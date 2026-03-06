@@ -24,7 +24,7 @@ class GoogleCalendarService:
             token_uri="https://oauth2.googleapis.com/token",
             client_id=os.getenv("GOOGLE_CLIENT_ID"),
             client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-            scopes=['https://www.googleapis.com/auth/calendar.events']
+            scopes=['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.readonly']
         )
 
         if not creds.valid:
@@ -55,13 +55,22 @@ class GoogleCalendarService:
         Fetches events from the last X days.
         """
         time_min = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).isoformat() + 'Z'
-        events_result = self.service.events().list(
-            calendarId=calendar_id,
-            timeMin=time_min,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
-        return events_result.get('items', [])
+        events = []
+        page_token = None
+        while True:
+            events_result = self.service.events().list(
+                calendarId=calendar_id,
+                timeMin=time_min,
+                singleEvents=True,
+                orderBy='startTime',
+                maxResults=2500,
+                pageToken=page_token
+            ).execute()
+            events.extend(events_result.get('items', []))
+            page_token = events_result.get('nextPageToken')
+            if not page_token:
+                break
+        return events
 
     def create_event(self, title, description, start_time, end_time=None, calendar_id='primary'):
         """

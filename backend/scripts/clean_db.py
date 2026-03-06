@@ -3,6 +3,10 @@ Script para limpiar workouts contaminados de la BD (cumpleaños, eventos sin eje
 Elimina SOLO los workouts que no tienen ningún ExerciseSet asociado,
 o que venían del calendario pero sin datos de entrenamiento útiles.
 """
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from models import SessionLocal, Workout, ExerciseSet
 
 db = SessionLocal()

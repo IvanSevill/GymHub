@@ -6,9 +6,40 @@ import {
 import { TrendingUp, Activity } from 'lucide-react';
 import { subWeeks, subMonths, subYears, isAfter } from 'date-fns';
 
+function cleanMuscle(text) {
+    if (!text) return 'Otros'
+    text = text.trim()
+    let clean = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    clean = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase()
+
+    if (clean === 'Hombros') clean = 'Hombro'
+    if (clean === 'Bicep') clean = 'Biceps'
+    if (clean === 'Tricep') clean = 'Triceps'
+    if (clean === 'Abdomen') clean = 'Abdominales'
+    if (['Gemelos', 'Gemelo'].includes(clean)) clean = 'Gemelo'
+    if (clean === 'Pierna') clean = 'Piernas'
+    if (['Cuadiceps', 'Sentadilla', 'Sentadillas'].includes(clean)) clean = 'Cuadriceps'
+
+    return clean
+}
+
+function getSetMuscle(set, workout) {
+    let muscle = 'Otros'
+    if (set.muscle_group) muscle = set.muscle_group
+    else if (workout.muscle_groups) muscle = workout.muscle_groups.split(',')[0].trim()
+    return cleanMuscle(muscle)
+}
+
+const LEG_MUSCLES = ['Piernas', 'Cuadriceps', 'Femoral', 'Gluteo', 'Gemelo', 'Aductores', 'Isquios'];
+
+function getMacroMuscle(muscle) {
+    if (LEG_MUSCLES.includes(muscle)) return 'Piernas';
+    return muscle;
+}
+
 // Use muscle_groups from the workout title (set by the backend), fall back to 'Otros'
 function classifyMuscle(workout) {
-    if (workout.muscle_groups) return workout.muscle_groups.split(',')[0].trim()
+    if (workout.muscle_groups) return cleanMuscle(workout.muscle_groups.split(',')[0])
     return 'Otros'
 }
 
@@ -104,37 +135,130 @@ const Analytics = ({ workouts }) => {
         totalVol: w.exercise_sets.reduce((acc, s) => acc + getTotalVolume(s), 0)
     })), [workouts]);
 
+    const IGNORED_MUSCLES = ['Extra', 'Circuito', 'Otros'];
+
     const availableMuscles = useMemo(() => {
-        const set = new Set(annotated.map(w => w.muscle));
+        const set = new Set();
+        annotated.forEach(w => {
+            set.add(getMacroMuscle(w.muscle)); // Main workout muscle
+            w.exercise_sets.forEach(s => {
+                set.add(getMacroMuscle(getSetMuscle(s, w))); // Muscles of individual sets
+            });
+        });
+        IGNORED_MUSCLES.forEach(m => set.delete(m));
         return [...set].sort();
     }, [annotated]);
 
     // ── Volume chart data ──────────────────────────────
     const volumeData = useMemo(() => {
         const periodStart = getPeriodStart(volumePeriod);
-        return annotated
-            .filter(w => isAfter(new Date(w.date), periodStart))
-            .filter(w => muscleVolume === 'all' || w.muscle === muscleVolume)
-            .sort((a, b) => new Date(a.date) - new Date(b.date))
-            .map(w => ({
-                date: new Date(w.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-                totalWeight: Math.round(w.totalVol),
-                sets: w.exercise_sets.length
+        const dailyVolume = {};
+
+        annotated.forEach(w => {
+            if (!isAfter(new Date(w.date), periodStart)) return;
+
+            let workoutVol = 0;
+            let setsCount = 0;
+
+            if (muscleVolume === 'all') {
+                workoutVol = w.totalVol;
+                setsCount = w.exercise_sets.length;
+            } else {
+                w.exercise_sets.forEach(s => {
+                    const sMuscle = getMacroMuscle(getSetMuscle(s, w));
+                    if (sMuscle === muscleVolume) {
+                        workoutVol += getTotalVolume(s);
+                        setsCount++;
+                    }
+                });
+            }
+
+            if (setsCount > 0) {
+                const dateKey = new Date(w.date).toISOString().split('T')[0];
+                if (!dailyVolume[dateKey]) {
+                    dailyVolume[dateKey] = {
+                        dateObj: new Date(w.date),
+                        date: new Date(w.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+                        totalWeight: 0,
+                        sets: 0
+                    };
+                }
+                dailyVolume[dateKey].totalWeight += workoutVol;
+                dailyVolume[dateKey].sets += setsCount;
+            }
+        });
+
+        return Object.values(dailyVolume)
+            .sort((a, b) => a.dateObj - b.dateObj)
+            .map(d => ({
+                date: d.date,
+                totalWeight: Math.round(d.totalWeight),
+                sets: d.sets
             }));
     }, [annotated, volumePeriod, muscleVolume]);
 
     // ── Frequency chart data ──────────────────────────────
     const freqData = useMemo(() => {
         const periodStart = getPeriodStart(freqPeriod);
-        const filtered = annotated
-            .filter(w => isAfter(new Date(w.date), periodStart))
-            .filter(w => muscleFreq === 'all' || w.muscle === muscleFreq);
 
-        const groups = filtered.reduce((acc, w) => {
-            acc[w.muscle] = (acc[w.muscle] || 0) + 1;
-            return acc;
-        }, {});
-        return Object.entries(groups).map(([name, value]) => ({ name, value }));
+        // Si estamos viendo "all", contamos en cuántos entrenamientos se ha tocado cada grupo muscular
+        if (muscleFreq === 'all') {
+            const groups = {};
+            annotated.forEach(w => {
+                if (isAfter(new Date(w.date), periodStart)) {
+                    const musclesInWorkout = new Set();
+
+                    // Extraemos los músculos de todos los ejercicios hechos ese día
+                    w.exercise_sets.forEach(s => {
+                        musclesInWorkout.add(getMacroMuscle(getSetMuscle(s, w)));
+                    });
+
+                    // Por si no hay ejercicios, añadimos también los del título por si acaso
+                    if (w.muscle_groups) {
+                        w.muscle_groups.split(',').forEach(m => {
+                            musclesInWorkout.add(getMacroMuscle(cleanMuscle(m)));
+                        });
+                    }
+
+                    // Sumamos 1 sesión a cada grupo muscular que se haya tocado ese día
+                    musclesInWorkout.forEach(macro => {
+                        if (!IGNORED_MUSCLES.includes(macro)) {
+                            groups[macro] = (groups[macro] || 0) + 1;
+                        }
+                    });
+                }
+            });
+            return Object.entries(groups)
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value); // Ordenar de más a menos
+        }
+
+        // Si hay seleccionado un músculo específico, contamos la frecuencia de cada ejercicio exacto de ese músculo
+        const exerciseGroups = {};
+        annotated.forEach(w => {
+            if (isAfter(new Date(w.date), periodStart)) {
+                // Buscamos dentro de los sets los que sean de este músculo
+                const exercisesInWorkout = new Set();
+                w.exercise_sets.forEach(s => {
+                    const sMuscle = getMacroMuscle(getSetMuscle(s, w));
+                    if (sMuscle === muscleFreq) {
+                        const rawName = s.exercise_name?.trim();
+                        if (rawName) {
+                            const exName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
+                            exercisesInWorkout.add(exName);
+                        }
+                    }
+                });
+                exercisesInWorkout.forEach(exName => {
+                    exerciseGroups[exName] = (exerciseGroups[exName] || 0) + 1;
+                });
+            }
+        });
+
+        return Object.entries(exerciseGroups)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value); // Ordenar de mayor frecuencia a menor
+
     }, [annotated, freqPeriod, muscleFreq]);
 
     return (

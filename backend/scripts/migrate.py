@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 """
 Migration: adds muscle_groups to workouts and muscle_group to exercise_sets.
 Safe to run multiple times (ignores "duplicate column" errors).

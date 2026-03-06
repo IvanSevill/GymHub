@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 Base = declarative_base()
 
@@ -73,6 +74,12 @@ class ExerciseSet(Base):
 db_url = os.getenv("DB_URL")
 if not db_url:
     db_url = "sqlite:///./gymhub.db"
+
+if db_url and db_url.startswith("sqlite:///./"):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    db_name = db_url.split("sqlite:///./")[1]
+    db_path = os.path.join(base_dir, db_name)
+    db_url = f"sqlite:///{db_path}"
 
 # Handle SQLite vs Postgres connection args
 connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}

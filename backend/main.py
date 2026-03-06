@@ -303,11 +303,38 @@ MUSCLE_KEYWORDS = {
     'Abdomen': ['abdomen', 'abdominal', 'plancha', 'crunch'],
 }
 
-def classify_exercise(name: str) -> str:
-    name_lower = name.lower()
-    for muscle, keywords in MUSCLE_KEYWORDS.items():
-        if any(k in name_lower for k in keywords):
-            return muscle
+def get_set_muscle(s: ExerciseSet, w: Workout) -> str:
+    import unicodedata
+    def clean_muscle(text):
+        if not text: return 'Otros'
+        text = text.strip()
+        nfkd = unicodedata.normalize('NFKD', text)
+        clean = "".join([c for c in nfkd if not unicodedata.combining(c)]).capitalize()
+        
+        # Hardcoded plural/singular normalizations
+        if clean == 'Hombros':
+            clean = 'Hombro'
+        elif clean == 'Bicep':
+            clean = 'Biceps'
+        elif clean == 'Tricep':
+            clean = 'Triceps'
+        elif clean == 'Abdomen':
+            clean = 'Abdominales'
+        elif clean in ['Gemelos', 'Gemelo']:
+            clean = 'Gemelo'
+        elif clean == 'Pierna':
+            clean = 'Piernas'
+        elif clean in ['Cuadiceps', 'Sentadilla', 'Sentadillas']:
+            clean = 'Cuadriceps'
+            
+        return clean
+
+    if s.muscle_group:
+        return clean_muscle(s.muscle_group)
+    if w.muscle_groups:
+        parts = w.muscle_groups.split(',')
+        if parts:
+            return clean_muscle(parts[0])
     return 'Otros'
 
 @app.get("/workouts/exercises-by-muscle")
@@ -335,7 +362,13 @@ def get_exercises_by_muscle(user_email: str, db: Session = Depends(get_db)):
             weight_str = " - ".join(str(int(v) if v == int(v) else v) for v in vals)
             if s.unit and weight_str:
                 weight_str += s.unit
-            seen[name] = {"name": name, "muscle": classify_exercise(name), "last_weight": weight_str or None}
+            # Fetch muscle natively from the set
+            muscle = get_set_muscle(s, s.workout)
+
+            # Map specific leg muscles into "Pierna" for UI simplicity or keep them if preferred
+            # We'll just provide the raw muscle, but handle aliases if requested by "Pierna"
+            
+            seen[name] = {"name": name, "muscle": muscle, "last_weight": weight_str or None}
 
     result = {}
     for ex in seen.values():
@@ -379,21 +412,36 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
     for s in sets:
         name = s.exercise_name.strip()
         if name not in seen:
-            muscle = classify_exercise(name)
-            if muscle in req.muscles:
+            muscle = get_set_muscle(s, s.workout)
+            
+            # Allow "Pierna" or "Piernas" in request to match specific sub-muscles
+            leg_muscles = ["pierna", "piernas", "glúteo", "gluteo", "cuádriceps", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+            
+            # Check if this muscle matches requested muscles directly or via the Pierna umbrella
+            matched_muscle = None
+            for req_m in req.muscles:
+                if muscle.lower() == req_m.lower():
+                    matched_muscle = muscle
+                    break
+                # If requested "Pierna" or "Piernas", allow sub-muscles
+                if req_m.lower() in ["pierna", "piernas"] and muscle.lower() in leg_muscles:
+                    matched_muscle = muscle  # Keep it as "Cuadriceps", "Femoral", etc.
+                    break
+
+            if matched_muscle:
                 vals = [v for v in [s.value1, s.value2, s.value3, s.value4] if v is not None]
                 weight_str = " - ".join(str(int(v) if v == int(v) else v) for v in vals)
                 if s.unit and weight_str:
                     weight_str += s.unit
-                seen[name] = {"muscle": muscle, "weight": weight_str}
+                seen[name] = {"muscle": muscle, "weight": weight_str, "req_muscle": matched_muscle}
 
     # Build flat description: one line per exercise, format: "Músculo - Ejercicio (Xkg)"
     lines = []
     for muscle in req.muscles:
-        exercises = [(n, d) for n, d in seen.items() if d["muscle"] == muscle]
+        exercises = [(n, d) for n, d in seen.items() if d["req_muscle"] == muscle]
         for name, data in exercises:
             weight_info = f" ({data['weight']})" if data["weight"] else ""
-            lines.append(f"{muscle} - {name}{weight_info}")
+            lines.append(f"{data['muscle']} - {name}{weight_info}")
 
     description = "\n".join(lines)
     if not description:
@@ -523,8 +571,8 @@ def sync_data_for_user(user: User, db: Session):
     try:
         cal_service = GoogleCalendarService(user, db)
         cal_id = user.selected_calendar_id
-        # Pull full year of history
-        recent_events = cal_service.get_recent_events(days=365, calendar_id=cal_id)
+        # Pull 10 years of history to ensure we catch all unifications
+        recent_events = cal_service.get_recent_events(days=3650, calendar_id=cal_id)
 
         for event in recent_events:
             event_id = event.get('id')

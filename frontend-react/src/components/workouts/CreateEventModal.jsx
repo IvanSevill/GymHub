@@ -3,12 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Loader2, CheckCircle2, Dumbbell, Clock } from 'lucide-react'
 import { fetchExercisesByMuscle, createEventTemplate } from '../../api/gymhubApi'
 
-const ALL_MUSCLES = ['Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Piernas', 'Abdomen', 'Otros']
+const BASE_MUSCLES = ['Pecho', 'Espalda', 'Hombro', 'Biceps', 'Triceps', 'Piernas', 'Abdominales', 'Otros']
 const MUSCLE_COLORS = {
-    'Pecho': '#06b6d4', 'Espalda': '#8b5cf6', 'Hombros': '#f59e0b',
-    'Bíceps': '#ec4899', 'Tríceps': '#10b981', 'Piernas': '#ef4444',
-    'Abdomen': '#a3e635', 'Otros': '#64748b'
+    'Pecho': '#06b6d4', 'Espalda': '#8b5cf6', 'Hombro': '#f59e0b', 'Hombros': '#f59e0b',
+    'Biceps': '#ec4899', 'Bíceps': '#ec4899', 'Triceps': '#10b981', 'Tríceps': '#10b981',
+    'Piernas': '#ef4444', 'Pierna': '#ef4444',
+    'Abdominales': '#a3e635', 'Abdomen': '#a3e635', 'Otros': '#64748b',
+    // Sub-muscles
+    'Glúteo': '#fb7185', 'Gluteo': '#fb7185',
+    'Cuádriceps': '#fca5a5', 'Cuadriceps': '#fca5a5',
+    'Femoral': '#bef264', 'Isquios': '#bef264',
+    'Aductores': '#fde047', 'Gemelo': '#86efac',
+    'Pierna': '#ef4444'
 }
+const LEG_MUSCLES = ["pierna", "piernas", "glúteo", "gluteo", "cuádriceps", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+
 
 export default function CreateEventModal({ onClose, onCreated }) {
     const [step, setStep] = useState(1) // 1=muscles, 2=time, 3=preview
@@ -39,9 +48,17 @@ export default function CreateEventModal({ onClose, onCreated }) {
         )
     }
 
-    const previewExercises = selectedMuscles.flatMap(m =>
-        (exercisesByMuscle[m] || []).map(ex => ({ ...ex, muscle: m }))
-    )
+    const previewExercises = selectedMuscles.flatMap(m => {
+        if (m.toLowerCase() === 'piernas' || m.toLowerCase() === 'pierna') {
+            const legKeys = Object.keys(exercisesByMuscle).filter(k => LEG_MUSCLES.includes(k.toLowerCase()))
+            return legKeys.flatMap(k => (exercisesByMuscle[k] || []).map(ex => ({ ...ex, muscle: k })))
+        }
+        return (exercisesByMuscle[m] || []).map(ex => ({ ...ex, muscle: m }))
+    })
+
+    const dynamicMuscles = Array.from(new Set([...BASE_MUSCLES, ...Object.keys(exercisesByMuscle)]))
+        .filter(m => m !== 'Otros')
+        .concat('Otros')
 
     const title = selectedMuscles.join(' - ') || 'Entrenamiento'
     const fmt = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
@@ -115,30 +132,64 @@ export default function CreateEventModal({ onClose, onCreated }) {
                             <p className="text-red-400 text-sm text-center py-8">{error}</p>
                         ) : step === 1 ? (
                             <div className="space-y-3">
-                                {ALL_MUSCLES.map(m => {
-                                    const exercises = exercisesByMuscle[m] || []
-                                    const selected = selectedMuscles.includes(m)
+                                {(() => {
+                                    // Separar las piernas del resto
+                                    const legSubMuscles = dynamicMuscles.filter(m => LEG_MUSCLES.includes(m.toLowerCase()) && m.toLowerCase() !== 'piernas' && m.toLowerCase() !== 'pierna')
+                                    const otherMuscles = dynamicMuscles.filter(m => !LEG_MUSCLES.includes(m.toLowerCase()))
+
+                                    const renderButton = (m, isSub = false) => {
+                                        let exercises = []
+                                        if (m.toLowerCase() === 'piernas' || m.toLowerCase() === 'pierna') {
+                                            const legKeys = Object.keys(exercisesByMuscle).filter(k => LEG_MUSCLES.includes(k.toLowerCase()) && k.toLowerCase() !== 'piernas')
+                                            exercises = legKeys.flatMap(k => exercisesByMuscle[k] || [])
+                                        } else {
+                                            exercises = exercisesByMuscle[m] || []
+                                        }
+
+                                        const selected = selectedMuscles.includes(m)
+                                        const color = MUSCLE_COLORS[m] || '#64748b'
+
+                                        return (
+                                            <button
+                                                key={m}
+                                                onClick={() => toggleMuscle(m)}
+                                                className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${selected
+                                                    ? 'border-transparent text-white'
+                                                    : 'bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06]'
+                                                    } ${isSub ? 'ml-6 w-[calc(100%-1.5rem)] py-3' : ''}`}
+                                                style={selected ? { backgroundColor: color + '25', borderColor: color } : {}}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                                                    <div className="text-left">
+                                                        <p className="font-bold">{m}</p>
+                                                        <p className="text-xs opacity-60">{exercises.length} ejercicios en historial</p>
+                                                    </div>
+                                                </div>
+                                                {selected && <CheckCircle2 className="w-5 h-5" style={{ color: MUSCLE_COLORS[m] }} />}
+                                            </button>
+                                        )
+                                    }
+
                                     return (
-                                        <button
-                                            key={m}
-                                            onClick={() => toggleMuscle(m)}
-                                            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${selected
-                                                ? 'border-transparent text-white'
-                                                : 'bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06]'
-                                                }`}
-                                            style={selected ? { backgroundColor: MUSCLE_COLORS[m] + '25', borderColor: MUSCLE_COLORS[m] } : {}}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: MUSCLE_COLORS[m] }} />
-                                                <div className="text-left">
-                                                    <p className="font-bold">{m}</p>
-                                                    <p className="text-xs opacity-60">{exercises.length} ejercicios en historial</p>
+                                        <>
+                                            {otherMuscles.map(m => renderButton(m))}
+
+                                            {/* Render Piernas and its sub-sections */}
+                                            <div className="pt-2 pb-1 border-t border-white/[0.06] mt-4 mb-2">
+                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Tren Inferior (Pierna)</p>
+                                                <div className="space-y-3">
+                                                    {renderButton('Piernas')} {/* El botón maestro de todo */}
+                                                    {legSubMuscles.length > 0 && (
+                                                        <div className="space-y-2 border-l-2 border-white/[0.05] ml-4">
+                                                            {legSubMuscles.map(m => renderButton(m, true))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
-                                            {selected && <CheckCircle2 className="w-5 h-5" style={{ color: MUSCLE_COLORS[m] }} />}
-                                        </button>
+                                        </>
                                     )
-                                })}
+                                })()}
                             </div>
                         ) : step === 2 ? (
                             <div className="space-y-6">
