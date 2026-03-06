@@ -11,8 +11,7 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
+    email = Column(String, primary_key=True, index=True)
     hashed_password = Column(String, nullable=True) # Optional if using Google Login exclusively
     
     # Google OAuth data
@@ -35,27 +34,37 @@ class User(Base):
 class Workout(Base):
     __tablename__ = "workouts"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_email = Column(String, ForeignKey("users.email"))
     date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
     source = Column(String, default="app")  # "app" or "calendar"
     google_event_id = Column(String, unique=True, index=True, nullable=True)
-    title = Column(String) # Muscle Groups (e.g., "Pecho/Tríceps")
-    
+    title = Column(String)  # e.g. "Pecho / Tríceps"
+    # Comma-separated muscle groups extracted from title, e.g. "Pecho,Tríceps"
+    muscle_groups = Column(String, nullable=True)
+
     calories = Column(Integer, nullable=True)
     heart_rate_avg = Column(Integer, nullable=True)
     duration_ms = Column(Integer, nullable=True)
-    
+
     user = relationship("User", back_populates="workouts")
     exercise_sets = relationship("ExerciseSet", back_populates="workout")
+
 
 class ExerciseSet(Base):
     __tablename__ = "exercise_sets"
     id = Column(Integer, primary_key=True, index=True)
     workout_id = Column(Integer, ForeignKey("workouts.id"))
+    muscle_group = Column(String, nullable=True)  # e.g. "Pecho", extracted from line prefix
     exercise_name = Column(String)
-    weight_kg = Column(Float)
+    value1 = Column(Float, nullable=True)
+    value2 = Column(Float, nullable=True)
+    value3 = Column(Float, nullable=True)
+    value4 = Column(Float, nullable=True)
+    unit = Column(String, nullable=True)  # 'kg' or 'min'
     reps = Column(Integer, nullable=True, default=0)
-    is_pr = Column(Integer, default=0) # 1 if it's a PR
+    is_pr = Column(Integer, default=0)
     raw_text = Column(String, nullable=True)
 
     workout = relationship("Workout", back_populates="exercise_sets")
