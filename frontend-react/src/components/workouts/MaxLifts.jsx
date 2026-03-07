@@ -34,7 +34,7 @@ function cleanMuscle(text) {
     if (clean === 'Tricep') clean = 'Triceps'
     if (clean === 'Abdomen') clean = 'Abdominales'
     if (['Gemelos', 'Gemelo'].includes(clean)) clean = 'Gemelo'
-    if (clean === 'Pierna') clean = 'Piernas'
+    if (clean === 'Piernas') clean = 'Pierna'
     if (['Cuadiceps', 'Sentadilla', 'Sentadillas'].includes(clean)) clean = 'Cuadriceps'
 
     return clean
@@ -48,7 +48,7 @@ function getSetMuscle(set, workout) {
     return cleanMuscle(muscle)
 }
 
-const LEG_MUSCLES = ['Piernas', 'Cuadriceps', 'Femoral', 'Gluteo', 'Gemelo', 'Aductores', 'Isquios']
+const LEG_MUSCLES = ['Pierna', 'Cuadriceps', 'Femoral', 'Gluteo', 'Gemelo', 'Aductores', 'Isquios']
 
 export default function MaxLifts({ workouts }) {
     const maxByExercise = useMemo(() => {
@@ -80,11 +80,11 @@ export default function MaxLifts({ workouts }) {
         for (const ex of maxByExercise) {
             let cat = ex.muscle
 
-            // Si es un músculo de la pierna, lo agrupamos dentro de "Piernas"
+            // Si es un músculo de la pierna, lo agrupamos dentro de "Pierna"
             if (LEG_MUSCLES.includes(cat)) {
-                if (!groups['Piernas']) groups['Piernas'] = { isParent: true, subGroups: {} }
-                if (!groups['Piernas'].subGroups[cat]) groups['Piernas'].subGroups[cat] = []
-                groups['Piernas'].subGroups[cat].push(ex)
+                if (!groups['Pierna']) groups['Pierna'] = { isParent: true, subGroups: {} }
+                if (!groups['Pierna'].subGroups[cat]) groups['Pierna'].subGroups[cat] = []
+                groups['Pierna'].subGroups[cat].push(ex)
             } else {
                 if (!groups[cat]) groups[cat] = { isParent: false, exercises: [] }
                 groups[cat].exercises.push(ex)
@@ -144,8 +144,8 @@ export default function MaxLifts({ workouts }) {
                             className="bg-[#1e293b]/30 border border-white/5 backdrop-blur-md rounded-3xl overflow-hidden"
                         >
                             <div className="bg-white/[0.02] border-b border-white/5 p-6 flex items-center gap-3">
-                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: MUSCLE_COLORS['Piernas'] }} />
-                                <h3 className="font-black text-lg">Piernas (Subsecciones)</h3>
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: MUSCLE_COLORS['Pierna'] }} />
+                                <h3 className="font-black text-lg">Pierna (Subsecciones)</h3>
                             </div>
 
                             <div className="p-6 space-y-6">

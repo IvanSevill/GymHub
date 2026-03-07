@@ -9,9 +9,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from models import SessionLocal, init_db, User, Workout, ExerciseSet
-from parser import WorkoutParser
-from google_calendar import GoogleCalendarService
+from models import SessionLocal, init_db, User, Workout, ExerciseSet, FitbitData
+from services.parser import WorkoutParser
+from services.google_calendar import GoogleCalendarService
+from services.fitbit_client import FitbitService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -89,6 +90,21 @@ class ExerciseSetOut(BaseModel):
     class Config:
         from_attributes = True
 
+class FitbitDataOut(BaseModel):
+    calories: Optional[int] = None
+    heart_rate_avg: Optional[int] = None
+    duration_ms: Optional[int] = None
+    steps: Optional[int] = None
+    distance_km: Optional[float] = None
+    elevation_gain_m: Optional[float] = None
+    activity_name: Optional[str] = None
+    azm_fat_burn: Optional[int] = None
+    azm_cardio: Optional[int] = None
+    azm_peak: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
 class WorkoutOut(BaseModel):
     id: int
     title: str
@@ -98,6 +114,7 @@ class WorkoutOut(BaseModel):
     source: str
     muscle_groups: Optional[str]   # e.g. "Pecho,Tríceps"
     exercise_sets: List[ExerciseSetOut]
+    fitbit_data: Optional[FitbitDataOut]
 
     class Config:
         from_attributes = True
@@ -228,16 +245,30 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
         raise HTTPException(400, f"Authentication failed: {str(e)}")
 
 @app.post("/auth/fitbit/connect")
-def connect_fitbit(auth_code: str, user_email: str, db: Session = Depends(get_db)):
+def connect_fitbit(
+    auth_code: str,
+    user_email: str,
+    redirect_uri: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """
     Exchange Fitbit auth_code for permanent access and refresh tokens.
+    redirect_uri MUST match exactly what was used in the initial OAuth redirect.
     """
     user = db.query(User).filter(User.email == user_email).first()
     if not user: raise HTTPException(404, "User not found")
-    # Call Fitbit API to exchange auth_code
-    # user.fitbit_access_token = ...
-    db.commit()
-    return {"status": "Fitbit connected"}
+    
+    try:
+        tokens = FitbitService.exchange_code_for_token(auth_code, redirect_uri=redirect_uri)
+        user.fitbit_id = tokens.get("user_id")
+        user.fitbit_access_token = tokens.get("access_token")
+        user.fitbit_refresh_token = tokens.get("refresh_token")
+        db.commit()
+        logger.info(f"Fitbit vinculado para {user_email}, fitbit_id={user.fitbit_id}")
+        return {"status": "Fitbit connected"}
+    except Exception as e:
+        logger.error(f"Fitbit auth error: {e}")
+        raise HTTPException(400, f"Failed to connect Fitbit account: {str(e)}")
 
 @app.post("/auth/google/mock")
 def mock_google_auth(user_email: str, db: Session = Depends(get_db)):
@@ -299,7 +330,7 @@ MUSCLE_KEYWORDS = {
     'Hombros': ['hombros', 'hombro', 'militar', 'laterales', 'elevaciones'],
     'Bíceps':  ['bíceps', 'biceps', 'curl'],
     'Tríceps': ['tríceps', 'triceps', 'extensiones'],
-    'Piernas': ['pierna', 'sentadilla', 'squat', 'prensa', 'femoral', 'gemelo', 'zancada'],
+    'Pierna': ['piernas', 'pierna', 'sentadilla', 'squat', 'prensa', 'femoral', 'gemelo', 'zancada'],
     'Abdomen': ['abdomen', 'abdominal', 'plancha', 'crunch'],
 }
 
@@ -322,8 +353,8 @@ def get_set_muscle(s: ExerciseSet, w: Workout) -> str:
             clean = 'Abdominales'
         elif clean in ['Gemelos', 'Gemelo']:
             clean = 'Gemelo'
-        elif clean == 'Pierna':
-            clean = 'Piernas'
+        elif clean == 'Piernas':
+            clean = 'Pierna'
         elif clean in ['Cuadiceps', 'Sentadilla', 'Sentadillas']:
             clean = 'Cuadriceps'
             
@@ -415,16 +446,20 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
             muscle = get_set_muscle(s, s.workout)
             
             # Allow "Pierna" or "Piernas" in request to match specific sub-muscles
-            leg_muscles = ["pierna", "piernas", "glúteo", "gluteo", "cuádriceps", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+            # Normalize accents for robust matching (e.g. 'Cuadriceps' matches 'Cuádriceps')
+            import unicodedata as _ud
+            def _norm(t): return _ud.normalize('NFD', t).encode('ascii', 'ignore').decode().lower()
+
+            leg_muscles_norm = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
             
             # Check if this muscle matches requested muscles directly or via the Pierna umbrella
             matched_muscle = None
             for req_m in req.muscles:
-                if muscle.lower() == req_m.lower():
+                if _norm(muscle) == _norm(req_m):
                     matched_muscle = muscle
                     break
-                # If requested "Pierna" or "Piernas", allow sub-muscles
-                if req_m.lower() in ["pierna", "piernas"] and muscle.lower() in leg_muscles:
+                # If requested "Pierna" or "Piernas", allow sub-muscles (normalized comparison)
+                if _norm(req_m) in ["pierna", "piernas"] and _norm(muscle) in leg_muscles_norm:
                     matched_muscle = muscle  # Keep it as "Cuadriceps", "Femoral", etc.
                     break
 
@@ -437,10 +472,10 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
 
     # Build flat description: one line per exercise, format: "Músculo - Ejercicio (Xkg)"
     lines = []
-    for muscle in req.muscles:
-        exercises = [(n, d) for n, d in seen.items() if d["req_muscle"] == muscle]
+    for muscle_req in req.muscles:
+        exercises = [(n, d) for n, d in seen.items() if _norm(d["req_muscle"]) == _norm(muscle_req)]
         for name, data in exercises:
-            weight_info = f" ({data['weight']})" if data["weight"] else ""
+            weight_info = f" {data['weight']}" if data["weight"] else ""
             lines.append(f"{data['muscle']} - {name}{weight_info}")
 
     description = "\n".join(lines)
@@ -626,6 +661,160 @@ def sync_data_for_user(user: User, db: Session):
 
     except Exception as e:
         logger.error(f"Sync failed for {user.email}: {e}")
+
+    # After syncing Google Calendar, try to fetch and sync Fitbit metrics
+    sync_fitbit_for_user(user, db)
+
+def _parse_fitbit_datetime(dt_str: str):
+    """Parse Fitbit's ISO datetime string (with timezone offset) to a naive UTC datetime."""
+    if not dt_str:
+        return None
+    try:
+        # e.g. "2026-02-09T15:38:39.254+01:00"
+        dt = datetime.datetime.fromisoformat(dt_str)
+        # Convert to UTC
+        if dt.tzinfo is not None:
+            dt = dt.utctimetuple()
+            dt = datetime.datetime(*dt[:6])
+        return dt
+    except Exception:
+        return None
+
+
+def _find_best_matching_workout(fitbit_start: datetime.datetime, fitbit_duration_ms: int,
+                                 workouts: list, max_gap_hours: float = 4.0):
+    """
+    Find the workout whose time overlaps or is closest to the Fitbit activity.
+    Strategy:
+      1. Only consider workouts on the same calendar date (fast filter)
+      2. Among those, prefer one whose start_time overlaps the Fitbit window
+         (fitbit_start .. fitbit_start + duration)
+      3. Fallback: closest by |workout.start_time - fitbit_start| within max_gap_hours
+    """
+    if not fitbit_start:
+        return None
+
+    date_only = fitbit_start.strftime("%Y-%m-%d")
+    fitbit_duration = datetime.timedelta(milliseconds=fitbit_duration_ms or 0)
+    fitbit_end = fitbit_start + fitbit_duration
+
+    same_day = [
+        w for w in workouts
+        if w.date and w.date.strftime("%Y-%m-%d") == date_only
+    ]
+
+    if not same_day:
+        return None
+
+    # 1. Prefer a workout that time-overlaps with the Fitbit activity
+    for w in same_day:
+        w_start = w.start_time or w.date
+        w_end = w.end_time or (w_start + datetime.timedelta(hours=2))
+
+        # Overlap exists if intervals intersect
+        if w_start <= fitbit_end and w_end >= fitbit_start:
+            return w
+
+    # 2. Closest by start time within max_gap_hours
+    max_gap = datetime.timedelta(hours=max_gap_hours)
+    best = None
+    best_gap = max_gap + datetime.timedelta(seconds=1)
+    for w in same_day:
+        w_start = w.start_time or w.date
+        gap = abs(w_start - fitbit_start)
+        if gap < best_gap:
+            best_gap = gap
+            best = w
+
+    return best
+
+
+def sync_fitbit_for_user(user: User, db: Session):
+    if not user.fitbit_access_token:
+        return
+
+    logger.info(f"Syncing Fitbit for {user.email}...")
+    try:
+        after_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
+
+        try:
+            activities = FitbitService.fetch_recent_activities(user.fitbit_access_token, after_date)
+        except Exception as e:
+            logger.error(f"Fitbit fetch failed, attempting to refresh token: {e}")
+            if user.fitbit_refresh_token:
+                tokens = FitbitService.refresh_token(user.fitbit_refresh_token)
+                user.fitbit_access_token = tokens.get("access_token")
+                user.fitbit_refresh_token = tokens.get("refresh_token")
+                db.commit()
+                activities = FitbitService.fetch_recent_activities(user.fitbit_access_token, after_date)
+            else:
+                return
+
+        user_workouts = db.query(Workout).filter(Workout.user_email == user.email).all()
+        linked = 0
+
+        for act in activities:
+            start_str = act.get("startTime")
+            if not start_str:
+                continue
+
+            log_id = str(act.get("logId", ""))
+            fitbit_start = _parse_fitbit_datetime(start_str)
+
+            # Check by logId first (most reliable deduplication)
+            existing_by_log = (
+                db.query(FitbitData).filter(FitbitData.fitbit_log_id == log_id).first()
+                if log_id else None
+            )
+
+            # Find the matching workout by time proximity
+            matching_workout = _find_best_matching_workout(
+                fitbit_start, act.get("duration", 0), user_workouts
+            )
+
+            if not matching_workout:
+                continue
+
+            # Parse Active Zone Minutes
+            azm = act.get("activeZoneMinutes", {})
+            azm_zones = {z["zoneName"]: z["minutes"] for z in azm.get("minutesInHeartRateZones", [])}
+
+            fields = {
+                "fitbit_log_id": log_id,
+                "calories": act.get("calories"),
+                "heart_rate_avg": act.get("averageHeartRate"),
+                "duration_ms": act.get("duration"),
+                "steps": act.get("steps"),
+                "distance_km": act.get("distance"),
+                "elevation_gain_m": act.get("elevationGain"),
+                "activity_name": act.get("activityName"),
+                "azm_fat_burn": azm_zones.get("Fat Burn", 0),
+                "azm_cardio": azm_zones.get("Cardio", 0),
+                "azm_peak": azm_zones.get("Peak", 0),
+            }
+
+            if existing_by_log:
+                for k, v in fields.items():
+                    setattr(existing_by_log, k, v)
+            else:
+                existing_data = db.query(FitbitData).filter(FitbitData.workout_id == matching_workout.id).first()
+                if not existing_data:
+                    db.add(FitbitData(workout_id=matching_workout.id, **fields))
+                else:
+                    for k, v in fields.items():
+                        setattr(existing_data, k, v)
+
+            db.commit()
+            linked += 1
+            logger.info(
+                f"  [{act.get('activityName')}] {start_str[:16]} "
+                f"→ workout '{matching_workout.title}' (id={matching_workout.id})"
+            )
+
+        logger.info(f"Fitbit sync done: {linked}/{len(activities)} activities linked.")
+
+    except Exception as e:
+        logger.error(f"Fitbit sync complete failure: {e}")
 
 @app.get("/health")
 def health_check():

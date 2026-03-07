@@ -11,7 +11,7 @@ from tkinter import ttk
 from collections import defaultdict
 from sqlalchemy.orm import Session
 from models import SessionLocal, User
-from google_calendar import GoogleCalendarService
+from services.google_calendar import GoogleCalendarService
 
 class UnifyExercisesApp:
     def __init__(self, root):

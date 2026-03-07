@@ -3,20 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Loader2, CheckCircle2, Dumbbell, Clock } from 'lucide-react'
 import { fetchExercisesByMuscle, createEventTemplate } from '../../api/gymhubApi'
 
-const BASE_MUSCLES = ['Pecho', 'Espalda', 'Hombro', 'Biceps', 'Triceps', 'Piernas', 'Abdominales', 'Otros']
+const BASE_MUSCLES = ['Pecho', 'Espalda', 'Hombro', 'Biceps', 'Triceps', 'Pierna', 'Abdominales', 'Otros']
 const MUSCLE_COLORS = {
     'Pecho': '#06b6d4', 'Espalda': '#8b5cf6', 'Hombro': '#f59e0b', 'Hombros': '#f59e0b',
     'Biceps': '#ec4899', 'Bíceps': '#ec4899', 'Triceps': '#10b981', 'Tríceps': '#10b981',
-    'Piernas': '#ef4444', 'Pierna': '#ef4444',
+    'Pierna': '#ef4444', 'Piernas': '#ef4444',
     'Abdominales': '#a3e635', 'Abdomen': '#a3e635', 'Otros': '#64748b',
     // Sub-muscles
     'Glúteo': '#fb7185', 'Gluteo': '#fb7185',
     'Cuádriceps': '#fca5a5', 'Cuadriceps': '#fca5a5',
     'Femoral': '#bef264', 'Isquios': '#bef264',
-    'Aductores': '#fde047', 'Gemelo': '#86efac',
-    'Pierna': '#ef4444'
+    'Aductores': '#fde047', 'Gemelo': '#86efac'
 }
-const LEG_MUSCLES = ["pierna", "piernas", "glúteo", "gluteo", "cuádriceps", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+const LEG_MUSCLES = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+// Normalizes accents and lowercase for robust comparison
+const normStr = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 
 export default function CreateEventModal({ onClose, onCreated }) {
@@ -49,9 +50,15 @@ export default function CreateEventModal({ onClose, onCreated }) {
     }
 
     const previewExercises = selectedMuscles.flatMap(m => {
-        if (m.toLowerCase() === 'piernas' || m.toLowerCase() === 'pierna') {
-            const legKeys = Object.keys(exercisesByMuscle).filter(k => LEG_MUSCLES.includes(k.toLowerCase()))
-            return legKeys.flatMap(k => (exercisesByMuscle[k] || []).map(ex => ({ ...ex, muscle: k })))
+        if (normStr(m) === 'pierna' || normStr(m) === 'piernas') {
+            // Include exercises stored directly under 'Pierna'/'Piernas' key
+            const directLegExs = (exercisesByMuscle['Pierna'] || exercisesByMuscle['Piernas'] || []).map(ex => ({ ...ex, muscle: 'Pierna' }))
+            // Also include sub-muscle keys (Cuadriceps, Gluteo, Femoral, Gemelo…) — normalize accents before comparing
+            const legSubKeys = Object.keys(exercisesByMuscle).filter(k =>
+                LEG_MUSCLES.includes(normStr(k)) && normStr(k) !== 'pierna' && normStr(k) !== 'piernas'
+            )
+            const subExs = legSubKeys.flatMap(k => (exercisesByMuscle[k] || []).map(ex => ({ ...ex, muscle: k })))
+            return [...directLegExs, ...subExs]
         }
         return (exercisesByMuscle[m] || []).map(ex => ({ ...ex, muscle: m }))
     })
@@ -134,14 +141,19 @@ export default function CreateEventModal({ onClose, onCreated }) {
                             <div className="space-y-3">
                                 {(() => {
                                     // Separar las piernas del resto
-                                    const legSubMuscles = dynamicMuscles.filter(m => LEG_MUSCLES.includes(m.toLowerCase()) && m.toLowerCase() !== 'piernas' && m.toLowerCase() !== 'pierna')
-                                    const otherMuscles = dynamicMuscles.filter(m => !LEG_MUSCLES.includes(m.toLowerCase()))
+                                    const legSubMuscles = dynamicMuscles.filter(m => LEG_MUSCLES.includes(normStr(m)) && normStr(m) !== 'piernas' && normStr(m) !== 'pierna')
+                                    const otherMuscles = dynamicMuscles.filter(m => !LEG_MUSCLES.includes(normStr(m)))
 
                                     const renderButton = (m, isSub = false) => {
                                         let exercises = []
-                                        if (m.toLowerCase() === 'piernas' || m.toLowerCase() === 'pierna') {
-                                            const legKeys = Object.keys(exercisesByMuscle).filter(k => LEG_MUSCLES.includes(k.toLowerCase()) && k.toLowerCase() !== 'piernas')
-                                            exercises = legKeys.flatMap(k => exercisesByMuscle[k] || [])
+                                        if (normStr(m) === 'pierna' || normStr(m) === 'piernas') {
+                                            // Direct 'Pierna' key exercises
+                                            const directLeg = exercisesByMuscle['Pierna'] || exercisesByMuscle['Piernas'] || []
+                                            // Sub-muscle exercises (Cuadriceps, Gluteo, Femoral, Gemelo…)
+                                            const legSubKeys = Object.keys(exercisesByMuscle).filter(k =>
+                                                LEG_MUSCLES.includes(normStr(k)) && normStr(k) !== 'pierna' && normStr(k) !== 'piernas'
+                                            )
+                                            exercises = [...directLeg, ...legSubKeys.flatMap(k => exercisesByMuscle[k] || [])]
                                         } else {
                                             exercises = exercisesByMuscle[m] || []
                                         }
@@ -179,7 +191,7 @@ export default function CreateEventModal({ onClose, onCreated }) {
                                             <div className="pt-2 pb-1 border-t border-white/[0.06] mt-4 mb-2">
                                                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Tren Inferior (Pierna)</p>
                                                 <div className="space-y-3">
-                                                    {renderButton('Piernas')} {/* El botón maestro de todo */}
+                                                    {renderButton('Pierna')} {/* El botón maestro de todo */}
                                                     {legSubMuscles.length > 0 && (
                                                         <div className="space-y-2 border-l-2 border-white/[0.05] ml-4">
                                                             {legSubMuscles.map(m => renderButton(m, true))}

@@ -17,7 +17,7 @@ function cleanMuscle(text) {
     if (clean === 'Tricep') clean = 'Triceps'
     if (clean === 'Abdomen') clean = 'Abdominales'
     if (['Gemelos', 'Gemelo'].includes(clean)) clean = 'Gemelo'
-    if (clean === 'Pierna') clean = 'Piernas'
+    if (clean === 'Piernas') clean = 'Pierna'
     if (['Cuadiceps', 'Sentadilla', 'Sentadillas'].includes(clean)) clean = 'Cuadriceps'
 
     return clean
@@ -30,10 +30,10 @@ function getSetMuscle(set, workout) {
     return cleanMuscle(muscle)
 }
 
-const LEG_MUSCLES = ['Piernas', 'Cuadriceps', 'Femoral', 'Gluteo', 'Gemelo', 'Aductores', 'Isquios'];
+const LEG_MUSCLES = ['Pierna', 'Cuadriceps', 'Femoral', 'Gluteo', 'Gemelo', 'Aductores', 'Isquios'];
 
 function getMacroMuscle(muscle) {
-    if (LEG_MUSCLES.includes(muscle)) return 'Piernas';
+    if (LEG_MUSCLES.includes(muscle)) return 'Pierna';
     return muscle;
 }
 

@@ -39,7 +39,7 @@ function App() {
     const [currentUser, setCurrentUser] = useState(null)
     const [autoSync, setAutoSync] = useState(true)
     const [units, setUnits] = useState('kg')
-    const [isAuthenticated, setIsAuthenticated] = useState(false)
+    const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('gymhub_user_email'))
 
     const loadData = async () => {
         try {
@@ -102,12 +102,14 @@ function App() {
         }
     }
 
-    const handleConnectFitbit = async () => {
-        setSyncing(true)
-        setTimeout(() => {
-            alert('Fitbit conectado con éxito (Simulado)')
-            setSyncing(false)
-        }, 1000)
+    const handleConnectFitbit = () => {
+        // Redirigir al flujo OAuth de Fitbit
+        const clientId = '23TXQR';
+        const redirectUri = window.location.origin; // http://localhost:5173
+        const scopes = 'activity heartrate sleep profile weight location nutrition settings';
+        const fitbitAuthUrl = `https://www.fitbit.com/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+
+        window.location.href = fitbitAuthUrl;
     }
 
     const handleLoginSuccess = async (user) => {
@@ -125,7 +127,40 @@ function App() {
     }
 
     useEffect(() => {
-        loadData()
+        const handleFitbitCallback = async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const email = localStorage.getItem('gymhub_user_email');
+
+            if (code && email) {
+                try {
+                    setLoading(true);
+                    // redirect_uri must match EXACTLY what was sent to Fitbit
+                    const redirectUri = window.location.origin;
+                    const response = await fetch(
+                        `http://localhost:8000/auth/fitbit/connect?auth_code=${code}&user_email=${encodeURIComponent(email)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+                        { method: 'POST' }
+                    );
+
+                    if (response.ok) {
+                        alert('¡Cuenta de Fitbit vinculada correctamente con GymHub!');
+                    } else {
+                        const errorData = await response.json();
+                        alert(`Error al vincular Fitbit: ${errorData.detail || 'Fallo desconocido'}`);
+                    }
+                    // Limpia la URL de parámetros OAuth para no interferir en futuras recargas
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (error) {
+                    console.error("Error linking fitbit:", error);
+                } finally {
+                    setLoading(false);
+                }
+            }
+        };
+
+        handleFitbitCallback().then(() => {
+            loadData();
+        });
     }, [])
 
     if (!isAuthenticated) {
@@ -246,7 +281,7 @@ function App() {
 
                     {activeTab === 'fitbit' && (
                         <motion.div key="fitbit" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                            <FitbitPanel />
+                            <FitbitPanel workouts={workouts} userName={currentUser?.name} />
                         </motion.div>
                     )}
                 </AnimatePresence>

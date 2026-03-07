@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Target, X, Dumbbell, Clock, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Target, X, Dumbbell, Clock, Plus, Heart, Flame, MapPin, Mountain, Watch } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     format, addMonths, subMonths, startOfMonth, endOfMonth,
@@ -83,6 +83,61 @@ const WorkoutPopup = ({ day, workouts, onClose }) => {
                                     ) : (
                                         <p className="text-gray-600 text-sm italic pl-2">Sin ejercicios registrados.</p>
                                     )}
+
+                                    {/* Fitbit metrics */}
+                                    {w.fitbit_data && (() => {
+                                        const fd = w.fitbit_data;
+                                        const azmTotal = (fd.azm_fat_burn || 0) + (fd.azm_cardio || 0) + (fd.azm_peak || 0);
+                                        return (
+                                            <div className="mt-4 p-3 bg-cyan-500/5 rounded-2xl border border-cyan-500/10 space-y-2">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <Watch className="text-cyan-400 w-3 h-3" />
+                                                    <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest">Fitbit</span>
+                                                    {fd.activity_name && (
+                                                        <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded-full text-gray-500">{fd.activity_name}</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                                                    {fd.heart_rate_avg && (
+                                                        <span className="flex items-center gap-1 text-xs text-gray-300">
+                                                            <Heart className="text-rose-400 w-3 h-3" />{fd.heart_rate_avg} bpm
+                                                        </span>
+                                                    )}
+                                                    {fd.calories && (
+                                                        <span className="flex items-center gap-1 text-xs text-gray-300">
+                                                            <Flame className="text-orange-400 w-3 h-3" />{fd.calories} kcal
+                                                        </span>
+                                                    )}
+                                                    {fd.duration_ms && (
+                                                        <span className="flex items-center gap-1 text-xs text-gray-300">
+                                                            <Clock className="text-blue-400 w-3 h-3" />{Math.round(fd.duration_ms / 60000)} min
+                                                        </span>
+                                                    )}
+                                                    {fd.distance_km && (
+                                                        <span className="flex items-center gap-1 text-xs text-gray-300">
+                                                            <MapPin className="text-cyan-400 w-3 h-3" />{fd.distance_km.toFixed(2)} km
+                                                        </span>
+                                                    )}
+                                                    {fd.elevation_gain_m > 0 && (
+                                                        <span className="flex items-center gap-1 text-xs text-gray-300">
+                                                            <Mountain className="text-purple-400 w-3 h-3" />{Math.round(fd.elevation_gain_m)} m
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {azmTotal > 0 && (
+                                                    <div className="flex items-center gap-2 pt-1">
+                                                        <span className="text-[9px] text-gray-600 font-bold uppercase w-10">AZM</span>
+                                                        <div className="flex gap-0.5 flex-1">
+                                                            {fd.azm_fat_burn > 0 && <div className="h-1.5 bg-yellow-400 rounded-full" style={{ width: `${fd.azm_fat_burn * 4}px`, maxWidth: '50%' }} />}
+                                                            {fd.azm_cardio > 0 && <div className="h-1.5 bg-orange-500 rounded-full" style={{ width: `${fd.azm_cardio * 4}px`, maxWidth: '50%' }} />}
+                                                            {fd.azm_peak > 0 && <div className="h-1.5 bg-rose-500 rounded-full" style={{ width: `${fd.azm_peak * 4}px`, maxWidth: '50%' }} />}
+                                                        </div>
+                                                        <span className="text-[9px] text-gray-500">{azmTotal} min</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             ))}
                         </div>
