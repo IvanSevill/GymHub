@@ -128,12 +128,17 @@ const Analytics = ({ workouts }) => {
     const [freqPeriod, setFreqPeriod] = useState('month');
     const [muscleFreq, setMuscleFreq] = useState('all');
 
-    // Build sorted + muscle-annotated workouts
-    const annotated = useMemo(() => workouts.map(w => ({
-        ...w,
-        muscle: classifyMuscle(w),
-        totalVol: w.exercise_sets.reduce((acc, s) => acc + getTotalVolume(s), 0)
-    })), [workouts]);
+    // Build sorted + muscle-annotated workouts (only past workouts)
+    const annotated = useMemo(() => {
+        const now = new Date();
+        return (workouts || [])
+            .filter(w => new Date(w.date) <= now)
+            .map(w => ({
+                ...w,
+                muscle: classifyMuscle(w),
+                totalVol: (w.exercise_sets || []).reduce((acc, s) => acc + getTotalVolume(s), 0)
+            }));
+    }, [workouts]);
 
     const IGNORED_MUSCLES = ['Extra', 'Circuito', 'Otros'];
 

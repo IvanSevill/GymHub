@@ -1,7 +1,42 @@
 import { motion } from 'framer-motion'
 import { Zap, CheckCircle2, Trophy, Heart, Flame, Clock, MapPin, Mountain, Watch } from 'lucide-react'
 
-export default function WorkoutCard({ workout, idx }) {
+export default function WorkoutCard({ workout, idx, isSmall = false }) {
+    if (isSmall) {
+        return (
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: idx * 0.05 }}
+                className="bg-[#1e293b]/40 border border-white/10 backdrop-blur-md rounded-2xl p-5 hover:bg-[#1e293b]/60 transition-all border-l-4 border-l-cyan-500/50"
+            >
+                <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-cyan-500/20 rounded-xl">
+                            <Clock className="text-cyan-400 w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-sm leading-tight">{workout.title}</h3>
+                            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">
+                                {new Date(workout.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {workout.muscle_groups && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                        {workout.muscle_groups.split(',').map(m => (
+                            <span key={m} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[9px] font-black uppercase rounded-md border border-purple-500/10">
+                                {m.trim()}
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </motion.div>
+        );
+    }
+
     return (
         <motion.div
             initial={{ opacity: 0, x: -20 }}

@@ -10,10 +10,11 @@ logger = logging.getLogger(__name__)
 
 @router.post("/manual")
 def manual_sync(user_email: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_email).first()
+    user = db.query(User).filter(User.email.ilike(user_email)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Run sync in background as it can take time
-    background_tasks.add_task(sync_data_for_user, user, db)
-    return {"status": "Sync started in background"}
+    # Run sync synchronously to ensure data is updated before response 
+    # (suitable for smaller datasets or when called during initial load)
+    sync_data_for_user(user, db)
+    return {"status": "Sync completed"}

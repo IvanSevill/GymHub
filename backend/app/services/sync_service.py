@@ -1,5 +1,6 @@
 import datetime
 import logging
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.models import User, Workout, ExerciseSet, FitbitData
 from .workout_parser import WorkoutParser
@@ -8,23 +9,65 @@ from .fitbit import FitbitService
 
 logger = logging.getLogger(__name__)
 
-def parse_muscle_groups(title: str) -> str:
+def parse_muscle_groups(title: str, exercise_muscles: List[str] = None) -> str:
     """
     Extracts muscle group names from a workout title and normalizes them.
+    If exercise_muscles is provided, it merges them.
     """
     import re
     parts = re.split(r'[/\-,+]|\by\b', title, flags=re.IGNORECASE)
     normalized = []
-    for p in parts:
-        if p.strip():
-            normalized.append(WorkoutParser.normalize_muscle(p.strip()))
     
-    # Unique parts
+    # Muscle aliases for normalization
+    aliases = {
+        "Piernas": "Pierna", "Pierna": "Pierna",
+        "Bíceps": "Biceps", "Biceps": "Biceps",
+        "Tríceps": "Triceps", "Triceps": "Triceps",
+        "Abdomen": "Abdominales", "Abdominales": "Abdominales",
+        "Gluteo": "Pierna", "Cuadriceps": "Pierna", "Femoral": "Pierna",
+        "Espalda": "Espalda", "Pecho": "Pecho", "Hombro": "Hombro"
+    }
+    
+    # 1. Process title parts
+    for p in parts:
+        p_clean = p.strip().title()
+        if p_clean in aliases:
+            normalized.append(aliases[p_clean])
+        else:
+            # Check for cardio
+            cardio_keywords = ["Natacion", "Natación", "Swim", "Pool", "Piscina", "Carrera", "Run", "Running", "Ciclismo", "Bici", "Bike", "Cardio", "Circuito", "Circuit"]
+            if any(k.lower() == p_clean.lower() for k in cardio_keywords):
+                normalized.append("Cardio")
+
+    # 2. Merge with exercise muscles
+    if exercise_muscles:
+        for m in exercise_muscles:
+            m_norm = m.strip().title()
+            if m_norm in aliases:
+                normalized.append(aliases[m_norm])
+            else:
+                normalized.append(m_norm)
+    
+    # Unique parts, ignoring 'Extra' or generic titles
     unique = []
     for p in normalized:
-        if p not in unique:
+        if p not in unique and p.lower() not in ["extra", "gymhub", "entrenamiento"]:
             unique.append(p)
-    return ','.join(unique)
+            
+    if not unique and any(k.lower() in title.lower() for k in ["cardio", "natacion", "swim", "naco", "piscina", "run", "bike"]):
+        return "Cardio"
+        
+    return ','.join(unique) or "Otros"
+
+def format_fitbit_metadata(fields: dict, owner_email: str) -> str:
+    lines = ["\n[Fitbit Metrics]", f"Owner: {owner_email}"]
+    if fields.get("calories"): lines.append(f"Calorias: {fields['calories']} kcal")
+    if fields.get("heart_rate_avg"): lines.append(f"FC Media: {fields['heart_rate_avg']} bpm")
+    if fields.get("steps"): lines.append(f"Pasos: {fields['steps']}")
+    if fields.get("distance_km"): lines.append(f"Distancia: {float(fields['distance_km']):.2f} km")
+    if fields.get("duration_ms"): lines.append(f"Duracion: {int(fields['duration_ms']/60000)} min")
+    if fields.get("activity_name"): lines.append(f"Actividad: {fields['activity_name']}")
+    return "\n".join(lines)
 
 def unify_cardio_sessions(user: User, db: Session):
     """
@@ -49,20 +92,27 @@ def unify_cardio_sessions(user: User, db: Session):
         # Check if it needs unification: if it has "circuito", "circuit", or "cardio" in title
         title_norm = original_title.lower()
         needs_update = False
-        if "circuito" in title_norm or "circuit" in title_norm or "cardio" in title_norm:
+        cardio_keywords = ["circuito", "circuit", "cardio", "natacion", "swim", "pool", "piscina", "carrera", "run", "ciclismo", "bike", "bici"]
+        if any(k in title_norm for k in cardio_keywords):
             needs_update = True
         
         if needs_update:
             import re
             new_title = original_title
-            # Normalize Circuito/Circuit to Cardio
-            if "circuito" in title_norm:
-                new_title = re.sub(r'(?i)circuito', 'Cardio', original_title)
-            elif "circuit" in title_norm:
-                new_title = re.sub(r'(?i)circuit', 'Cardio', original_title)
+            # Normalize popular activity names to 'Cardio'
+            cardio_patterns = [r'(?i)circuito', r'(?i)circuit', r'(?i)natacion', r'(?i)natación', r'(?i)swim', r'(?i)piscina', r'(?i)carrera', r'(?i)running', r'(?i)run', r'(?i)ciclismo', r'(?i)bike', r'(?i)bici']
+            for pattern in cardio_patterns:
+                if re.search(pattern, new_title):
+                    new_title = re.sub(pattern, 'Cardio', new_title)
             
-            # Ensure "Cardio" is at least present
-            if "Cardio" not in new_title:
+            # Remove redundant "Cardio - Cardio" if it happened
+            new_title = re.sub(r'Cardio\s*-\s*Cardio', 'Cardio', new_title)
+            
+            # Ensure it's clean and starts with Cardio if needed, or is just Cardio
+            new_title = new_title.strip()
+            if not new_title or new_title.lower() == "cardio":
+                new_title = "Cardio"
+            elif "Cardio" not in new_title:
                 new_title = f"Cardio - {new_title}"
 
             if w.title != new_title or w.muscle_groups != "Cardio":
@@ -83,13 +133,83 @@ def unify_cardio_sessions(user: User, db: Session):
 def update_exercises_from_text(workout: Workout, text: str, db: Session):
     """
     Parses text into exercises and replaces existing sets for a workout.
+    Also parses Fitbit metrics if present in text to reconstruct local metrics if missing.
     """
     db.query(ExerciseSet).filter(ExerciseSet.workout_id == workout.id).delete()
     exercises = WorkoutParser.parse_description(text)
     for ex in exercises:
         ex_set = ExerciseSet(workout_id=workout.id, **ex)
         db.add(ex_set)
+    
+    # Reconstruction logic: Parse Fitbit metrics from text
+    # We only reconstruct if the user is currently connected to Fitbit,
+    # as per user request to hide fitbit data/events when session is not started.
+    from app.core.database import SessionLocal
+    from app.models import User
+    
+    can_reconstruct = False
+    with SessionLocal() as session:
+        user = session.query(User).filter(User.email == workout.user_email).first()
+        if user and user.fitbit_access_token:
+            can_reconstruct = True
+
+    if "[Fitbit Metrics]" in text and can_reconstruct:
+        try:
+            import re
+            # Check if metrics already exist to avoid duplicate/overwrite unless necessary
+            existing_metrics = db.query(FitbitData).filter(FitbitData.workout_id == workout.id).first()
+            
+            # Security Check: Only reconstruct if the owner in description matches the current workout owner
+            owner_match = re.search(r'Owner: ([\w\.-]+@[\w\.-]+)', text)
+            
+            if owner_match:
+                extracted_owner = owner_match.group(1).lower()
+                if extracted_owner != workout.user_email.lower():
+                    if existing_metrics:
+                        logger.warning(f"Purging foreign FitbitData for workout {workout.id} (belonged to {extracted_owner})")
+                        db.delete(existing_metrics)
+                        db.commit()
+                    return
+            else:
+                # If metrics are present but Owner tag is missing, it's safer to skip reconstruction
+                # to prevent attribution error in shared calendars for legacy events.
+                if not existing_metrics:
+                    logger.info(f"Skipping legacy Fitbit metrics for workout {workout.id}: Missing Owner tag.")
+                    return
+
+            if not existing_metrics:
+                fields = {}
+                lines = text.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if "Calorias:" in line: fields["calories"] = float(re.search(r'Calorias: ([\d.]+)', line).group(1))
+                    if "FC Media:" in line: fields["heart_rate_avg"] = float(re.search(r'FC Media: ([\d.]+)', line).group(1))
+                    if "Pasos:" in line: fields["steps"] = int(re.search(r'Pasos: (\d+)', line).group(1))
+                    if "Distancia:" in line: fields["distance_km"] = float(re.search(r'Distancia: ([\d.]+)', line).group(1))
+                    if "Duracion:" in line: fields["duration_ms"] = int(re.search(r'Duracion: (\d+)', line).group(1)) * 60000
+                    if "Actividad:" in line: fields["activity_name"] = line.split("Actividad: ")[1].strip() if "Actividad: " in line else "Cardio"
+                
+                if fields:
+                    db.add(FitbitData(workout_id=workout.id, **fields))
+                    logger.info(f"Reconstructed Fitbit metrics from description for workout {workout.id}")
+        except Exception as e:
+            logger.error(f"Failed to reconstruct Fitbit metrics from text for workout {workout.id}: {e}")
+
     db.commit()
+
+    # Derived muscles from exercises
+    ex_muscles = [ex["muscle_group"] for ex in exercises if ex.get("muscle_group")]
+    new_muscles = parse_muscle_groups(workout.title, ex_muscles)
+    if workout.muscle_groups != new_muscles:
+        workout.muscle_groups = new_muscles
+        db.commit()
+
+    # Fallback to 'Cardio' if no structured exercises were found
+    if not exercises and (not workout.muscle_groups or workout.muscle_groups == "Otros"):
+        title_norm = workout.title.lower()
+        if any(k in title_norm for k in ["natacion", "swim", "run", "bike", "cardio", "piscina"]):
+             workout.muscle_groups = "Cardio"
+             db.commit()
 
 def sync_data_for_user(user: User, db: Session):
     """
@@ -111,19 +231,38 @@ def sync_data_for_user(user: User, db: Session):
         cal_id = user.selected_calendar_id
         # Pull 10 years of history to ensure we catch all unifications
         recent_events = cal_service.get_recent_events(days=3650, calendar_id=cal_id)
+        
+        # Keep track of synced IDs to prune obsolete local records later
+        synced_google_ids = set()
 
         for event in recent_events:
             event_id = event.get('id')
             title = event.get('summary', 'Sin Título')
             description = event.get('description', '') or ''
 
-            # Skip events with no workout data (birthdays, reminders, etc.)
-            event_is_valid = '[GymHub]' in description or 'Fitbit' in description or '\u2705' in description
-            if not event_is_valid:
+            # 1. Validation: Only import events that look like workouts.
+            is_gymhub = "[GymHub]" in description or "\u2705" in description
+            is_fitbit = "[Fitbit Metrics]" in description or "Fitbit" in description
+            
+            title_norm = title.lower()
+            cardio_keywords = ["cardio", "carrera", "run", "entren", "workout", "pesas", "weights", "gym", "bici", "bike", "ciclismo", "circuito", "routine", "rutina", "pecho", "espalda", "hombro", "biceps", "triceps", "pierna", "abdomen", "abdominales", "gluteo"]
+            is_manual_workout = any(k in title_norm for k in cardio_keywords)
+
+            if is_fitbit and not user.fitbit_access_token:
+                # Optimization/Privacy: Skip it entirely
                 continue
 
-            # Check if we already have this workout
-            workout = db.query(Workout).filter(Workout.google_event_id == event_id).first()
+            if not (is_gymhub or is_fitbit or is_manual_workout):
+                # Skip generic personal events
+                continue
+
+            synced_google_ids.add(event_id)
+
+            # Check if we already have this workout (filtered by user to avoid crossover)
+            workout = db.query(Workout).filter(
+                Workout.google_event_id == event_id,
+                Workout.user_email == user.email
+            ).first()
 
             if workout:
                 # Update existing workout if changed
@@ -163,6 +302,27 @@ def sync_data_for_user(user: User, db: Session):
 
                 update_exercises_from_text(new_workout, description, db)
 
+        # 2. Pruning: Delete local workouts that were deleted from Google Calendar
+        # or belong to a different calendar (if we just switched)
+        # We only prune sessions that have a google_event_id (ones we expect to be in sync)
+        existing_local = db.query(Workout).filter(
+            Workout.user_email == user.email,
+            Workout.google_event_id.isnot(None)
+        ).all()
+        
+        deleted_count = 0
+        for lw in existing_local:
+            if lw.google_event_id not in synced_google_ids:
+                # Security: Only delete if the event is within the time range we just fetched
+                # (to avoid deleting very old history that might not be in the recent batch)
+                # But since we fetch 3650 days, we can safely prune most.
+                db.delete(lw)
+                deleted_count += 1
+        
+        if deleted_count > 0:
+            db.commit()
+            logger.info(f"Pruned {deleted_count} obsolete local workouts for {user.email}")
+
     except Exception as e:
         logger.error(f"Sync failed for {user.email}: {e}")
 
@@ -181,7 +341,8 @@ ACTIVITY_MAP_ES = {
     "Cycling": "Ciclismo",
     "Bici": "Ciclismo",
     "Weights": "Pesas",
-    "Sport": "Deportes",
+    "Pesas": "Pesas",
+    "Sport": "Deportivo",
     "Workout": "Entrenamiento",
     "Aerobic": "Cardio Aeróbico",
     "Elliptical": "Elíptica",
@@ -260,9 +421,14 @@ def sync_fitbit_for_user(user: User, db: Session):
             log_id = str(act.get("logId", ""))
             fitbit_start = _parse_fitbit_datetime(start_str)
 
-            # Check by logId first (most reliable deduplication)
+            # Check by logId first (most reliable deduplication) - MUST filter by user
             existing_by_log = (
-                db.query(FitbitData).filter(FitbitData.fitbit_log_id == log_id).first()
+                db.query(FitbitData)
+                .join(Workout)
+                .filter(
+                    FitbitData.fitbit_log_id == log_id,
+                    Workout.user_email == user.email
+                ).first()
                 if log_id else None
             )
 
@@ -271,10 +437,15 @@ def sync_fitbit_for_user(user: User, db: Session):
                 fitbit_start, act.get("duration", 0), user_workouts
             )
 
+            # CRITICAL: If we already have this log_id linked to ANY workout, skip creation
+            if existing_by_log:
+                logger.info(f"Skipping sync for log {log_id}: Already exists.")
+                continue
+
             if not matching_workout:
                 # Do not create standalone cardio events for generic daily activities
                 activity_name_lower = (act.get("activityName") or "").lower()
-                generic_names = ["sport", "workout", "aerobic workout"]
+                generic_names = ["sport", "workout", "aerobic workout", "pesas", "weights"]
                 if any(g in activity_name_lower for g in generic_names):
                     logger.info(f"Skipping standalone creation for generic activity: {act.get('activityName')}")
                     continue
@@ -338,14 +509,40 @@ def sync_fitbit_for_user(user: User, db: Session):
                 for k, v in fields.items():
                     setattr(existing_by_log, k, v)
             else:
+                # Still check if this specific workout already had fitbit data 
+                # (to avoid creating duplicates if matching_workout was found via time)
                 existing_data = db.query(FitbitData).filter(FitbitData.workout_id == matching_workout.id).first()
                 if not existing_data:
                     db.add(FitbitData(workout_id=matching_workout.id, **fields))
                 else:
+                    # Update the existing one
                     for k, v in fields.items():
                         setattr(existing_data, k, v)
             
             db.commit()
+
+            # Update Google Calendar description with Fitbit metadata for persistence
+            if matching_workout.google_event_id and user.google_access_token:
+                try:
+                    cal_service = GoogleCalendarService(user, db)
+                    event = cal_service.service.events().get(
+                        calendarId=user.selected_calendar_id, 
+                        eventId=matching_workout.google_event_id
+                    ).execute()
+                    
+                    desc = event.get('description', '') or ''
+                    # Don't duplicate if already exists
+                    if "[Fitbit Metrics]" not in desc:
+                        new_desc = desc + format_fitbit_metadata(fields, user.email)
+                        cal_service.update_event(
+                            matching_workout.google_event_id, 
+                            description=new_desc, 
+                            calendar_id=user.selected_calendar_id
+                        )
+                        logger.info(f"Updated Google Calendar description for event {matching_workout.google_event_id}")
+                except Exception as e:
+                    logger.error(f"Failed to update calendar description with Fitbit data: {e}")
+
             linked_workout_ids.add(matching_workout.id)
 
     except Exception as e:

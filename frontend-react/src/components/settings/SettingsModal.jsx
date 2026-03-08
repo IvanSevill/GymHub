@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, CheckCircle2, Loader2, Watch } from 'lucide-react'
-import { updateSelectedCalendar } from '../../api/gymhubApi'
+import { Settings, CheckCircle2, Loader2, Watch, Download, Upload, Activity } from 'lucide-react'
+import { updateSelectedCalendar, exportRootMock, importRootMock } from '../../api/gymhubApi'
 
 export default function SettingsModal({
     showSettings,
@@ -15,12 +16,30 @@ export default function SettingsModal({
     setSelectedCal,
     autoSync,
     setAutoSync,
-    fetchCalendars,
     handleConnectFitbit,
     handleDisconnectFitbit,
+    handleSync,
     showToast
 }) {
+    const [newExercise, setNewExercise] = useState({ name: '', muscle: 'Pecho' });
+    const [isAddingExercise, setIsAddingExercise] = useState(false);
+
     if (!showSettings) return null;
+
+    const handleAddManualExercise = async () => {
+        if (!newExercise.name) return;
+        try {
+            setIsAddingExercise(true);
+            const { addMasterExercise } = await import('../../api/gymhubApi');
+            await addMasterExercise(newExercise.name, newExercise.muscle);
+            showToast(`Ejercicio "${newExercise.name}" añadido correctamente`);
+            setNewExercise({ ...newExercise, name: '' });
+        } catch (error) {
+            showToast('Error al añadir ejercicio', 'error');
+        } finally {
+            setIsAddingExercise(false);
+        }
+    }
 
     const handleConnectGoogle = async () => {
         try {
@@ -35,10 +54,48 @@ export default function SettingsModal({
         }
     }
 
+    const handleExportMock = async () => {
+        try {
+            const data = await exportRootMock();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gymhub_exercises_mock_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            showToast('Mock de ejercicios exportado correctamente');
+        } catch (error) {
+            showToast('Error al exportar mock', 'error');
+        }
+    }
+
+    const handleImportMock = async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const mockData = JSON.parse(event.target.result);
+                    await importRootMock(mockData);
+                    showToast('Mock importado con éxito. Refrescando...');
+                    window.location.reload();
+                } catch (err) {
+                    showToast('Error al importar el archivo JSON', 'error');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    }
+
     const selectCalendar = async (id) => {
         try {
             await updateSelectedCalendar(id);
             setSelectedCal(id)
+            if (handleSync) handleSync();
         } catch (error) {
             console.error('Update calendar failed:', error)
         }
@@ -151,6 +208,63 @@ export default function SettingsModal({
                             </div>
                         </div>
                     </div>
+
+                    {currentUser?.is_root === true && (
+                        <div className="space-y-6">
+                            <div>
+                                <label className="text-sm font-bold text-purple-400 uppercase tracking-widest mb-4 block">Herramientas Root</label>
+                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                    <button
+                                        onClick={handleExportMock}
+                                        className="flex items-center justify-center gap-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 p-4 rounded-2xl text-xs font-bold transition-all border border-purple-500/20"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Exportar Mock
+                                    </button>
+                                    <button
+                                        onClick={handleImportMock}
+                                        className="flex items-center justify-center gap-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 p-4 rounded-2xl text-xs font-bold transition-all border border-indigo-500/20"
+                                    >
+                                        <Upload className="w-4 h-4" />
+                                        Importar Mock
+                                    </button>
+                                </div>
+
+                                <div className="bg-purple-500/5 border border-purple-500/10 p-5 rounded-3xl">
+                                    <p className="text-xs font-bold text-purple-300 uppercase tracking-widest mb-4">Añadir Ejercicio Manual</p>
+                                    <div className="space-y-3">
+                                        <input
+                                            type="text"
+                                            placeholder="Nombre del ejercicio (ej: Press Militar)"
+                                            value={newExercise.name}
+                                            onChange={(e) => setNewExercise({ ...newExercise, name: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 text-white"
+                                        />
+                                        <select
+                                            value={newExercise.muscle}
+                                            onChange={(e) => setNewExercise({ ...newExercise, muscle: e.target.value })}
+                                            className="w-full bg-[#1e293b] border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 text-white appearance-none"
+                                        >
+                                            <option value="Pecho">Pecho</option>
+                                            <option value="Espalda">Espalda</option>
+                                            <option value="Hombro">Hombro</option>
+                                            <option value="Pierna">Pierna</option>
+                                            <option value="Biceps">Biceps</option>
+                                            <option value="Triceps">Triceps</option>
+                                            <option value="Abdominales">Abdominales</option>
+                                        </select>
+                                        <button
+                                            onClick={handleAddManualExercise}
+                                            disabled={isAddingExercise || !newExercise.name}
+                                            className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all"
+                                        >
+                                            {isAddingExercise ? 'Añadiendo...' : 'Añadir al Master'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="pt-4 border-t border-white/10">
                         <button

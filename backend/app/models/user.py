@@ -21,5 +21,6 @@ class User(Base):
     fitbit_id = Column(String, unique=True, index=True, nullable=True)
     fitbit_access_token = Column(String, nullable=True)
     fitbit_refresh_token = Column(String, nullable=True)
+    is_root = Column(Integer, default=0) # 0 = False, 1 = True
     
     workouts = relationship("Workout", back_populates="user")

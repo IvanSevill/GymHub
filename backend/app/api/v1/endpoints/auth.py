@@ -68,8 +68,17 @@ def google_connect(data: dict, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
         
+        from .users import is_user_root
+        user_data = {
+            "email": user.email,
+            "name": user.name,
+            "picture_url": user.picture_url,
+            "selected_calendar_id": user.selected_calendar_id,
+            "fitbit_access_token": user.fitbit_access_token,
+            "is_root": bool(is_user_root(user.email, user.is_root))
+        }
         session_token = create_access_token({"sub": user.email})
-        return {"token": session_token, "user": user}
+        return {"token": session_token, "user": user_data}
         
     except Exception as e:
         logger.error(f"Google auth error: {e}")
@@ -112,8 +121,17 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
         
+        from .users import is_user_root
+        user_data = {
+            "email": user.email,
+            "name": user.name,
+            "picture_url": user.picture_url,
+            "selected_calendar_id": user.selected_calendar_id,
+            "fitbit_access_token": user.fitbit_access_token,
+            "is_root": bool(is_user_root(user.email, user.is_root))
+        }
         session_token = create_access_token({"sub": user.email})
-        return {"token": session_token, "user": user}
+        return {"token": session_token, "user": user_data}
     except Exception as e:
         logger.error(f"Mobile Google auth error: {e}")
         raise HTTPException(400, f"Authentication failed: {str(e)}")
@@ -129,12 +147,32 @@ def connect_fitbit(
     if not user: raise HTTPException(404, "User not found")
     try:
         tokens = FitbitService.exchange_code_for_token(auth_code, redirect_uri=redirect_uri)
-        user.fitbit_id = tokens.get("user_id")
-        user.fitbit_access_token = tokens.get("access_token")
+        fitbit_id = tokens.get("user_id")
+        access_token = tokens.get("access_token")
+        
+        # Verify whose account we are actually connecting
+        profile = FitbitService.fetch_profile(access_token)
+        fitbit_name = profile.get("fullName", "Unknown")
+        
+        logger.info(f"Connecting GymHub user {user_email} to Fitbit account: {fitbit_name} ({fitbit_id})")
+        
+        # Prevent UNIQUE constraint error (users.fitbit_id)
+        # If this Fitbit account is already linked to another GymHub user, transfer it.
+        existing_user = db.query(User).filter(User.fitbit_id == fitbit_id, User.email != user_email).first()
+        if existing_user:
+            logger.warning(f"TRANSFER: Fitbit account {fitbit_id} ({fitbit_name}) was already linked to {existing_user.email}. Moving it to {user_email}.")
+            existing_user.fitbit_id = None
+            existing_user.fitbit_access_token = None
+            existing_user.fitbit_refresh_token = None
+            db.commit()
+
+        user.fitbit_id = fitbit_id
+        user.fitbit_access_token = access_token
         user.fitbit_refresh_token = tokens.get("refresh_token")
         db.commit()
         return {"status": "Fitbit connected"}
     except Exception as e:
+        db.rollback()
         logger.error(f"Fitbit auth error: {e}")
         raise HTTPException(400, f"Failed to connect Fitbit account: {str(e)}")
 
@@ -177,7 +215,7 @@ def mock_google_auth(user_email: str, db: Session = Depends(get_db)):
         user = User(email=user_email, google_id=f"mock_{user_email}")
         db.add(user)
     
-    user.name = "Iván J. Sevillano"
+    user.name = "Mock GymHub User"
     user.picture_url = "https://ui-avatars.com/api/?name=Ivan+J+Sevillano&background=06b6d4&color=fff&bold=true"
     user.google_access_token = "mock_access_token"
     user.google_refresh_token = "mock_refresh_token"

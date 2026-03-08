@@ -62,6 +62,14 @@ export const createEventTemplate = async (payload) => {
     return response.data;
 };
 
+export const createWeeklyPlan = async (payload) => {
+    const response = await axios.post(`${API_URL}/calendar/create-weekly-plan`, {
+        user_email: getUserEmail(),
+        ...payload
+    });
+    return response.data;
+};
+
 export const disconnectFitbit = async () => {
     const email = getUserEmail();
     if (!email) throw new Error("No user email");
@@ -69,3 +77,20 @@ export const disconnectFitbit = async () => {
     return response.data;
 };
 
+export const exportRootMock = async () => {
+    const email = getUserEmail();
+    const response = await axios.get(`${API_URL}/workouts/root/export-mock?user_email=${email}`);
+    return response.data;
+};
+
+export const importRootMock = async (mockData) => {
+    const email = getUserEmail();
+    const response = await axios.post(`${API_URL}/workouts/root/import-mock?user_email=${email}`, mockData);
+    return response.data;
+};
+
+export const addMasterExercise = async (name, muscle) => {
+    const email = getUserEmail();
+    const response = await axios.post(`${API_URL}/workouts/root/add-exercise?user_email=${email}&exercise_name=${name}&muscle=${muscle}`);
+    return response.data;
+};

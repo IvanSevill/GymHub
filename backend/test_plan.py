@@ -1,21 +1,20 @@
 import requests
 import json
 
-URL = "http://localhost:8000/api/v1/calendar/create-template"
-PAYLOAD = {
-    "user_email": "ivansevillano2005@gmail.com",
-    "title": "Test Plan",
+base_url = "http://localhost:8000/api/v1"
+email = "ivansevillano2005@gmail.com"
+
+payload = {
+    "user_email": email,
+    "title": "Pecho",
     "muscles": ["Pecho"],
-    "date": "2026-03-08",
+    "date": "2026-03-20",
     "start_hour": 10,
-    "start_minute": 00,
+    "start_minute": 0,
     "end_hour": 11,
-    "end_minute": 00
+    "end_minute": 30
 }
 
-try:
-    response = requests.post(URL, json=PAYLOAD)
-    print(f"Status Code: {response.status_code}")
-    print(f"Response: {response.text}")
-except Exception as e:
-    print(f"Error: {e}")
+response = requests.post(f"{base_url}/calendar/create-template", json=payload)
+print(f"Status: {response.status_code}")
+print(response.text)

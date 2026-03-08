@@ -1,6 +1,10 @@
 import datetime
 import logging
+import json
+import os
+import unicodedata
 from typing import List, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -8,15 +12,62 @@ from app.models import User, Workout, ExerciseSet
 from app.schemas.workout import WorkoutOut, WorkoutCreate
 from app.services.workout_parser import WorkoutParser
 from app.services.sync_service import parse_muscle_groups
+from app.core.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+def get_root_users(db: Session):
+    emails = []
+    # 1. From JSON file
+    try:
+        if os.path.exists(settings.ROOT_USERS_FILE):
+             with open(settings.ROOT_USERS_FILE, 'r') as f:
+                emails.extend(json.load(f))
+    except Exception as e:
+        logger.error(f"Error reading root users JSON: {e}")
+    
+    # 2. From Database
+    try:
+        db_roots = db.query(User.email).filter(User.is_root == True).all()
+        emails.extend([r[0] for r in db_roots])
+    except Exception as e:
+        logger.error(f"Error reading root users from DB: {e}")
+        
+    return list(set([e.lower() for e in emails]))
+
+def normalize_exercise_name(name: str) -> str:
+    # Remove accents and convert to title case
+    nksfd = unicodedata.normalize('NFKD', name)
+    name = "".join([c for c in nksfd if not unicodedata.combining(c)])
+    return name.strip().title()
+
 @router.get("/", response_model=List[WorkoutOut])
 def get_workouts(user_email: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_email).first()
+    user = db.query(User).filter(User.email.ilike(user_email)).first()
     if not user: raise HTTPException(404, "User not found")
-    workouts = db.query(Workout).filter(Workout.user_email == user.email).order_by(Workout.date.desc()).all()
+    
+    # Use the case-normalized email from the user record
+    query = db.query(Workout).filter(Workout.user_email == user.email)
+    
+    # Security: If user is not connected to Fitbit, hide all Fitbit-sourced workouts 
+    if not user.fitbit_access_token:
+        from app.models.fitbit import FitbitData
+        # Hide workouts with source='fitbit' OR those that have FitbitData OR those with [Fitbit Metrics] marker
+        # (The marker check handles sessions synced to Google Kalendar by Fitbit itself)
+        query = query.outerjoin(FitbitData).filter(
+            Workout.source != 'fitbit',
+            FitbitData.id == None,
+            ~Workout.title.ilike('%[Fitbit Metrics]%'),
+            ~Workout.title.ilike('%Fitbit%')
+        )
+        
+    workouts = query.order_by(Workout.date.desc()).all()
+    
+    # Secondary check: If someone manually added [Fitbit Metrics] to a calendar event title/desc 
+    # but isn't connected, we should ideally filter those out too if they are just ghost copies.
+    # The source filter above handles the ones created by the app.
+    
     return workouts
 
 def get_set_muscle(s: ExerciseSet, w: Workout) -> str:
@@ -30,35 +81,177 @@ def get_set_muscle(s: ExerciseSet, w: Workout) -> str:
 
 @router.get("/exercises-by-muscle")
 def get_exercises_by_muscle(user_email: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_email).first()
+    user = db.query(User).filter(User.email.ilike(user_email)).first()
     if not user: raise HTTPException(404, "User not found")
 
-    sets = (
+    root_emails = get_root_users(db)
+    search_emails = list(set([user.email.lower()] + root_emails))
+
+    logger.info(f"Fetching exercises for user: {user.email}. Root users: {root_emails}")
+    
+    from sqlalchemy import func
+    # 1. Get all unique exercise names available to this user (theirs + root)
+    available_sets = (
+        db.query(ExerciseSet.exercise_name, ExerciseSet.muscle_group, Workout.muscle_groups.label("workout_muscles"))
+        .join(Workout, ExerciseSet.workout_id == Workout.id)
+        .filter(func.lower(Workout.user_email).in_(search_emails))
+        .all()
+    )
+
+    exercise_catalog = {}
+    for es_name, es_muscle, w_muscles in available_sets:
+        norm_name = normalize_exercise_name(es_name)
+        if norm_name not in exercise_catalog:
+            # Determine muscle group
+            muscle = es_muscle
+            if not muscle and w_muscles:
+                parts = w_muscles.split(',')
+                if parts: muscle = parts[0]
+            muscle = WorkoutParser.normalize_muscle(muscle or 'Otros')
+            
+            if muscle != 'Otros':
+                exercise_catalog[norm_name] = {"name": norm_name, "muscle": muscle, "last_weight": None}
+
+    # 2. Get ONLY the user's most recent sets to fill in their own weights
+    user_sets = (
         db.query(ExerciseSet)
-        .join(Workout)
-        .filter(Workout.user_email == user_email)
+        .join(Workout, ExerciseSet.workout_id == Workout.id)
+        .filter(func.lower(Workout.user_email) == user.email.lower())
         .order_by(Workout.date.desc())
         .all()
     )
 
-    seen = {}
-    for s in sets:
-        name = s.exercise_name.strip()
-        if name not in seen:
+    for s in user_sets:
+        norm_name = normalize_exercise_name(s.exercise_name)
+        if norm_name in exercise_catalog and exercise_catalog[norm_name]["last_weight"] is None:
             vals = [v for v in [s.value1, s.value2, s.value3, s.value4] if v is not None]
             weight_str = " - ".join(str(int(v) if v == int(v) else v) for v in vals)
             if s.unit and weight_str:
                 weight_str += s.unit
-            muscle = get_set_muscle(s, s.workout)
-            seen[name] = {"name": name, "muscle": muscle, "last_weight": weight_str or None}
+            exercise_catalog[norm_name]["last_weight"] = weight_str
+    
+    seen = exercise_catalog
 
-    result = {}
+    # Group by muscle
+    grouped = {}
     for ex in seen.values():
         muscle = ex["muscle"]
-        if muscle not in result:
-            result[muscle] = []
-        result[muscle].append({"name": ex["name"], "last_weight": ex["last_weight"]})
+        if muscle not in grouped:
+            grouped[muscle] = []
+        grouped[muscle].append({"name": ex["name"], "last_weight": ex["last_weight"]})
+
+    # Sort muscles alphabetically
+    sorted_muscles = sorted(grouped.keys())
+    
+    result = {}
+    for muscle in sorted_muscles:
+        # Sort exercises within each muscle alphabetically
+        exercises = sorted(grouped[muscle], key=lambda x: x["name"])
+        result[muscle] = exercises
+        
     return result
+
+@router.get("/root/export-mock")
+def export_exercises_mock(user_email: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == user_email).first()
+    from .users import is_user_root
+    if not user or not is_user_root(user.email, user.is_root):
+        raise HTTPException(403, "Only root users can export mocks")
+    
+    sets = (
+        db.query(ExerciseSet)
+        .join(Workout)
+        .filter(Workout.user_email == user_email)
+        .all()
+    )
+    
+    mock_data = []
+    for s in sets:
+        mock_data.append({
+            "exercise_name": s.exercise_name,
+            "muscle_group": s.muscle_group,
+            "unit": s.unit,
+            "reps": s.reps,
+            "value1": s.value1,
+            "value2": s.value2,
+            "value3": s.value3,
+            "value4": s.value4
+        })
+    return mock_data
+
+@router.post("/root/import-mock")
+def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == user_email).first()
+    from .users import is_user_root
+    if not user or not is_user_root(user.email, user.is_root):
+        raise HTTPException(403, "Only root users can import mocks")
+    
+    # Create a dummy workout to hold these exercises
+    master_workout = Workout(
+        user_email=user_email,
+        title="Master Exercises Mock",
+        date=datetime.datetime.now(),
+        muscle_groups="Master",
+        source="root_import"
+    )
+    db.add(master_workout)
+    db.commit()
+    db.refresh(master_workout)
+    
+    for item in mock_data:
+        ex_set = ExerciseSet(
+            workout_id=master_workout.id,
+            exercise_name=item.get("exercise_name"),
+            muscle_group=item.get("muscle_group"),
+            unit=item.get("unit"),
+            reps=item.get("reps"),
+            value1=item.get("value1"),
+            value2=item.get("value2"),
+            value3=item.get("value3"),
+            value4=item.get("value4")
+        )
+        db.add(ex_set)
+    
+    db.commit()
+    return {"status": "Mock imported", "count": len(mock_data)}
+
+@router.post("/root/add-exercise")
+def add_master_exercise(user_email: str, exercise_name: str, muscle: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == user_email).first()
+    from .users import is_user_root
+    if not user or not is_user_root(user_email, user.is_root):
+        raise HTTPException(403, "Only root users can add master exercises")
+    
+    # Check if exists normalized
+    norm = normalize_exercise_name(exercise_name)
+    
+    # Create a persistent root workout for this muscle if not exists, or just a new one
+    master_workout = db.query(Workout).filter(
+        Workout.user_email == user_email, 
+        Workout.title == f"Master {muscle}",
+        Workout.source == "root_added"
+    ).first()
+    
+    if not master_workout:
+        master_workout = Workout(
+            user_email=user_email,
+            title=f"Master {muscle}",
+            date=datetime.datetime.now(),
+            muscle_groups=muscle,
+            source="root_added"
+        )
+        db.add(master_workout)
+        db.commit()
+        db.refresh(master_workout)
+    
+    ex_set = ExerciseSet(
+        workout_id=master_workout.id,
+        exercise_name=exercise_name,
+        muscle_group=muscle
+    )
+    db.add(ex_set)
+    db.commit()
+    return {"status": "Exercise added", "exercise": norm}
 
 @router.post("/", response_model=WorkoutOut)
 def create_workout(workout_in: WorkoutCreate, db: Session = Depends(get_db)):

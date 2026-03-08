@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Heart, Footprints, Flame, Activity, Mountain, MapPin, Timer, Zap, TrendingUp, Watch } from 'lucide-react';
+import { Heart, Footprints, Flame, Activity, Mountain, MapPin, Timer, Zap, TrendingUp, Watch, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -105,6 +105,18 @@ const FitbitPanel = ({ workouts = [], userName, onConnect, isConnected }) => {
                     {userName ? `Fitbit — ${userName}` : 'Fitbit Dashboard'}
                 </h3>
                 <div className="flex items-center gap-3">
+                    {isConnected && (
+                        <button
+                            onClick={() => {
+                                if (window.confirm('¿Estás seguro de que quieres desconectar Fitbit? Se eliminarán tus métricas locales.')) {
+                                    window.dispatchEvent(new CustomEvent('gymhub:disconnect_fitbit'));
+                                }
+                            }}
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2.5 rounded-2xl text-xs font-black transition-all border border-red-500/20"
+                        >
+                            Desconectar
+                        </button>
+                    )}
                     {!isConnected && (
                         <button
                             onClick={onConnect}

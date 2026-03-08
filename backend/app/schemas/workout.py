@@ -59,3 +59,16 @@ class CreateEventTemplateRequest(BaseModel):
     start_minute: int
     end_hour: int
     end_minute: int
+
+class WeeklyWorkout(BaseModel):
+    title: str
+    muscles: List[str]
+    date: str
+    start_hour: int
+    start_minute: int
+    end_hour: int
+    end_minute: int
+
+class CreateWeeklyPlanRequest(BaseModel):
+    user_email: str
+    workouts: List[WeeklyWorkout]

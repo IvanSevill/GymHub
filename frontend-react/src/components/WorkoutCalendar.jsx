@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Target, X, Dumbbel
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     format, addMonths, subMonths, startOfMonth, endOfMonth,
-    startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays
+    startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, startOfDay
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import CreateEventModal from './workouts/CreateEventModal';
@@ -15,7 +15,10 @@ const formatValues = (set) => {
 };
 
 const WorkoutPopup = ({ day, workouts, onClose }) => {
-    const dayWorkouts = workouts.filter(w => isSameDay(new Date(w.date), day));
+    const dayWorkouts = (workouts || []).filter(w => {
+        const d = new Date(w.date);
+        return !isNaN(d) && isSameDay(d, day);
+    });
 
     return (
         <AnimatePresence>
@@ -214,6 +217,11 @@ const WorkoutCalendar = ({ workouts, onRefresh }) => {
         const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
         const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
+        const monthWorkouts = (workouts || []).filter(w => {
+            const d = new Date(w.date);
+            return !isNaN(d) && isSameMonth(d, monthStart);
+        });
+
         const rows = [];
         let days = [];
         let day = startDate;
@@ -222,17 +230,26 @@ const WorkoutCalendar = ({ workouts, onRefresh }) => {
             for (let i = 0; i < 7; i++) {
                 const cloneDay = day;
                 const formattedDate = format(day, 'd');
-                const dayWorkouts = workouts.filter(d => isSameDay(new Date(d.date), cloneDay));
+                const dayWorkouts = (workouts || []).filter(w => {
+                    const wDate = new Date(w.date);
+                    return !isNaN(wDate) && isSameDay(wDate, cloneDay);
+                });
                 const hasWorkout = dayWorkouts.length > 0;
                 const isCurrentMonth = isSameMonth(day, monthStart);
                 const isToday = isSameDay(day, new Date());
+                const isFuture = startOfDay(day) > startOfDay(new Date());
 
                 // Decide color based on workout types
-                const hasCardio = dayWorkouts.some(w => w.muscle_groups?.includes('Cardio') || w.source === 'fitbit' && !w.exercise_sets?.length);
-                const hasMuscle = dayWorkouts.some(w => w.muscle_groups && w.muscle_groups !== 'Cardio');
+                const hasCardio = dayWorkouts.some(w => (w.muscle_groups && String(w.muscle_groups).includes('Cardio')) || (w.source === 'fitbit' && (!w.exercise_sets || w.exercise_sets.length === 0)));
+                const hasMuscle = dayWorkouts.some(w => w.muscle_groups && !String(w.muscle_groups).includes('Cardio'));
 
-                const theme = hasMuscle ? 'cyan' : (hasCardio ? 'emerald' : 'cyan');
-                const ThemeIcon = hasMuscle ? Target : Heart;
+                let theme = hasMuscle ? 'cyan' : (hasCardio ? 'emerald' : 'cyan');
+                let ThemeIcon = hasMuscle ? Target : Heart;
+
+                if (isFuture && hasWorkout) {
+                    theme = 'indigo';
+                    ThemeIcon = Watch; // Use Watch or Clock to indicate "Planned"
+                }
 
                 const classes = {
                     cyan: {
@@ -254,6 +271,17 @@ const WorkoutCalendar = ({ workouts, onRefresh }) => {
                         dropShadow: 'drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]',
                         bgBar: 'bg-emerald-500',
                         shadowBar: 'shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                    },
+                    indigo: {
+                        hoverBg: 'hover:bg-indigo-500/5',
+                        textToday: 'text-indigo-400',
+                        bgToday: 'bg-indigo-400/10',
+                        bgPulse: 'bg-indigo-500/10',
+                        textPrimary: 'text-indigo-400',
+                        dropShadow: 'drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]',
+                        bgBar: 'bg-indigo-500/50',
+                        shadowBar: 'shadow-[0_0_10px_rgba(99,102,241,0.2)]',
+                        border: 'border-indigo-500/30 border-dashed bg-indigo-500/5'
                     }
                 }[theme];
 
@@ -263,7 +291,7 @@ const WorkoutCalendar = ({ workouts, onRefresh }) => {
                         onClick={() => isCurrentMonth && handleDayClick(cloneDay)}
                         className={`relative h-20 md:h-24 border border-white/[0.03] p-2 transition-all
                             ${!isCurrentMonth ? 'opacity-20 pointer-events-none' : ''}
-                            ${hasWorkout && isCurrentMonth ? `cursor-pointer ${classes.hoverBg}` : ''}
+                            ${hasWorkout && isCurrentMonth ? `cursor-pointer ${classes.hoverBg} ${classes.border || ''}` : ''}
                         `}
                     >
                         <span className={`text-sm font-bold ${isToday ? `${classes.textToday} ${classes.bgToday} px-2 py-1 rounded-lg` : 'text-gray-500'}`}>
@@ -294,7 +322,16 @@ const WorkoutCalendar = ({ workouts, onRefresh }) => {
             );
             days = [];
         }
-        return <div className="rounded-3xl border border-white/5 overflow-hidden bg-black/20 backdrop-blur-sm">{rows}</div>;
+        return (
+            <div className="rounded-3xl border border-white/5 overflow-hidden bg-black/20 backdrop-blur-sm relative">
+                {rows}
+                {monthWorkouts.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-30">
+                        <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">No hay actividad este mes</p>
+                    </div>
+                )}
+            </div>
+        );
     };
 
     return (

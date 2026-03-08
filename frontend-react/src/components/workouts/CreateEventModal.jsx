@@ -1,9 +1,36 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Loader2, CheckCircle2, Dumbbell, Clock } from 'lucide-react'
-import { fetchExercisesByMuscle, createEventTemplate } from '../../api/gymhubApi'
+import { fetchExercisesByMuscle, createEventTemplate, createWeeklyPlan } from '../../api/gymhubApi'
 
-const BASE_MUSCLES = ['Pecho', 'Espalda', 'Hombro', 'Biceps', 'Triceps', 'Pierna', 'Abdominales', 'Otros']
+const BASE_MUSCLES = ['Pecho', 'Espalda', 'Hombro', 'Biceps', 'Triceps', 'Pierna', 'Abdominales']
+const WEEKLY_RECOMMENDATIONS = [
+    { name: 'Empuje (Push)', muscles: ['Pecho', 'Hombro', 'Triceps'] },
+    { name: 'Tirón (Pull)', muscles: ['Espalda', 'Biceps'] },
+    { name: 'Pierna', muscles: ['Pierna'] },
+    { name: 'Torso/Superior', muscles: ['Pecho', 'Espalda', 'Hombro'] },
+    { name: 'Full Body', muscles: ['Pecho', 'Espalda', 'Pierna'] },
+]
+
+const WEEKLY_PLANS = [
+    {
+        name: 'Rutina 3 Días (Clásica)',
+        workouts: [
+            { title: 'Pecho - Hombro - Tríceps', muscles: ['Pecho', 'Hombro', 'Triceps'] },
+            { title: 'Pierna - Abdominales', muscles: ['Pierna', 'Abdominales'] },
+            { title: 'Bíceps - Espalda', muscles: ['Biceps', 'Espalda'] }
+        ]
+    },
+    {
+        name: 'Rutina 4 Días (Dividida)',
+        workouts: [
+            { title: 'Pecho - Abdominales', muscles: ['Pecho', 'Abdominales'] },
+            { title: 'Hombro - Tríceps', muscles: ['Hombro', 'Triceps'] },
+            { title: 'Pierna', muscles: ['Pierna'] },
+            { title: 'Bíceps - Espalda', muscles: ['Biceps', 'Espalda'] }
+        ]
+    }
+]
 const MUSCLE_COLORS = {
     'Pecho': '#06b6d4', 'Espalda': '#8b5cf6', 'Hombro': '#f59e0b', 'Hombros': '#f59e0b',
     'Biceps': '#ec4899', 'Bíceps': '#ec4899', 'Triceps': '#10b981', 'Tríceps': '#10b981',
@@ -17,7 +44,7 @@ const MUSCLE_COLORS = {
 }
 const LEG_MUSCLES = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
 // Normalizes accents and lowercase for robust comparison
-const normStr = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+const normStr = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 
 export default function CreateEventModal({ onClose, onCreated }) {
@@ -27,6 +54,7 @@ export default function CreateEventModal({ onClose, onCreated }) {
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState(null)
+    const [weeklyPlan, setWeeklyPlan] = useState(null) // { workouts: [...] }
 
     // Date/time state
     const today = new Date().toISOString().split('T')[0]
@@ -61,11 +89,14 @@ export default function CreateEventModal({ onClose, onCreated }) {
             return [...directLegExs, ...subExs]
         }
         return (exercisesByMuscle[m] || []).map(ex => ({ ...ex, muscle: m }))
+    }).sort((a, b) => {
+        if (a.muscle !== b.muscle) return a.muscle.localeCompare(b.muscle);
+        return a.name.localeCompare(b.name);
     })
 
     const dynamicMuscles = Array.from(new Set([...BASE_MUSCLES, ...Object.keys(exercisesByMuscle)]))
-        .filter(m => m !== 'Otros')
-        .concat('Otros')
+        .filter(m => m && m !== 'Otros')
+        .sort()
 
     const title = (selectedMuscles.join(' - ') || 'Entrenamiento')
         .replace(/Circuito/gi, 'Cardio')
@@ -83,21 +114,76 @@ export default function CreateEventModal({ onClose, onCreated }) {
         }
     }
 
+    const handleWeeklyPlanSelect = (plan) => {
+        // Generate random schedule for the next week starting from next Monday
+        const now = new Date();
+        const nextMonday = new Date();
+        nextMonday.setDate(now.getDate() + ((1 + 7 - now.getDay()) % 7 || 7));
+
+        const possibleDays = [0, 1, 2, 3, 4, 5, 6]; // Offset from Monday
+        // Shuffle days
+        const shuffled = [...possibleDays].sort(() => Math.random() - 0.5);
+
+        const workouts = plan.workouts.map((w, i) => {
+            const dayOffset = shuffled[i % shuffled.length];
+            const d = new Date(nextMonday);
+            d.setDate(d.getDate() + dayOffset);
+
+            // Random hour between 8 and 20
+            const h = Math.floor(Math.random() * (20 - 8 + 1)) + 8;
+            const m = Math.random() > 0.5 ? 0 : 30;
+
+            const startH = h;
+            const startM = m;
+
+            // Fixed duration: 1h 30m
+            let endH = h + 1;
+            let endM = m + 30;
+            if (endM >= 60) {
+                endH += 1;
+                endM -= 60;
+            }
+
+            return {
+                ...w,
+                date: d.toISOString().split('T')[0],
+                start_hour: startH,
+                start_minute: startM,
+                end_hour: endH,
+                end_minute: endM
+            };
+        }).sort((a, b) => a.date.localeCompare(b.date));
+
+        setWeeklyPlan({ name: plan.name, workouts });
+        setStep(3); // Go straight to preview
+    }
+
+    const updateWeeklyWorkout = (idx, fields) => {
+        setWeeklyPlan(prev => ({
+            ...prev,
+            workouts: prev.workouts.map((w, i) => i === idx ? { ...w, ...fields } : w)
+        }))
+    }
+
     const [isSuccess, setIsSuccess] = useState(false)
 
     const handleSubmit = async () => {
         setSubmitting(true)
         setError(null)
         try {
-            await createEventTemplate({
-                title,
-                muscles: selectedMuscles,
-                date,
-                start_hour: startHour,
-                start_minute: startMin,
-                end_hour: endHour,
-                end_minute: endMin,
-            })
+            if (weeklyPlan) {
+                await createWeeklyPlan({ workouts: weeklyPlan.workouts })
+            } else {
+                await createEventTemplate({
+                    title,
+                    muscles: selectedMuscles,
+                    date,
+                    start_hour: startHour,
+                    start_minute: startMin,
+                    end_hour: endHour,
+                    end_minute: endMin,
+                })
+            }
             setIsSuccess(true)
             // Wait 1.5s to show success state
             setTimeout(() => {
@@ -194,6 +280,43 @@ export default function CreateEventModal({ onClose, onCreated }) {
 
                                     return (
                                         <>
+                                            <div className="mb-6">
+                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Planes Semanales (Auto-Planificar)</p>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    {WEEKLY_PLANS.map(plan => (
+                                                        <button
+                                                            key={plan.name}
+                                                            onClick={() => handleWeeklyPlanSelect(plan)}
+                                                            className="w-full text-left p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all group"
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div>
+                                                                    <p className="text-sm font-black text-cyan-400">{plan.name}</p>
+                                                                    <p className="text-[10px] text-cyan-400/60 uppercase tracking-tighter">Planifica {plan.workouts.length} días automáticamente</p>
+                                                                </div>
+                                                                <Plus className="w-4 h-4 text-cyan-400 group-hover:rotate-90 transition-transform" />
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="mb-6">
+                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Sugerencias Rápidas</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {WEEKLY_RECOMMENDATIONS.map(rec => (
+                                                        <button
+                                                            key={rec.name}
+                                                            onClick={() => setSelectedMuscles(rec.muscles)}
+                                                            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-white/10 hover:border-white/20 transition-all text-gray-400"
+                                                        >
+                                                            {rec.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Grupos Musculares</p>
                                             {otherMuscles.map(m => renderButton(m))}
 
                                             {/* Render Piernas and its sub-sections */}
@@ -261,25 +384,73 @@ export default function CreateEventModal({ onClose, onCreated }) {
                         ) : (
                             // Step 3: preview
                             <div className="space-y-4">
-                                <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] mb-4">
-                                    <p className="font-black text-lg">{title}</p>
-                                    <p className="text-sm text-gray-400">{date} · {fmt(startHour, startMin)} – {fmt(endHour, endMin)}</p>
-                                </div>
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Ejercicios que se añadirán (sin ✅)</p>
-                                {previewExercises.length === 0 ? (
-                                    <p className="text-red-400 text-sm">No hay ejercicios en historial para los músculos seleccionados.</p>
-                                ) : (
-                                    <div className="space-y-1.5">
-                                        {previewExercises.map((ex, i) => (
-                                            <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
-                                                <span className="text-sm text-gray-300">
-                                                    <span style={{ color: MUSCLE_COLORS[ex.muscle], fontWeight: 700 }}>{ex.muscle}</span>
-                                                    {' - '}{ex.name}
-                                                </span>
-                                                <span className="text-xs text-gray-500 font-mono ml-3 shrink-0">{ex.last_weight || '—'}</span>
+                                {weeklyPlan ? (
+                                    <div className="space-y-4">
+                                        <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-2xl p-4">
+                                            <p className="text-xs font-black text-cyan-400 uppercase mb-2">Resumen del Plan Semanal</p>
+                                            <h4 className="text-xl font-black mb-4">{weeklyPlan.name}</h4>
+                                            <div className="space-y-3">
+                                                {weeklyPlan.workouts.map((pw, i) => (
+                                                    <div key={i} className="bg-white/5 rounded-2xl p-4 border border-white/5 space-y-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center shrink-0">
+                                                                <Dumbbell className="w-4 h-4 text-cyan-400" />
+                                                            </div>
+                                                            <p className="text-sm font-black">{pw.title}</p>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <input
+                                                                type="date"
+                                                                value={pw.date}
+                                                                onChange={e => updateWeeklyWorkout(i, { date: e.target.value })}
+                                                                className="bg-[#0f172a] border border-white/10 rounded-xl px-2 py-1.5 text-[10px] text-white focus:outline-none focus:border-cyan-500"
+                                                            />
+                                                            <div className="flex gap-1 items-center bg-[#0f172a] border border-white/10 rounded-xl px-2 py-1.5">
+                                                                <input
+                                                                    type="number" min="0" max="23"
+                                                                    value={pw.start_hour}
+                                                                    onChange={e => updateWeeklyWorkout(i, { start_hour: +e.target.value, end_hour: +e.target.value + 1 })}
+                                                                    className="bg-transparent text-[10px] text-white w-full text-center outline-none"
+                                                                />
+                                                                <span className="text-gray-600">:</span>
+                                                                <input
+                                                                    type="number" min="0" max="59" step="15"
+                                                                    value={pw.start_minute}
+                                                                    onChange={e => updateWeeklyWorkout(i, { start_minute: +e.target.value })}
+                                                                    className="bg-transparent text-[10px] text-white w-full text-center outline-none"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        </div>
+                                        <p className="text-xs text-gray-500 italic">Se crearán {weeklyPlan.workouts.length} eventos en tu calendario con ejercicios basados en tu historial.</p>
                                     </div>
+                                ) : (
+                                    <>
+                                        <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] mb-4">
+                                            <p className="font-black text-lg">{title}</p>
+                                            <p className="text-sm text-gray-400">{date} · {fmt(startHour, startMin)} – {fmt(endHour, endMin)}</p>
+                                        </div>
+                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Ejercicios que se añadirán (sin ✅)</p>
+                                        {previewExercises.length === 0 ? (
+                                            <p className="text-red-400 text-sm">No hay ejercicios en historial para los músculos seleccionados.</p>
+                                        ) : (
+                                            <div className="space-y-1.5">
+                                                {previewExercises.map((ex, i) => (
+                                                    <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
+                                                        <span className="text-sm text-gray-300">
+                                                            <span style={{ color: MUSCLE_COLORS[ex.muscle], fontWeight: 700 }}>{ex.muscle}</span>
+                                                            {' - '}{ex.name}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500 font-mono ml-3 shrink-0">{ex.last_weight || '—'}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                                 {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
                             </div>
@@ -289,7 +460,14 @@ export default function CreateEventModal({ onClose, onCreated }) {
                     {/* Footer */}
                     <div className="p-6 border-t border-white/[0.06] flex justify-between gap-3">
                         {step > 1 && (
-                            <button onClick={() => setStep(s => s - 1)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-2xl font-bold transition-colors">
+                            <button onClick={() => {
+                                if (step === 3 && weeklyPlan) {
+                                    setStep(1);
+                                    setWeeklyPlan(null);
+                                } else {
+                                    setStep(s => s - 1);
+                                }
+                            }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-2xl font-bold transition-colors">
                                 Atrás
                             </button>
                         )}
@@ -310,7 +488,7 @@ export default function CreateEventModal({ onClose, onCreated }) {
                                 {isSuccess ? (
                                     <CheckCircle2 className="w-5 h-5 animate-bounce" />
                                 ) : (submitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Plus className="w-5 h-5" />)}
-                                {isSuccess ? '¡Evento creado!' : (submitting ? 'Creando...' : 'Crear en Google Calendar')}
+                                {isSuccess ? (weeklyPlan ? '¡Plan Creado!' : '¡Evento creado!') : (submitting ? 'Creando...' : (weeklyPlan ? 'Confirmar Plan Semanal' : 'Crear en Google Calendar'))}
                             </button>
                         )}
                     </div>
