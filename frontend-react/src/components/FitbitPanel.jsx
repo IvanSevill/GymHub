@@ -61,7 +61,7 @@ const AzmBar = ({ label, minutes, color }) => (
     </div>
 );
 
-const FitbitPanel = ({ workouts = [], userName }) => {
+const FitbitPanel = ({ workouts = [], userName, onConnect, isConnected }) => {
     const fitbitWorkouts = useMemo(() =>
         [...workouts]
             .filter(w => w.fitbit_data)
@@ -97,25 +97,47 @@ const FitbitPanel = ({ workouts = [], userName }) => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold flex items-center gap-3">
                     <div className="p-2 bg-cyan-500/10 rounded-xl">
                         <Watch className="text-cyan-400 w-6 h-6" />
                     </div>
-                    Fitbit — {userName || 'Dashboard'}
+                    {userName ? `Fitbit — ${userName}` : 'Fitbit Dashboard'}
                 </h3>
-                {hasRealData && (
-                    <span className="text-xs font-bold px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">
-                        {totalStats.sessions} sesiones con datos reales
-                    </span>
-                )}
+                <div className="flex items-center gap-3">
+                    {!isConnected && (
+                        <button
+                            onClick={onConnect}
+                            className="flex items-center gap-2 bg-[#00B0B9]/20 hover:bg-[#00B0B9]/30 text-[#00B0B9] px-4 py-2.5 rounded-2xl text-xs font-black transition-all border border-[#00B0B9]/30"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Conectar Fitbit
+                        </button>
+                    )}
+                    {hasRealData && (
+                        <span className="text-xs font-bold px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">
+                            {totalStats.sessions} sesiones
+                        </span>
+                    )}
+                </div>
             </div>
 
             {!hasRealData ? (
-                <div className="bg-[#1e293b]/30 border border-white/5 rounded-3xl p-12 text-center">
-                    <Watch className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <div className="bg-[#1e293b]/30 border border-white/5 rounded-3xl p-12 text-center backdrop-blur-sm">
+                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5">
+                        <Watch className="w-8 h-8 text-gray-700" />
+                    </div>
                     <p className="text-gray-400 font-bold text-lg">Sin datos de Fitbit aún</p>
-                    <p className="text-gray-600 text-sm mt-2">Sincroniza tu cuenta desde los Ajustes para ver tus métricas reales aquí.</p>
+                    <p className="text-gray-600 text-sm mt-2 mb-6">Enlaza tu cuenta para ver tus métricas de salud y rendimiento aquí.</p>
+                    {!isConnected && (
+                        <button
+                            onClick={onConnect}
+                            className="bg-white text-black font-black px-6 py-3 rounded-2xl hover:bg-gray-200 transition-colors flex items-center gap-2 mx-auto"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Enlazar Fitbit ahora
+                        </button>
+                    )}
                 </div>
             ) : (
                 <>

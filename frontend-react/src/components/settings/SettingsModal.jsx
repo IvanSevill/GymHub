@@ -15,22 +15,21 @@ export default function SettingsModal({
     setSelectedCal,
     autoSync,
     setAutoSync,
-    units,
-    setUnits,
     fetchCalendars,
-    handleConnectFitbit
+    handleConnectFitbit,
+    handleDisconnectFitbit,
+    showToast
 }) {
     if (!showSettings) return null;
 
     const handleConnectGoogle = async () => {
-        // Enlazar google auth está cubierto por loginScreen, pero para Fitbit dejamos este flow similar
         try {
             setSyncing(true)
             await fetchCalendars()
             setIsDemoMode(false)
         } catch (error) {
             console.error('Connection failed:', error)
-            alert('No se pudo conectar con el servidor de autenticación.')
+            showToast('No se pudo conectar con el servidor de autenticación.', 'error')
         } finally {
             setSyncing(false)
         }
@@ -130,37 +129,25 @@ export default function SettingsModal({
 
                             <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                                 <div>
-                                    <p className="font-bold">Unidades de Peso</p>
-                                    <p className="text-xs text-gray-500">Métricas (kg) o Imperiales (lb)</p>
-                                </div>
-                                <div className="flex bg-black/20 p-1 rounded-xl">
-                                    <button
-                                        onClick={() => setUnits('kg')}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${units === 'kg' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:text-white'}`}
-                                    >
-                                        KG
-                                    </button>
-                                    <button
-                                        onClick={() => setUnits('lb')}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${units === 'lb' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:text-white'}`}
-                                    >
-                                        LB
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                                <div>
                                     <p className="font-bold">Salud & Wearables</p>
                                     <p className="text-xs text-gray-500">Métricas de Fitbit y Apple Health</p>
                                 </div>
-                                <button
-                                    onClick={handleConnectFitbit}
-                                    className="flex items-center gap-2 bg-[#00B0B9]/20 hover:bg-[#00B0B9]/30 text-[#00B0B9] px-4 py-2 rounded-xl text-xs font-bold transition-all border border-[#00B0B9]/30"
-                                >
-                                    <Watch className="w-4 h-4" />
-                                    Conectar
-                                </button>
+                                {currentUser?.fitbit_id ? (
+                                    <button
+                                        onClick={handleDisconnectFitbit}
+                                        className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-red-500/20"
+                                    >
+                                        Desconectar
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleConnectFitbit}
+                                        className="flex items-center gap-2 bg-[#00B0B9]/20 hover:bg-[#00B0B9]/30 text-[#00B0B9] px-4 py-2 rounded-xl text-xs font-bold transition-all border border-[#00B0B9]/30"
+                                    >
+                                        <Watch className="w-4 h-4" />
+                                        Conectar
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

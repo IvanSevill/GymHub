@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://localhost:8000/api/v1';
 
 const getUserEmail = () => localStorage.getItem('gymhub_user_email');
 
@@ -59,6 +59,13 @@ export const createEventTemplate = async (payload) => {
         user_email: getUserEmail(),
         ...payload
     });
+    return response.data;
+};
+
+export const disconnectFitbit = async () => {
+    const email = getUserEmail();
+    if (!email) throw new Error("No user email");
+    const response = await axios.post(`${API_URL}/auth/fitbit/disconnect?user_email=${email}`);
     return response.data;
 };
 

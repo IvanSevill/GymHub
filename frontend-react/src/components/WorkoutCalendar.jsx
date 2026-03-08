@@ -148,7 +148,7 @@ const WorkoutPopup = ({ day, workouts, onClose }) => {
     );
 };
 
-const WorkoutCalendar = ({ workouts }) => {
+const WorkoutCalendar = ({ workouts, onRefresh }) => {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [popupDay, setPopupDay] = useState(null);
     const [showCreate, setShowCreate] = useState(false);
@@ -222,9 +222,40 @@ const WorkoutCalendar = ({ workouts }) => {
             for (let i = 0; i < 7; i++) {
                 const cloneDay = day;
                 const formattedDate = format(day, 'd');
-                const hasWorkout = workoutDays.some(d => isSameDay(d, cloneDay));
+                const dayWorkouts = workouts.filter(d => isSameDay(new Date(d.date), cloneDay));
+                const hasWorkout = dayWorkouts.length > 0;
                 const isCurrentMonth = isSameMonth(day, monthStart);
                 const isToday = isSameDay(day, new Date());
+
+                // Decide color based on workout types
+                const hasCardio = dayWorkouts.some(w => w.muscle_groups?.includes('Cardio') || w.source === 'fitbit' && !w.exercise_sets?.length);
+                const hasMuscle = dayWorkouts.some(w => w.muscle_groups && w.muscle_groups !== 'Cardio');
+
+                const theme = hasMuscle ? 'cyan' : (hasCardio ? 'emerald' : 'cyan');
+                const ThemeIcon = hasMuscle ? Target : Heart;
+
+                const classes = {
+                    cyan: {
+                        hoverBg: 'hover:bg-cyan-500/5',
+                        textToday: 'text-cyan-400',
+                        bgToday: 'bg-cyan-400/10',
+                        bgPulse: 'bg-cyan-500/10',
+                        textPrimary: 'text-cyan-400',
+                        dropShadow: 'drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]',
+                        bgBar: 'bg-cyan-500',
+                        shadowBar: 'shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                    },
+                    emerald: {
+                        hoverBg: 'hover:bg-emerald-500/5',
+                        textToday: 'text-emerald-400',
+                        bgToday: 'bg-emerald-400/10',
+                        bgPulse: 'bg-emerald-500/10',
+                        textPrimary: 'text-emerald-400',
+                        dropShadow: 'drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]',
+                        bgBar: 'bg-emerald-500',
+                        shadowBar: 'shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                    }
+                }[theme];
 
                 days.push(
                     <div
@@ -232,23 +263,23 @@ const WorkoutCalendar = ({ workouts }) => {
                         onClick={() => isCurrentMonth && handleDayClick(cloneDay)}
                         className={`relative h-20 md:h-24 border border-white/[0.03] p-2 transition-all
                             ${!isCurrentMonth ? 'opacity-20 pointer-events-none' : ''}
-                            ${hasWorkout && isCurrentMonth ? 'cursor-pointer hover:bg-cyan-500/5' : ''}
+                            ${hasWorkout && isCurrentMonth ? `cursor-pointer ${classes.hoverBg}` : ''}
                         `}
                     >
-                        <span className={`text-sm font-bold ${isToday ? 'text-cyan-400 bg-cyan-400/10 px-2 py-1 rounded-lg' : 'text-gray-500'}`}>
+                        <span className={`text-sm font-bold ${isToday ? `${classes.textToday} ${classes.bgToday} px-2 py-1 rounded-lg` : 'text-gray-500'}`}>
                             {formattedDate}
                         </span>
 
                         {hasWorkout && isCurrentMonth && (
                             <>
                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <div className="w-12 h-12 bg-cyan-500/10 rounded-full blur-md" />
+                                    <div className={`w-12 h-12 ${classes.bgPulse} rounded-full blur-md`} />
                                     <div className="absolute w-8 h-8 flex items-center justify-center">
-                                        <Target className="text-cyan-400 w-6 h-6 drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
+                                        <ThemeIcon className={`${classes.textPrimary} w-6 h-6 ${classes.dropShadow}`} />
                                     </div>
                                 </div>
                                 <div className="absolute bottom-2 left-2 right-2">
-                                    <div className="h-1 w-full bg-cyan-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.3)]" />
+                                    <div className={`h-1 w-full ${classes.bgBar} rounded-full ${classes.shadowBar}`} />
                                 </div>
                             </>
                         )}
@@ -283,7 +314,10 @@ const WorkoutCalendar = ({ workouts }) => {
             {showCreate && (
                 <CreateEventModal
                     onClose={() => setShowCreate(false)}
-                    onCreated={() => setShowCreate(false)}
+                    onCreated={() => {
+                        setShowCreate(false);
+                        if (onRefresh) onRefresh();
+                    }}
                 />
             )}
         </>

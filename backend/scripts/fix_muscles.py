@@ -23,7 +23,7 @@ def fix_events():
     calendar_id = user.selected_calendar_id or 'primary'
     
     print("Obteniendo eventos de Google Calendar...")
-    time_max = datetime.datetime(2026, 1, 1).isoformat() + 'Z'
+    time_max = datetime.datetime(2027, 1, 1).isoformat() + 'Z'
     time_min = datetime.datetime(2020, 1, 1).isoformat() + 'Z'
     
     try:

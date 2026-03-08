@@ -31,6 +31,16 @@ export default function WorkoutCard({ workout, idx }) {
                 </div>
             </div>
 
+            {workout.muscle_groups && (
+                <div className="flex flex-wrap gap-2 mb-6">
+                    {workout.muscle_groups.split(',').map(m => (
+                        <span key={m} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-black uppercase rounded-md border border-purple-500/20">
+                            {m.trim()}
+                        </span>
+                    ))}
+                </div>
+            )}
+
             {workout.fitbit_data && (() => {
                 const fd = workout.fitbit_data;
                 const azmTotal = (fd.azm_fat_burn || 0) + (fd.azm_cardio || 0) + (fd.azm_peak || 0);

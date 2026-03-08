@@ -67,7 +67,9 @@ export default function CreateEventModal({ onClose, onCreated }) {
         .filter(m => m !== 'Otros')
         .concat('Otros')
 
-    const title = selectedMuscles.join(' - ') || 'Entrenamiento'
+    const title = (selectedMuscles.join(' - ') || 'Entrenamiento')
+        .replace(/Circuito/gi, 'Cardio')
+        .replace(/Circuit/gi, 'Cardio')
     const fmt = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
     const startTotal = startHour * 60 + startMin
     const endTotal = endHour * 60 + endMin
@@ -81,8 +83,11 @@ export default function CreateEventModal({ onClose, onCreated }) {
         }
     }
 
+    const [isSuccess, setIsSuccess] = useState(false)
+
     const handleSubmit = async () => {
         setSubmitting(true)
+        setError(null)
         try {
             await createEventTemplate({
                 title,
@@ -93,8 +98,12 @@ export default function CreateEventModal({ onClose, onCreated }) {
                 end_hour: endHour,
                 end_minute: endMin,
             })
-            onCreated()
-            onClose()
+            setIsSuccess(true)
+            // Wait 1.5s to show success state
+            setTimeout(() => {
+                onCreated()
+                onClose()
+            }, 1500)
         } catch (e) {
             setError(e?.response?.data?.detail || 'Error al crear el evento.')
             setSubmitting(false)
@@ -295,11 +304,13 @@ export default function CreateEventModal({ onClose, onCreated }) {
                         ) : (
                             <button
                                 onClick={handleSubmit}
-                                disabled={submitting || previewExercises.length === 0}
-                                className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-bold disabled:opacity-40 flex items-center justify-center gap-2"
+                                disabled={submitting}
+                                className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all ${isSuccess ? 'bg-emerald-500 shadow-lg shadow-emerald-500/20' : 'bg-gradient-to-r from-cyan-500 to-blue-600 disabled:opacity-40'}`}
                             >
-                                {submitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                                {submitting ? 'Creando...' : 'Crear en Google Calendar'}
+                                {isSuccess ? (
+                                    <CheckCircle2 className="w-5 h-5 animate-bounce" />
+                                ) : (submitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Plus className="w-5 h-5" />)}
+                                {isSuccess ? '¡Evento creado!' : (submitting ? 'Creando...' : 'Crear en Google Calendar')}
                             </button>
                         )}
                     </div>

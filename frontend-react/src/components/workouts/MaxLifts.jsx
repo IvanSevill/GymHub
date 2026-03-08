@@ -7,7 +7,7 @@ const MUSCLE_COLORS = {
     'Bíceps': '#ec4899', 'Tríceps': '#10b981', 'Triceps': '#10b981',
     'Piernas': '#ef4444', 'Pierna': '#ef4444',
     'Abdomen': '#a3e635', 'Abdominales': '#a3e635',
-    'Full Body': '#60a5fa', 'Circuito': '#60a5fa', 'Extra': '#64748b', 'Otros': '#64748b',
+    'Full Body': '#60a5fa', 'Cardio': '#10b981', 'Circuito': '#10b981', 'Extra': '#64748b', 'Otros': '#64748b',
     'Glúteo': '#fb7185', 'Gluteo': '#fb7185',
     'Cuádriceps': '#fca5a5', 'Cuadriceps': '#fca5a5',
     'Femoral': '#bef264', 'Isquios': '#bef264',

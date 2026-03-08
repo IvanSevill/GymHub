@@ -10,11 +10,15 @@ import {
     LayoutDashboard,
     PieChart,
     Watch,
-    Settings
+    Settings,
+    Filter,
+    Activity,
+    CheckCircle2,
+    XCircle
 } from 'lucide-react'
 
 // API
-import { fetchWorkouts, fetchUser, syncWorkouts, fetchCalendars } from './api/gymhubApi'
+import { fetchWorkouts, fetchUser, syncWorkouts, fetchCalendars, disconnectFitbit } from './api/gymhubApi'
 
 // Components
 import Analytics from './components/Analytics'
@@ -40,6 +44,16 @@ function App() {
     const [autoSync, setAutoSync] = useState(true)
     const [units, setUnits] = useState('kg')
     const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('gymhub_user_email'))
+
+    // Filters
+    const [filterFitbit, setFilterFitbit] = useState(false)
+    const [filterMuscles, setFilterMuscles] = useState([]) // Array for multiple selection
+    const [toast, setToast] = useState(null)
+
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 4000);
+    }
 
     const loadData = async () => {
         try {
@@ -84,10 +98,11 @@ function App() {
         try {
             await syncWorkouts()
             const workoutsRes = await fetchWorkouts()
-            setWorkouts(workoutsRes)
+            setWorkouts(workoutsRes || [])
+            showToast('Sincronización completada con éxito');
         } catch (error) {
             console.error('Sync failed:', error)
-            alert('Error al sincronizar. Verifica tu conexión.')
+            showToast('Fallo en la sincronización. Revisa tu conexión.', 'error');
         } finally {
             setSyncing(false)
         }
@@ -111,6 +126,21 @@ function App() {
 
         window.location.href = fitbitAuthUrl;
     }
+
+    const handleDisconnectFitbit = async () => {
+        try {
+            setLoading(true);
+            await disconnectFitbit();
+            showToast('Fitbit desconectado. Datos eliminados correctamente.');
+            await loadData(); // Reload to reflect changes (workouts updated)
+        } catch (error) {
+            console.error('Failed to disconnect Fitbit:', error);
+            showToast('Error al desconectar Fitbit', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }
+
 
     const handleLoginSuccess = async (user) => {
         setIsAuthenticated(true);
@@ -138,15 +168,15 @@ function App() {
                     // redirect_uri must match EXACTLY what was sent to Fitbit
                     const redirectUri = window.location.origin;
                     const response = await fetch(
-                        `http://localhost:8000/auth/fitbit/connect?auth_code=${code}&user_email=${encodeURIComponent(email)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+                        `http://localhost:8000/api/v1/auth/fitbit/connect?auth_code=${code}&user_email=${encodeURIComponent(email)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
                         { method: 'POST' }
                     );
 
                     if (response.ok) {
-                        alert('¡Cuenta de Fitbit vinculada correctamente con GymHub!');
+                        showToast('¡Cuenta de Fitbit vinculada correctamente!');
                     } else {
                         const errorData = await response.json();
-                        alert(`Error al vincular Fitbit: ${errorData.detail || 'Fallo desconocido'}`);
+                        showToast(`Error de Fitbit: ${errorData.detail || 'Fallo desconocido'}`, 'error');
                     }
                     // Limpia la URL de parámetros OAuth para no interferir en futuras recargas
                     window.history.replaceState({}, document.title, window.location.pathname);
@@ -171,6 +201,20 @@ function App() {
         <div className="min-h-screen bg-[#020617] text-white p-4 md:p-8">
             <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
             <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none" />
+
+            {syncing && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-[#1e293b] border border-white/10 rounded-3xl p-8 flex flex-col items-center gap-4 shadow-2xl"
+                    >
+                        <RefreshCw className="w-12 h-12 text-cyan-400 animate-spin" />
+                        <h3 className="text-xl font-bold text-white">Sincronizando datos...</h3>
+                        <p className="text-gray-400 text-sm text-center max-w-xs">Buscando rutinas de Google Calendar y obteniendo tus métricas y sesiones de salud desde Fitbit.</p>
+                    </motion.div>
+                </div>
+            )}
 
             <header className="max-w-6xl mx-auto mb-12 relative">
                 <div className="flex justify-between items-center">
@@ -243,6 +287,78 @@ function App() {
                                 <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
                                     <History className="text-cyan-400" /> Entrenamientos Recientes
                                 </h2>
+
+                                <div className="flex flex-wrap items-center gap-4 mb-8 bg-[#1e293b]/20 p-4 rounded-3xl border border-white/5">
+                                    <div className="flex items-center gap-2">
+                                        <Filter className="w-4 h-4 text-gray-500" />
+                                        <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Filtros:</span>
+                                    </div>
+
+                                    <button
+                                        onClick={() => setFilterFitbit(!filterFitbit)}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${filterFitbit
+                                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                            }`}
+                                    >
+                                        <Watch className="w-4 h-4" />
+                                        Con Fitbit
+                                    </button>
+
+                                    <div className="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
+
+                                    <div className="flex-1 flex flex-wrap gap-2">
+                                        {Array.from(new Set(workouts.flatMap(w => w.muscle_groups ? w.muscle_groups.split(',').map(m => m.trim()) : [])))
+                                            .filter(Boolean)
+                                            .sort()
+                                            .map(m => (
+                                                <button
+                                                    key={m}
+                                                    onClick={() => {
+                                                        if (filterMuscles.includes(m)) {
+                                                            setFilterMuscles(filterMuscles.filter(x => x !== m));
+                                                        } else {
+                                                            setFilterMuscles([...filterMuscles, m]);
+                                                        }
+                                                    }}
+                                                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all border ${filterMuscles.includes(m)
+                                                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-400'
+                                                        : 'bg-white/5 border-white/10 text-gray-500 hover:bg-white/10'
+                                                        }`}
+                                                >
+                                                    {m}
+                                                </button>
+                                            ))
+                                        }
+                                    </div>
+
+                                    <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-white/5 py-1 px-3 rounded-full border border-white/5">
+                                            {(() => {
+                                                const filtered = workouts.filter(w => {
+                                                    const mF = filterFitbit ? !!w.fitbit_data : true;
+                                                    let mM = true;
+                                                    if (filterMuscles.length > 0) {
+                                                        const wm = w.muscle_groups ? w.muscle_groups.split(',').map(m => m.trim()) : [];
+                                                        mM = filterMuscles.some(m => wm.includes(m));
+                                                    }
+                                                    return mF && mM;
+                                                });
+                                                return `${filtered.length} entrenamientos encontrados`;
+                                            })()}
+                                        </p>
+
+                                        {(filterFitbit || filterMuscles.length > 0) && (
+                                            <button
+                                                onClick={() => { setFilterFitbit(false); setFilterMuscles([]); }}
+                                                className="text-xs font-bold text-gray-500 hover:text-white transition-colors underline underline-offset-4 ml-auto"
+                                            >
+                                                Limpiar
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
                                 <div className="space-y-6">
                                     {loading ? (
                                         <div className="flex justify-center p-20">
@@ -253,9 +369,30 @@ function App() {
                                             <Dumbbell className="w-16 h-16 mx-auto mb-4 text-gray-600" />
                                             <p className="text-gray-500 text-lg">No hay entrenamientos guardados</p>
                                         </motion.div>
-                                    ) : (
-                                        workouts.map((workout, idx) => <WorkoutCard key={workout.id} workout={workout} idx={idx} />)
-                                    )}
+                                    ) : (() => {
+                                        const filteredWorkouts = workouts.filter(w => {
+                                            const matchesFitbit = filterFitbit ? !!w.fitbit_data : true;
+
+                                            let matchesMuscle = true;
+                                            if (filterMuscles.length > 0) {
+                                                const norm = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+                                                const workoutMuscles = w.muscle_groups ? w.muscle_groups.split(',').map(m => norm(m.trim())) : [];
+                                                matchesMuscle = filterMuscles.some(m => workoutMuscles.includes(norm(m)));
+                                            }
+
+                                            return matchesFitbit && matchesMuscle;
+                                        });
+
+                                        if (filteredWorkouts.length === 0) {
+                                            return (
+                                                <div className="text-center py-12 bg-white/5 rounded-3xl border border-dashed border-white/10">
+                                                    <p className="text-gray-500 font-medium">No se encontraron entrenamientos con estos filtros.</p>
+                                                </div>
+                                            );
+                                        }
+
+                                        return filteredWorkouts.map((workout, idx) => <WorkoutCard key={workout.id} workout={workout} idx={idx} />);
+                                    })()}
                                 </div>
                             </section>
                         </motion.div>
@@ -275,13 +412,18 @@ function App() {
 
                     {activeTab === 'calendar' && (
                         <motion.div key="calendar" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
-                            <WorkoutCalendar workouts={workouts} />
+                            <WorkoutCalendar workouts={workouts} onRefresh={loadData} />
                         </motion.div>
                     )}
 
                     {activeTab === 'fitbit' && (
                         <motion.div key="fitbit" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                            <FitbitPanel workouts={workouts} userName={currentUser?.name} />
+                            <FitbitPanel
+                                workouts={workouts}
+                                userName={currentUser?.name}
+                                onConnect={handleConnectFitbit}
+                                isConnected={!!currentUser?.fitbit_access_token}
+                            />
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -300,11 +442,27 @@ function App() {
                 setSelectedCal={setSelectedCal}
                 autoSync={autoSync}
                 setAutoSync={setAutoSync}
-                units={units}
-                setUnits={setUnits}
                 fetchCalendars={loadCalendarsOnly}
                 handleConnectFitbit={handleConnectFitbit}
+                handleDisconnectFitbit={handleDisconnectFitbit}
+                showToast={showToast}
             />
+            <AnimatePresence>
+                {toast && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, x: '-50%' }}
+                        animate={{ opacity: 1, y: 0, x: '-50%' }}
+                        exit={{ opacity: 0, y: 20, x: '-50%' }}
+                        className={`fixed bottom-8 left-1/2 z-[100] px-6 py-4 rounded-3xl shadow-2xl border flex items-center gap-3 backdrop-blur-xl ${toast.type === 'error'
+                            ? 'bg-red-500/20 border-red-500/30 text-red-200'
+                            : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-200'
+                            }`}
+                    >
+                        {toast.type === 'error' ? <XCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                        <span className="font-bold tracking-wide">{toast.message}</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }
