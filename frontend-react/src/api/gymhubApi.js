@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'https://gymhub-jd53.onrender.com/api/v1';
 
 const getUserEmail = () => localStorage.getItem('gymhub_user_email');
 
