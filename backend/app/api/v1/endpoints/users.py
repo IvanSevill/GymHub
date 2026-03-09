@@ -19,7 +19,13 @@ def is_user_root(email: str, db_is_root: int) -> bool:
     return False
 
 def check_json_for_root(email: str) -> bool:
-    # 2. Check JSON file (session/configuration-based root) ONLY ON CREATION
+    # 2. Check environment variable first
+    if settings.ROOT_EMAILS:
+        root_list = [r.strip().lower() for r in settings.ROOT_EMAILS.split(',') if r.strip()]
+        if email.lower() in root_list:
+            return True
+
+    # 3. Fallback to JSON file
     try:
         if os.path.exists(settings.ROOT_USERS_FILE):
             with open(settings.ROOT_USERS_FILE, 'r') as f:

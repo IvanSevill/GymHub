@@ -13,6 +13,10 @@ if db_url and db_url.startswith("sqlite:///./"):
     db_path = os.path.join(BASE_DIR, db_name)
     db_url = f"sqlite:///{db_path}"
 
+# Render fix: postgres:// to postgresql://
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
 # Handle SQLite vs Postgres connection args
 connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}
 

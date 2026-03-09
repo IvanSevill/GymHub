@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: gymhub-backend
+    env: python
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app"
+    envVars:
+      - key: DB_URL
+        fromDatabase:
+          name: gymhub-db
+          property: connectionString
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FITBIT_CLIENT_ID
+        sync: false
+      - key: FITBIT_CLIENT_SECRET
+        sync: false
+      - key: BACKEND_PORT
+        value: 8000
+
+databases:
+  - name: gymhub-db
+    plan: free
