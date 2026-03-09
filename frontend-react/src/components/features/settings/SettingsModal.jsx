@@ -186,8 +186,8 @@ export default function SettingsModal({
 
                             <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                                 <div>
-                                    <p className="font-bold">Salud & Wearables</p>
-                                    <p className="text-xs text-gray-500">Métricas de Fitbit y Apple Health</p>
+                                    <p className="font-bold">Reloj & Wearables</p>
+                                    <p className="text-xs text-gray-500">Métricas de Fitbit</p>
                                 </div>
                                 {currentUser?.fitbit_id ? (
                                     <button

@@ -11,14 +11,14 @@ import WorkoutPopup from './WorkoutPopup';
 
 const WorkoutCalendar = ({ workouts, onRefresh, isFitbitConnected }) => {
     const [currentMonth, setCurrentMonth] = useState(new Date());
-    const [popupDay, setPopupDay] = useState(null);
+    const [selectedDay, setSelectedDay] = useState(null);
     const [showCreate, setShowCreate] = useState(false);
 
     const workoutDays = workouts.map(w => new Date(w.date));
 
     const handleDayClick = (day) => {
         const hasWorkout = workoutDays.some(d => isSameDay(d, day));
-        if (hasWorkout) setPopupDay(day);
+        if (hasWorkout) setSelectedDay(day);
     };
 
     const renderHeader = () => (
