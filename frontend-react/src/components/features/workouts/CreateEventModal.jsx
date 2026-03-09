@@ -1,16 +1,9 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Loader2, CheckCircle2, Dumbbell, Clock } from 'lucide-react'
-import { fetchExercisesByMuscle, createEventTemplate, createWeeklyPlan } from '../../api/gymhubApi'
+import { fetchExercisesByMuscle, createEventTemplate, createWeeklyPlan } from '../../../api/gymhubApi'
 
 const BASE_MUSCLES = ['Pecho', 'Espalda', 'Hombro', 'Biceps', 'Triceps', 'Pierna', 'Abdominales']
-const WEEKLY_RECOMMENDATIONS = [
-    { name: 'Empuje (Push)', muscles: ['Pecho', 'Hombro', 'Triceps'] },
-    { name: 'Tirón (Pull)', muscles: ['Espalda', 'Biceps'] },
-    { name: 'Pierna', muscles: ['Pierna'] },
-    { name: 'Torso/Superior', muscles: ['Pecho', 'Espalda', 'Hombro'] },
-    { name: 'Full Body', muscles: ['Pecho', 'Espalda', 'Pierna'] },
-]
 
 const WEEKLY_PLANS = [
     {
@@ -48,7 +41,7 @@ const normStr = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''
 
 
 export default function CreateEventModal({ onClose, onCreated }) {
-    const [step, setStep] = useState(1) // 1=muscles, 2=time, 3=preview
+    const [step, setStep] = useState(1) // 1=config (muscles + time), 2=preview
     const [selectedMuscles, setSelectedMuscles] = useState([])
     const [exercisesByMuscle, setExercisesByMuscle] = useState({})
     const [loading, setLoading] = useState(true)
@@ -90,7 +83,6 @@ export default function CreateEventModal({ onClose, onCreated }) {
         }
         return (exercisesByMuscle[m] || []).map(ex => ({ ...ex, muscle: m }))
     }).sort((a, b) => {
-        if (a.muscle !== b.muscle) return a.muscle.localeCompare(b.muscle);
         return a.name.localeCompare(b.name);
     })
 
@@ -107,11 +99,31 @@ export default function CreateEventModal({ onClose, onCreated }) {
     const isTimeValid = endTotal > startTotal
 
     const handleStartHourChange = (v) => {
-        setStartHour(+v)
-        // Auto-push end if it would become before start
-        if (+v * 60 + startMin >= endTotal) {
-            setEndHour(+v + 1 <= 23 ? +v + 1 : 23)
+        const h = parseInt(v) || 0;
+        setStartHour(h)
+        // Keep 1h 30m duration by default
+        let newEndH = h + 1;
+        let newEndM = startMin + 30;
+        if (newEndM >= 60) {
+            newEndH += 1;
+            newEndM -= 60;
         }
+        setEndHour(newEndH > 23 ? 23 : newEndH);
+        setEndMin(newEndM);
+    }
+
+    const handleStartMinChange = (v) => {
+        const m = parseInt(v) || 0;
+        setStartMin(m)
+        // Keep 1h 30m duration by default
+        let newEndH = startHour + 1;
+        let newEndM = m + 30;
+        if (newEndM >= 60) {
+            newEndH += 1;
+            newEndM -= 60;
+        }
+        setEndHour(newEndH > 23 ? 23 : newEndH);
+        setEndMin(newEndM);
     }
 
     const handleWeeklyPlanSelect = (plan) => {
@@ -155,7 +167,7 @@ export default function CreateEventModal({ onClose, onCreated }) {
         }).sort((a, b) => a.date.localeCompare(b.date));
 
         setWeeklyPlan({ name: plan.name, workouts });
-        setStep(3); // Go straight to preview
+        setStep(2); // Go straight to preview
     }
 
     const updateWeeklyWorkout = (idx, fields) => {
@@ -217,7 +229,7 @@ export default function CreateEventModal({ onClose, onCreated }) {
                         <div>
                             <h3 className="text-xl font-black">Planificar Entrenamiento</h3>
                             <p className="text-gray-500 text-xs mt-0.5">
-                                {step === 1 ? 'Paso 1: Selecciona los músculos' : step === 2 ? 'Paso 2: Elige el horario' : 'Paso 3: Confirmar'}
+                                {step === 1 ? 'Paso 1: Configura tu entrenamiento' : 'Paso 2: Confirmar y crear'}
                             </p>
                         </div>
                         <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
@@ -233,156 +245,165 @@ export default function CreateEventModal({ onClose, onCreated }) {
                         ) : error ? (
                             <p className="text-red-400 text-sm text-center py-8">{error}</p>
                         ) : step === 1 ? (
-                            <div className="space-y-3">
-                                {(() => {
-                                    // Separar las piernas del resto
-                                    const legSubMuscles = dynamicMuscles.filter(m => LEG_MUSCLES.includes(normStr(m)) && normStr(m) !== 'piernas' && normStr(m) !== 'pierna')
-                                    const otherMuscles = dynamicMuscles.filter(m => !LEG_MUSCLES.includes(normStr(m)))
+                            <div className="space-y-6">
+                                {/* Time Selection Section */}
+                                <div className="bg-white/5 border border-white/5 rounded-3xl p-5 space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">Fecha</label>
+                                        <input
+                                            type="date"
+                                            value={date}
+                                            onChange={e => setDate(e.target.value)}
+                                            className="w-full bg-black/20 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" /> Inicio
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <select
+                                                    value={startHour}
+                                                    onChange={e => handleStartHourChange(e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {Array.from({ length: 24 }).map((_, i) => (
+                                                        <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="flex items-center text-gray-500 font-bold">:</span>
+                                                <select
+                                                    value={startMin}
+                                                    onChange={e => handleStartMinChange(e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                                                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" /> Fin (Predef. 1:30h)
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <select
+                                                    value={endHour}
+                                                    onChange={e => setEndHour(+e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {Array.from({ length: 24 }).map((_, i) => (
+                                                        <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="flex items-center text-gray-500 font-bold">:</span>
+                                                <select
+                                                    value={endMin}
+                                                    onChange={e => setEndMin(+e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                                                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {!isTimeValid && (
+                                        <p className="text-red-400 text-[10px] font-bold">⚠️ La hora de fin debe ser posterior.</p>
+                                    )}
+                                </div>
 
-                                    const renderButton = (m, isSub = false) => {
-                                        let exercises = []
-                                        if (normStr(m) === 'pierna' || normStr(m) === 'piernas') {
-                                            // Direct 'Pierna' key exercises
-                                            const directLeg = exercisesByMuscle['Pierna'] || exercisesByMuscle['Piernas'] || []
-                                            // Sub-muscle exercises (Cuadriceps, Gluteo, Femoral, Gemelo…)
-                                            const legSubKeys = Object.keys(exercisesByMuscle).filter(k =>
-                                                LEG_MUSCLES.includes(normStr(k)) && normStr(k) !== 'pierna' && normStr(k) !== 'piernas'
+                                <div className="space-y-3">
+                                    {(() => {
+                                        // Separar las piernas del resto
+                                        const legSubMuscles = dynamicMuscles.filter(m => LEG_MUSCLES.includes(normStr(m)) && normStr(m) !== 'piernas' && normStr(m) !== 'pierna')
+                                        const otherMuscles = dynamicMuscles.filter(m => !LEG_MUSCLES.includes(normStr(m)))
+
+                                        const renderButton = (m, isSub = false) => {
+                                            let exercises = []
+                                            if (normStr(m) === 'pierna' || normStr(m) === 'piernas') {
+                                                // Direct 'Pierna' key exercises
+                                                const directLeg = exercisesByMuscle['Pierna'] || exercisesByMuscle['Piernas'] || []
+                                                // Sub-muscle exercises (Cuadriceps, Gluteo, Femoral, Gemelo…)
+                                                const legSubKeys = Object.keys(exercisesByMuscle).filter(k =>
+                                                    LEG_MUSCLES.includes(normStr(k)) && normStr(k) !== 'pierna' && normStr(k) !== 'piernas'
+                                                )
+                                                exercises = [...directLeg, ...legSubKeys.flatMap(k => exercisesByMuscle[k] || [])]
+                                            } else {
+                                                exercises = exercisesByMuscle[m] || []
+                                            }
+
+                                            const selected = selectedMuscles.includes(m)
+                                            const color = MUSCLE_COLORS[m] || '#64748b'
+
+                                            return (
+                                                <button
+                                                    key={m}
+                                                    onClick={() => toggleMuscle(m)}
+                                                    className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${selected
+                                                        ? 'border-transparent text-white'
+                                                        : 'bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06]'
+                                                        } ${isSub ? 'ml-6 w-[calc(100%-1.5rem)] py-3' : ''}`}
+                                                    style={selected ? { backgroundColor: color + '25', borderColor: color } : {}}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                                                        <div className="text-left">
+                                                            <p className="font-bold">{m}</p>
+                                                            <p className="text-xs opacity-60">{exercises.length} ejercicios en historial</p>
+                                                        </div>
+                                                    </div>
+                                                    {selected && <CheckCircle2 className="w-5 h-5" style={{ color: MUSCLE_COLORS[m] }} />}
+                                                </button>
                                             )
-                                            exercises = [...directLeg, ...legSubKeys.flatMap(k => exercisesByMuscle[k] || [])]
-                                        } else {
-                                            exercises = exercisesByMuscle[m] || []
                                         }
 
-                                        const selected = selectedMuscles.includes(m)
-                                        const color = MUSCLE_COLORS[m] || '#64748b'
-
                                         return (
-                                            <button
-                                                key={m}
-                                                onClick={() => toggleMuscle(m)}
-                                                className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${selected
-                                                    ? 'border-transparent text-white'
-                                                    : 'bg-white/[0.03] border-white/[0.06] text-gray-400 hover:bg-white/[0.06]'
-                                                    } ${isSub ? 'ml-6 w-[calc(100%-1.5rem)] py-3' : ''}`}
-                                                style={selected ? { backgroundColor: color + '25', borderColor: color } : {}}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                                                    <div className="text-left">
-                                                        <p className="font-bold">{m}</p>
-                                                        <p className="text-xs opacity-60">{exercises.length} ejercicios en historial</p>
+                                            <>
+                                                <div className="mb-6">
+                                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Planes Semanales (Auto-Planificar)</p>
+                                                    <div className="grid grid-cols-1 gap-2">
+                                                        {WEEKLY_PLANS.map(plan => (
+                                                            <button
+                                                                key={plan.name}
+                                                                onClick={() => handleWeeklyPlanSelect(plan)}
+                                                                className="w-full text-left p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all group"
+                                                            >
+                                                                <div className="flex items-center justify-between">
+                                                                    <div>
+                                                                        <p className="text-sm font-black text-cyan-400">{plan.name}</p>
+                                                                        <p className="text-[10px] text-cyan-400/60 uppercase tracking-tighter">Planifica {plan.workouts.length} días automáticamente</p>
+                                                                    </div>
+                                                                    <Plus className="w-4 h-4 text-cyan-400 group-hover:rotate-90 transition-transform" />
+                                                                </div>
+                                                            </button>
+                                                        ))}
                                                     </div>
                                                 </div>
-                                                {selected && <CheckCircle2 className="w-5 h-5" style={{ color: MUSCLE_COLORS[m] }} />}
-                                            </button>
-                                        )
-                                    }
 
-                                    return (
-                                        <>
-                                            <div className="mb-6">
-                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Planes Semanales (Auto-Planificar)</p>
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    {WEEKLY_PLANS.map(plan => (
-                                                        <button
-                                                            key={plan.name}
-                                                            onClick={() => handleWeeklyPlanSelect(plan)}
-                                                            className="w-full text-left p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all group"
-                                                        >
-                                                            <div className="flex items-center justify-between">
-                                                                <div>
-                                                                    <p className="text-sm font-black text-cyan-400">{plan.name}</p>
-                                                                    <p className="text-[10px] text-cyan-400/60 uppercase tracking-tighter">Planifica {plan.workouts.length} días automáticamente</p>
-                                                                </div>
-                                                                <Plus className="w-4 h-4 text-cyan-400 group-hover:rotate-90 transition-transform" />
+                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Grupos Musculares</p>
+                                                {otherMuscles.map(m => renderButton(m))}
+
+                                                <div className="pt-2 pb-1 border-t border-white/[0.06] mt-4 mb-2">
+                                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Tren Inferior (Pierna)</p>
+                                                    <div className="space-y-3">
+                                                        {renderButton('Pierna')}
+                                                        {legSubMuscles.length > 0 && (
+                                                            <div className="space-y-2 border-l-2 border-white/[0.05] ml-4">
+                                                                {legSubMuscles.map(m => renderButton(m, true))}
                                                             </div>
-                                                        </button>
-                                                    ))}
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-
-                                            <div className="mb-6">
-                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Sugerencias Rápidas</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {WEEKLY_RECOMMENDATIONS.map(rec => (
-                                                        <button
-                                                            key={rec.name}
-                                                            onClick={() => setSelectedMuscles(rec.muscles)}
-                                                            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-white/10 hover:border-white/20 transition-all text-gray-400"
-                                                        >
-                                                            {rec.name}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Grupos Musculares</p>
-                                            {otherMuscles.map(m => renderButton(m))}
-
-                                            {/* Render Piernas and its sub-sections */}
-                                            <div className="pt-2 pb-1 border-t border-white/[0.06] mt-4 mb-2">
-                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest pl-2 mb-3">Tren Inferior (Pierna)</p>
-                                                <div className="space-y-3">
-                                                    {renderButton('Pierna')} {/* El botón maestro de todo */}
-                                                    {legSubMuscles.length > 0 && (
-                                                        <div className="space-y-2 border-l-2 border-white/[0.05] ml-4">
-                                                            {legSubMuscles.map(m => renderButton(m, true))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </>
-                                    )
-                                })()}
-                            </div>
-                        ) : step === 2 ? (
-                            <div className="space-y-6">
-                                <div>
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">Fecha</label>
-                                    <input
-                                        type="date"
-                                        value={date}
-                                        onChange={e => setDate(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-colors"
-                                    />
+                                            </>
+                                        )
+                                    })()}
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
-                                            <Clock className="w-3 h-3" /> Inicio
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <input type="number" min="0" max="23" value={startHour} onChange={e => handleStartHourChange(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-3 text-white text-center focus:outline-none focus:border-cyan-500 transition-colors" />
-                                            <span className="flex items-center text-gray-500 font-bold">:</span>
-                                            <input type="number" min="0" max="59" step="5" value={startMin} onChange={e => setStartMin(+e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-3 text-white text-center focus:outline-none focus:border-cyan-500 transition-colors" />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
-                                            <Clock className="w-3 h-3" /> Fin
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <input type="number" min="0" max="23" value={endHour} onChange={e => setEndHour(+e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-3 text-white text-center focus:outline-none focus:border-cyan-500 transition-colors" />
-                                            <span className="flex items-center text-gray-500 font-bold">:</span>
-                                            <input type="number" min="0" max="59" step="5" value={endMin} onChange={e => setEndMin(+e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-3 text-white text-center focus:outline-none focus:border-cyan-500 transition-colors" />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06]">
-                                    <p className="text-xs text-gray-500 mb-1">Resumen</p>
-                                    <p className="font-black">{title}</p>
-                                    <p className="text-sm text-gray-400">{date} · {fmt(startHour, startMin)} – {fmt(endHour, endMin)}</p>
-                                </div>
-                                {!isTimeValid && (
-                                    <p className="text-red-400 text-xs font-bold">⚠️ La hora de fin debe ser posterior a la de inicio.</p>
-                                )}
                             </div>
                         ) : (
-                            // Step 3: preview
                             <div className="space-y-4">
                                 {weeklyPlan ? (
                                     <div className="space-y-4">
@@ -426,7 +447,7 @@ export default function CreateEventModal({ onClose, onCreated }) {
                                                 ))}
                                             </div>
                                         </div>
-                                        <p className="text-xs text-gray-500 italic">Se crearán {weeklyPlan.workouts.length} eventos en tu calendario con ejercicios basados en tu historial.</p>
+                                        <p className="text-xs text-gray-500 italic">Se crearán {weeklyPlan.workouts.length} eventos en tu calendario.</p>
                                     </div>
                                 ) : (
                                     <>
@@ -436,14 +457,14 @@ export default function CreateEventModal({ onClose, onCreated }) {
                                         </div>
                                         <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Ejercicios que se añadirán (sin ✅)</p>
                                         {previewExercises.length === 0 ? (
-                                            <p className="text-red-400 text-sm">No hay ejercicios en historial para los músculos seleccionados.</p>
+                                            <p className="text-red-400 text-sm">No hay ejercicios en historial.</p>
                                         ) : (
                                             <div className="space-y-1.5">
                                                 {previewExercises.map((ex, i) => (
                                                     <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
                                                         <span className="text-sm text-gray-300">
-                                                            <span style={{ color: MUSCLE_COLORS[ex.muscle], fontWeight: 700 }}>{ex.muscle}</span>
-                                                            {' - '}{ex.name}
+                                                            {ex.name}
+                                                            <span className="ml-2 text-[10px] bg-white/5 px-2 py-0.5 rounded-full" style={{ color: MUSCLE_COLORS[ex.muscle] || '#94a3b8', fontWeight: 700 }}>{ex.muscle}</span>
                                                         </span>
                                                         <span className="text-xs text-gray-500 font-mono ml-3 shrink-0">{ex.last_weight || '—'}</span>
                                                     </div>
@@ -461,7 +482,7 @@ export default function CreateEventModal({ onClose, onCreated }) {
                     <div className="p-6 border-t border-white/[0.06] flex justify-between gap-3">
                         {step > 1 && (
                             <button onClick={() => {
-                                if (step === 3 && weeklyPlan) {
+                                if (step === 2 && weeklyPlan) {
                                     setStep(1);
                                     setWeeklyPlan(null);
                                 } else {
@@ -471,10 +492,10 @@ export default function CreateEventModal({ onClose, onCreated }) {
                                 Atrás
                             </button>
                         )}
-                        {step < 3 ? (
+                        {step < 2 ? (
                             <button
                                 onClick={() => setStep(s => s + 1)}
-                                disabled={(step === 1 && selectedMuscles.length === 0) || (step === 2 && !isTimeValid)}
+                                disabled={(step === 1 && (selectedMuscles.length === 0 || !isTimeValid))}
                                 className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-bold disabled:opacity-40 hover:opacity-90 transition-opacity"
                             >
                                 Siguiente

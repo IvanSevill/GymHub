@@ -10,26 +10,27 @@ import {
     LayoutDashboard,
     PieChart,
     Watch,
-    Settings,
     Filter,
     Activity,
     CheckCircle2,
-    XCircle
+    XCircle,
+    TrendingUp,
+    Settings
 } from 'lucide-react'
 
 // API
 import { fetchWorkouts, fetchUser, syncWorkouts, fetchCalendars, disconnectFitbit } from './api/gymhubApi'
 
 // Components
-import Analytics from './components/Analytics'
-import WorkoutCalendar from './components/WorkoutCalendar'
-import FitbitPanel from './components/FitbitPanel'
-import StatCard from './components/common/StatCard'
-import TabButton from './components/common/TabButton'
-import WorkoutCard from './components/workouts/WorkoutCard'
-import MaxLifts from './components/workouts/MaxLifts'
-import SettingsModal from './components/settings/SettingsModal'
-import LoginScreen from './components/LoginScreen'
+import Analytics from './components/features/analytics/Analytics'
+import WorkoutCalendar from './components/features/calendar/WorkoutCalendar'
+import FitbitPanel from './components/features/fitbit/FitbitPanel'
+import StatCard from './components/ui/StatCard'
+import TabButton from './components/ui/TabButton'
+import WorkoutCard from './components/features/workouts/WorkoutCard'
+import MaxLifts from './components/features/workouts/MaxLifts'
+import SettingsModal from './components/features/settings/SettingsModal'
+import LoginScreen from './components/features/auth/LoginScreen'
 
 function App() {
     const [workouts, setWorkouts] = useState([])
@@ -254,12 +255,14 @@ function App() {
                                 className="w-10 h-10 rounded-full border-2 border-cyan-500/30 p-0.5"
                             />
                         )}
+
                         <button
                             onClick={() => setShowSettings(!showSettings)}
                             className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors"
                         >
                             <Settings className="w-6 h-6 text-gray-400" />
                         </button>
+
                         <button
                             onClick={handleLogout}
                             className="p-3 bg-red-500/10 rounded-2xl hover:bg-red-500/20 transition-colors"
@@ -269,6 +272,7 @@ function App() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                             </svg>
                         </button>
+
                         <button
                             onClick={handleSync}
                             disabled={syncing}
@@ -340,11 +344,14 @@ function App() {
                                                 </h2>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                     {futureWorkouts.slice(0, 3).map((workout, idx) => (
-                                                        <WorkoutCard key={workout.id} workout={workout} idx={idx} isSmall />
+                                                        <WorkoutCard key={workout.id} workout={workout} idx={idx} isSmall isFitbitConnected={!!currentUser?.fitbit_access_token} />
                                                     ))}
                                                 </div>
                                             </section>
                                         )}
+
+
+
 
                                         <section className="mt-12">
                                             <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
@@ -408,7 +415,7 @@ function App() {
                                                                     const em = w.exercise_sets ? w.exercise_sets.map(s => norm(s.muscle_group)) : [];
                                                                     const allTM = [...new Set([...wm, ...em])];
 
-                                                                    mM = filterMuscles.some(m => {
+                                                                    mM = filterMuscles.every(m => {
                                                                         const nm = norm(m);
                                                                         if (nm === 'pierna') {
                                                                             return allTM.some(tm => ['pierna', 'gluteo', 'cuadriceps', 'femoral', 'gemelo', 'isquios', 'aductores'].includes(tm));
@@ -416,6 +423,13 @@ function App() {
                                                                         return allTM.includes(nm);
                                                                     });
                                                                 }
+
+                                                                // Final check: if fitbit is NOT connected, hide pure cardio workouts
+                                                                if (!currentUser?.fitbit_access_token) {
+                                                                    const isPureCardio = (w.muscle_groups && w.muscle_groups.split(',').every(m => m.trim().toLowerCase() === 'cardio')) || w.source === 'fitbit';
+                                                                    if (isPureCardio && (!w.exercise_sets || w.exercise_sets.length === 0)) return false;
+                                                                }
+
                                                                 return mF && mM;
                                                             });
                                                             return `${filtered.length} entrenamientos encontrados`;
@@ -454,20 +468,24 @@ function App() {
                                                             // 1. Check muscle_groups field
                                                             const workoutMuscles = w.muscle_groups ? w.muscle_groups.split(',').map(m => norm(m.trim())) : [];
 
-                                                            // 2. Check individual exercises (for generic titles like "Extra")
+                                                            // 2. Check individual exercises
                                                             const exerciseMuscles = w.exercise_sets ? w.exercise_sets.map(s => norm(s.muscle_group)) : [];
 
                                                             const allTrainedMuscles = [...new Set([...workoutMuscles, ...exerciseMuscles])];
 
-                                                            matchesMuscle = filterMuscles.some(m => {
+                                                            matchesMuscle = filterMuscles.every(m => {
                                                                 const nm = norm(m);
-                                                                // Match specific muscle or generic "pierna" for leg sub-groups
                                                                 if (nm === 'pierna') {
                                                                     const legMuscles = ['pierna', 'gluteo', 'cuadriceps', 'femoral', 'gemelo', 'isquios', 'aductores'];
                                                                     return allTrainedMuscles.some(tm => legMuscles.includes(tm));
                                                                 }
                                                                 return allTrainedMuscles.includes(nm);
                                                             });
+                                                        }
+
+                                                        if (!currentUser?.fitbit_access_token) {
+                                                            const isPureCardio = (w.muscle_groups && w.muscle_groups.split(',').every(m => m.trim().toLowerCase() === 'cardio')) || w.source === 'fitbit';
+                                                            if (isPureCardio && (!w.exercise_sets || w.exercise_sets.length === 0)) return false;
                                                         }
 
                                                         return matchesFitbit && matchesMuscle;
@@ -481,9 +499,11 @@ function App() {
                                                         );
                                                     }
 
-                                                    return filteredWorkouts.map((workout, idx) => <WorkoutCard key={workout.id} workout={workout} idx={idx} />);
+                                                    return filteredWorkouts.map((workout, idx) => <WorkoutCard key={workout.id} workout={workout} idx={idx} isFitbitConnected={!!currentUser?.fitbit_access_token} />);
                                                 })()}
                                             </div>
+
+
                                         </section>
                                     </>
                                 );
@@ -505,7 +525,14 @@ function App() {
 
                     {activeTab === 'calendar' && (
                         <motion.div key="calendar" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
-                            <WorkoutCalendar workouts={workouts} onRefresh={loadData} />
+                            <WorkoutCalendar
+                                workouts={workouts}
+                                onRefresh={async () => {
+                                    await loadData();
+                                    handleSync();
+                                }}
+                                isFitbitConnected={!!currentUser?.fitbit_access_token}
+                            />
                         </motion.div>
                     )}
 

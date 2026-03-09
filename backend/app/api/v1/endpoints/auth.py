@@ -53,7 +53,7 @@ def google_connect(data: dict, db: Session = Depends(get_db)):
         if not email:
             raise HTTPException(400, "Could not get email from Google")
             
-        user = db.query(User).filter(User.email == email).first()
+        user = db.query(User).filter(User.email.ilike(email)).first()
         if not user:
             user = User(email=email)
             db.add(user)
@@ -62,6 +62,12 @@ def google_connect(data: dict, db: Session = Depends(get_db)):
         user.picture_url = user_info.get("picture")
         user.google_id = user_info.get("sub")
         user.google_access_token = credentials.token
+        
+        from .users import check_json_for_root, is_user_root
+        # Sync the is_root flag to DB if they are in the file during login/signup.
+        if check_json_for_root(user.email):
+            user.is_root = 1
+
         if credentials.refresh_token:
             user.google_refresh_token = credentials.refresh_token
             
@@ -105,7 +111,7 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
         if not email:
             raise HTTPException(400, "Could not get email from Google ID token")
             
-        user = db.query(User).filter(User.email == email).first()
+        user = db.query(User).filter(User.email.ilike(email)).first()
         if not user:
             user = User(email=email)
             db.add(user)
@@ -113,6 +119,10 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
         user.name = user_info.get("name")
         user.picture_url = user_info.get("picture")
         user.google_id = user_info.get("sub")
+        
+        from .users import check_json_for_root, is_user_root
+        if check_json_for_root(user.email):
+            user.is_root = 1
         
         access_token_str = data.get("access_token")
         if access_token_str:

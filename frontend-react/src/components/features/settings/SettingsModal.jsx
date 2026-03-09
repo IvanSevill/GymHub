@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Settings, CheckCircle2, Loader2, Watch, Download, Upload, Activity } from 'lucide-react'
-import { updateSelectedCalendar, exportRootMock, importRootMock } from '../../api/gymhubApi'
+import { updateSelectedCalendar, exportRootMock, importRootMock } from '../../../api/gymhubApi'
 
 export default function SettingsModal({
     showSettings,
@@ -30,7 +30,7 @@ export default function SettingsModal({
         if (!newExercise.name) return;
         try {
             setIsAddingExercise(true);
-            const { addMasterExercise } = await import('../../api/gymhubApi');
+            const { addMasterExercise } = await import('../../../api/gymhubApi');
             await addMasterExercise(newExercise.name, newExercise.muscle);
             showToast(`Ejercicio "${newExercise.name}" añadido correctamente`);
             setNewExercise({ ...newExercise, name: '' });

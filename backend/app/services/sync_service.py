@@ -118,6 +118,7 @@ def unify_cardio_sessions(user: User, db: Session):
             if w.title != new_title or w.muscle_groups != "Cardio":
                 w.title = new_title
                 w.muscle_groups = "Cardio"
+                w.sync_muscles_3nf(db)
                 db.commit()
                 count += 1
                 
@@ -202,6 +203,7 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
     new_muscles = parse_muscle_groups(workout.title, ex_muscles)
     if workout.muscle_groups != new_muscles:
         workout.muscle_groups = new_muscles
+        workout.sync_muscles_3nf(db)
         db.commit()
 
     # Fallback to 'Cardio' if no structured exercises were found
@@ -209,6 +211,7 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
         title_norm = workout.title.lower()
         if any(k in title_norm for k in ["natacion", "swim", "run", "bike", "cardio", "piscina"]):
              workout.muscle_groups = "Cardio"
+             workout.sync_muscles_3nf(db)
              db.commit()
 
 def sync_data_for_user(user: User, db: Session):
@@ -248,9 +251,6 @@ def sync_data_for_user(user: User, db: Session):
             cardio_keywords = ["cardio", "carrera", "run", "entren", "workout", "pesas", "weights", "gym", "bici", "bike", "ciclismo", "circuito", "routine", "rutina", "pecho", "espalda", "hombro", "biceps", "triceps", "pierna", "abdomen", "abdominales", "gluteo"]
             is_manual_workout = any(k in title_norm for k in cardio_keywords)
 
-            if is_fitbit and not user.fitbit_access_token:
-                # Optimization/Privacy: Skip it entirely
-                continue
 
             if not (is_gymhub or is_fitbit or is_manual_workout):
                 # Skip generic personal events
@@ -297,6 +297,8 @@ def sync_data_for_user(user: User, db: Session):
                     google_event_id=event_id
                 )
                 db.add(new_workout)
+                db.flush()
+                new_workout.sync_muscles_3nf(db)
                 db.commit()
                 db.refresh(new_workout)
 
@@ -483,6 +485,8 @@ def sync_fitbit_for_user(user: User, db: Session):
                     google_event_id=event_id
                 )
                 db.add(matching_workout)
+                db.flush()
+                matching_workout.sync_muscles_3nf(db)
                 db.commit()
                 db.refresh(matching_workout)
                 user_workouts.append(matching_workout)

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Zap, CheckCircle2, Trophy, Heart, Flame, Clock, MapPin, Mountain, Watch } from 'lucide-react'
 
-export default function WorkoutCard({ workout, idx, isSmall = false }) {
+export default function WorkoutCard({ workout, idx, isSmall = false, isFitbitConnected }) {
     if (isSmall) {
         return (
             <motion.div
@@ -76,7 +76,7 @@ export default function WorkoutCard({ workout, idx, isSmall = false }) {
                 </div>
             )}
 
-            {workout.fitbit_data && (() => {
+            {isFitbitConnected && workout.fitbit_data && (() => {
                 const fd = workout.fitbit_data;
                 const azmTotal = (fd.azm_fat_burn || 0) + (fd.azm_cardio || 0) + (fd.azm_peak || 0);
                 return (
@@ -126,9 +126,9 @@ export default function WorkoutCard({ workout, idx, isSmall = false }) {
                             <div className="flex items-center gap-2 pt-1">
                                 <span className="text-[10px] text-gray-600 font-bold uppercase tracking-wider w-16">AZM</span>
                                 <div className="flex gap-1 flex-1">
-                                    {fd.azm_fat_burn > 0 && <div title={`Fat Burn: ${fd.azm_fat_burn}min`} className="h-2 bg-yellow-400 rounded-full" style={{ width: `${fd.azm_fat_burn * 4}px`, maxWidth: '60%' }} />}
+                                    {fd.azm_fat_burn > 0 && <div title={`Quema Grasas: ${fd.azm_fat_burn}min`} className="h-2 bg-yellow-400 rounded-full" style={{ width: `${fd.azm_fat_burn * 4}px`, maxWidth: '60%' }} />}
                                     {fd.azm_cardio > 0 && <div title={`Cardio: ${fd.azm_cardio}min`} className="h-2 bg-orange-500 rounded-full" style={{ width: `${fd.azm_cardio * 4}px`, maxWidth: '60%' }} />}
-                                    {fd.azm_peak > 0 && <div title={`Peak: ${fd.azm_peak}min`} className="h-2 bg-rose-500 rounded-full" style={{ width: `${fd.azm_peak * 4}px`, maxWidth: '60%' }} />}
+                                    {fd.azm_peak > 0 && <div title={`Pico: ${fd.azm_peak}min`} className="h-2 bg-rose-500 rounded-full" style={{ width: `${fd.azm_peak * 4}px`, maxWidth: '60%' }} />}
                                 </div>
                                 <span className="text-[10px] text-gray-500">{azmTotal} min</span>
                             </div>

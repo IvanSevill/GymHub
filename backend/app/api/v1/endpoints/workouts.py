@@ -19,17 +19,8 @@ logger = logging.getLogger(__name__)
 
 def get_root_users(db: Session):
     emails = []
-    # 1. From JSON file
     try:
-        if os.path.exists(settings.ROOT_USERS_FILE):
-             with open(settings.ROOT_USERS_FILE, 'r') as f:
-                emails.extend(json.load(f))
-    except Exception as e:
-        logger.error(f"Error reading root users JSON: {e}")
-    
-    # 2. From Database
-    try:
-        db_roots = db.query(User.email).filter(User.is_root == True).all()
+        db_roots = db.query(User.email).filter(User.is_root == 1).all()
         emails.extend([r[0] for r in db_roots])
     except Exception as e:
         logger.error(f"Error reading root users from DB: {e}")
@@ -47,26 +38,13 @@ def get_workouts(user_email: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email.ilike(user_email)).first()
     if not user: raise HTTPException(404, "User not found")
     
-    # Use the case-normalized email from the user record
     query = db.query(Workout).filter(Workout.user_email == user.email)
     
-    # Security: If user is not connected to Fitbit, hide all Fitbit-sourced workouts 
-    if not user.fitbit_access_token:
-        from app.models.fitbit import FitbitData
-        # Hide workouts with source='fitbit' OR those that have FitbitData OR those with [Fitbit Metrics] marker
-        # (The marker check handles sessions synced to Google Kalendar by Fitbit itself)
-        query = query.outerjoin(FitbitData).filter(
-            Workout.source != 'fitbit',
-            FitbitData.id == None,
-            ~Workout.title.ilike('%[Fitbit Metrics]%'),
-            ~Workout.title.ilike('%Fitbit%')
-        )
+    # Hide 'root_import' and 'root_added' workouts from the regular timeline, 
+    # since they are just mock containers for the exercise database.
+    query = query.filter(~Workout.source.in_(['root_import', 'root_added']))
         
     workouts = query.order_by(Workout.date.desc()).all()
-    
-    # Secondary check: If someone manually added [Fitbit Metrics] to a calendar event title/desc 
-    # but isn't connected, we should ideally filter those out too if they are just ghost copies.
-    # The source filter above handles the ones created by the app.
     
     return workouts
 
@@ -153,7 +131,7 @@ def get_exercises_by_muscle(user_email: str, db: Session = Depends(get_db)):
 
 @router.get("/root/export-mock")
 def export_exercises_mock(user_email: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_email).first()
+    user = db.query(User).filter(User.email.ilike(user_email)).first()
     from .users import is_user_root
     if not user or not is_user_root(user.email, user.is_root):
         raise HTTPException(403, "Only root users can export mocks")
@@ -161,7 +139,7 @@ def export_exercises_mock(user_email: str, db: Session = Depends(get_db)):
     sets = (
         db.query(ExerciseSet)
         .join(Workout)
-        .filter(Workout.user_email == user_email)
+        .filter(Workout.user_email == user.email)
         .all()
     )
     
@@ -181,20 +159,22 @@ def export_exercises_mock(user_email: str, db: Session = Depends(get_db)):
 
 @router.post("/root/import-mock")
 def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_email).first()
+    user = db.query(User).filter(User.email.ilike(user_email)).first()
     from .users import is_user_root
     if not user or not is_user_root(user.email, user.is_root):
         raise HTTPException(403, "Only root users can import mocks")
     
     # Create a dummy workout to hold these exercises
     master_workout = Workout(
-        user_email=user_email,
+        user_email=user.email,
         title="Master Exercises Mock",
         date=datetime.datetime.now(),
         muscle_groups="Master",
         source="root_import"
     )
     db.add(master_workout)
+    db.flush()
+    master_workout.sync_muscles_3nf(db)
     db.commit()
     db.refresh(master_workout)
     
@@ -217,9 +197,9 @@ def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = 
 
 @router.post("/root/add-exercise")
 def add_master_exercise(user_email: str, exercise_name: str, muscle: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_email).first()
+    user = db.query(User).filter(User.email.ilike(user_email)).first()
     from .users import is_user_root
-    if not user or not is_user_root(user_email, user.is_root):
+    if not user or not is_user_root(user.email, user.is_root):
         raise HTTPException(403, "Only root users can add master exercises")
     
     # Check if exists normalized
@@ -227,14 +207,14 @@ def add_master_exercise(user_email: str, exercise_name: str, muscle: str, db: Se
     
     # Create a persistent root workout for this muscle if not exists, or just a new one
     master_workout = db.query(Workout).filter(
-        Workout.user_email == user_email, 
+        Workout.user_email == user.email, 
         Workout.title == f"Master {muscle}",
         Workout.source == "root_added"
     ).first()
     
     if not master_workout:
         master_workout = Workout(
-            user_email=user_email,
+            user_email=user.email,
             title=f"Master {muscle}",
             date=datetime.datetime.now(),
             muscle_groups=muscle,
@@ -265,6 +245,8 @@ def create_workout(workout_in: WorkoutCreate, db: Session = Depends(get_db)):
         source="app"
     )
     db.add(new_workout)
+    db.flush()
+    new_workout.sync_muscles_3nf(db)
     db.commit()
     db.refresh(new_workout)
 
@@ -282,11 +264,13 @@ def update_workout(workout_id: int, workout_in: WorkoutCreate, db: Session = Dep
     workout = db.query(Workout).filter(Workout.id == workout_id).first()
     if not workout: raise HTTPException(404, "Workout not found")
     workout.title = workout_in.title
+    workout.muscle_groups = parse_muscle_groups(workout_in.title)
     db.query(ExerciseSet).filter(ExerciseSet.workout_id == workout_id).delete()
     exercises = WorkoutParser.parse_description(workout_in.description)
     for ex in exercises:
         ex_set = ExerciseSet(workout_id=workout.id, **ex)
         db.add(ex_set)
+    workout.sync_muscles_3nf(db)
     db.commit()
     db.refresh(workout)
     return workout

@@ -94,3 +94,9 @@ export const addMasterExercise = async (name, muscle) => {
     const response = await axios.post(`${API_URL}/workouts/root/add-exercise?user_email=${email}&exercise_name=${name}&muscle=${muscle}`);
     return response.data;
 };
+
+export const updateWorkout = async (id, payload) => {
+    const email = getUserEmail();
+    const response = await axios.patch(`${API_URL}/workouts/${id}?user_email=${email}`, payload);
+    return response.data;
+};

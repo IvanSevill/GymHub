@@ -62,12 +62,12 @@ const AzmBar = ({ label, minutes, color }) => (
 );
 
 const FitbitPanel = ({ workouts = [], userName, onConnect, isConnected }) => {
-    const fitbitWorkouts = useMemo(() =>
-        [...workouts]
+    const fitbitWorkouts = useMemo(() => {
+        if (!isConnected) return []; // Ocultar métricas históricas si no está conectado
+        return [...workouts]
             .filter(w => w.fitbit_data)
-            .sort((a, b) => new Date(a.date) - new Date(b.date)),
-        [workouts]
-    );
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+    }, [workouts, isConnected]);
 
     const hasRealData = fitbitWorkouts.length > 0;
     const lastSession = hasRealData ? fitbitWorkouts[fitbitWorkouts.length - 1]?.fitbit_data : null;
@@ -96,40 +96,30 @@ const FitbitPanel = ({ workouts = [], userName, onConnect, isConnected }) => {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
+            {/* Cabecera */}
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold flex items-center gap-3">
                     <div className="p-2 bg-cyan-500/10 rounded-xl">
                         <Watch className="text-cyan-400 w-6 h-6" />
                     </div>
-                    {userName ? `Fitbit — ${userName}` : 'Fitbit Dashboard'}
+                    {userName ? `Fitbit — ${userName}` : 'Panel de Fitbit'}
                 </h3>
                 <div className="flex items-center gap-3">
-                    {isConnected && (
+                    {isConnected ? (
                         <button
-                            onClick={() => {
-                                if (window.confirm('¿Estás seguro de que quieres desconectar Fitbit? Se eliminarán tus métricas locales.')) {
-                                    window.dispatchEvent(new CustomEvent('gymhub:disconnect_fitbit'));
-                                }
-                            }}
-                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-4 py-2.5 rounded-2xl text-xs font-black transition-all border border-red-500/20"
+                            onClick={() => window.dispatchEvent(new CustomEvent('gymhub:disconnect_fitbit'))}
+                            className="text-xs font-bold px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full hover:bg-red-500/20 transition-all"
                         >
                             Desconectar
                         </button>
-                    )}
-                    {!isConnected && (
+                    ) : (
                         <button
                             onClick={onConnect}
-                            className="flex items-center gap-2 bg-[#00B0B9]/20 hover:bg-[#00B0B9]/30 text-[#00B0B9] px-4 py-2.5 rounded-2xl text-xs font-black transition-all border border-[#00B0B9]/30"
+                            className="flex items-center gap-2 text-xs font-bold px-4 py-2 bg-[#00B0B9] text-white rounded-full hover:scale-105 transition-all shadow-lg shadow-[#00B0B9]/20"
                         >
                             <Plus className="w-4 h-4" />
                             Conectar Fitbit
                         </button>
-                    )}
-                    {hasRealData && (
-                        <span className="text-xs font-bold px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">
-                            {totalStats.sessions} sesiones
-                        </span>
                     )}
                 </div>
             </div>
@@ -140,16 +130,7 @@ const FitbitPanel = ({ workouts = [], userName, onConnect, isConnected }) => {
                         <Watch className="w-8 h-8 text-gray-700" />
                     </div>
                     <p className="text-gray-400 font-bold text-lg">Sin datos de Fitbit aún</p>
-                    <p className="text-gray-600 text-sm mt-2 mb-6">Enlaza tu cuenta para ver tus métricas de salud y rendimiento aquí.</p>
-                    {!isConnected && (
-                        <button
-                            onClick={onConnect}
-                            className="bg-white text-black font-black px-6 py-3 rounded-2xl hover:bg-gray-200 transition-colors flex items-center gap-2 mx-auto"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Enlazar Fitbit ahora
-                        </button>
-                    )}
+                    <p className="text-gray-600 text-sm mt-2 mb-6">Enlaza tu cuenta en <b>Ajustes</b> para ver tus métricas de salud y rendimiento aquí.</p>
                 </div>
             ) : (
                 <>
@@ -205,10 +186,10 @@ const FitbitPanel = ({ workouts = [], userName, onConnect, isConnected }) => {
                             {/* AZM Bars */}
                             {(lastSession.azm_fat_burn || lastSession.azm_cardio || lastSession.azm_peak) && (
                                 <div className="space-y-2 pt-4 border-t border-white/5">
-                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Minutos de Zona Activa</p>
-                                    <AzmBar label="Fat Burn" minutes={lastSession.azm_fat_burn} color="bg-yellow-400" />
+                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Minutos en Zona Activa</p>
+                                    <AzmBar label="Quema Grasas" minutes={lastSession.azm_fat_burn} color="bg-yellow-400" />
                                     <AzmBar label="Cardio" minutes={lastSession.azm_cardio} color="bg-orange-500" />
-                                    <AzmBar label="Peak" minutes={lastSession.azm_peak} color="bg-rose-500" />
+                                    <AzmBar label="Pico" minutes={lastSession.azm_peak} color="bg-rose-500" />
                                 </div>
                             )}
                         </motion.div>

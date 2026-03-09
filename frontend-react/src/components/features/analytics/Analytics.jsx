@@ -110,7 +110,7 @@ const MuscleSelector = ({ selected, onChange, muscles }) => (
     </div>
 );
 
-const CustomTooltip = ({ active, payload, label, unit = 'kg total' }) => {
+const CustomTooltip = ({ active, payload, label, unit = 'kg totales' }) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-[#1e293b] border border-white/10 p-4 rounded-2xl shadow-2xl backdrop-blur-md">

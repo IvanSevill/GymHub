@@ -16,8 +16,10 @@ def is_user_root(email: str, db_is_root: int) -> bool:
     # 1. Check database flag (permanent root)
     if db_is_root == 1:
         return True
-    
-    # 2. Check JSON file (session/configuration-based root)
+    return False
+
+def check_json_for_root(email: str) -> bool:
+    # 2. Check JSON file (session/configuration-based root) ONLY ON CREATION
     try:
         if os.path.exists(settings.ROOT_USERS_FILE):
             with open(settings.ROOT_USERS_FILE, 'r') as f:
@@ -25,7 +27,6 @@ def is_user_root(email: str, db_is_root: int) -> bool:
                 return email.lower() in [r.lower() for r in roots]
     except Exception as e:
         logger.error(f"Error reading root users file: {e}")
-    
     return False
 
 @router.get("/me")

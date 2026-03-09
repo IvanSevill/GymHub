@@ -19,17 +19,8 @@ logger = logging.getLogger(__name__)
 
 def get_root_users(db: Session):
     emails = []
-    # 1. From JSON file
     try:
-        if os.path.exists(settings.ROOT_USERS_FILE):
-             with open(settings.ROOT_USERS_FILE, 'r') as f:
-                emails.extend(json.load(f))
-    except Exception as e:
-        logger.error(f"Error reading root users JSON: {e}")
-    
-    # 2. From Database
-    try:
-        db_roots = db.query(User.email).filter(User.is_root == True).all()
+        db_roots = db.query(User.email).filter(User.is_root == 1).all()
         emails.extend([r[0] for r in db_roots])
     except Exception as e:
         logger.error(f"Error reading root users from DB: {e}")
@@ -130,7 +121,7 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
         
         for data in muscle_exercises:
             weight_info = f" {data['weight']}" if data["weight"] else ""
-            lines.append(f"{data['muscle']} - {data['name']}{weight_info}")
+            lines.append(f"{data['name']} - {data['muscle']}{weight_info}")
         
         # Add a newline between muscle groups
         lines.append("")
@@ -245,7 +236,7 @@ def create_weekly_plan(req: CreateWeeklyPlanRequest, db: Session = Depends(get_d
                 
             for data in muscle_exercises:
                 weight_info = f" {data['weight']}" if data["weight"] else ""
-                lines.append(f"{data['muscle']} - {data['name']}{weight_info}")
+                lines.append(f"{data['name']} - {data['muscle']}{weight_info}")
             
             # Add a newline between muscle groups
             lines.append("")
