@@ -14,13 +14,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import com.ivansevill.gymhub.ui.components.WorkoutCard
 import com.ivansevill.gymhub.viewmodel.HomeState
 import com.ivansevill.gymhub.viewmodel.HomeViewModel
 
+import com.ivansevill.gymhub.utils.SessionManager
+
 @Composable
-fun HomeWorkoutList(viewModel: HomeViewModel) {
+fun HomeWorkoutList(viewModel: HomeViewModel, sessionManager: SessionManager) {
     val state by viewModel.state
+    val scope = rememberCoroutineScope()
+    var isSyncing by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -35,7 +43,7 @@ fun HomeWorkoutList(viewModel: HomeViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Mis Entrenamientos",
+                text = "GymHub",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.White
@@ -45,6 +53,11 @@ fun HomeWorkoutList(viewModel: HomeViewModel) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refrescar", color = Color.Gray)
             }
         }
+
+        // Fitbit connection panel at the top
+        FitbitPanel(sessionManager = sessionManager)
+        
+        Spacer(modifier = Modifier.size(8.dp))
 
         when (state) {
             is HomeState.Loading -> {

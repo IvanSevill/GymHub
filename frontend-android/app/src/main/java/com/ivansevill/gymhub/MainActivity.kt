@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import com.ivansevill.gymhub.ui.HomeWorkoutList
+import com.ivansevill.gymhub.ui.CalendarScreen
+import com.ivansevill.gymhub.ui.MetricsScreen
 import com.ivansevill.gymhub.ui.PlaceholderScreen
 import com.ivansevill.gymhub.ui.LoginScreen
 import com.ivansevill.gymhub.ui.theme.GymHubTheme
@@ -148,8 +150,8 @@ fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManage
         Box(modifier = Modifier.padding(padding)) {
             when (selectedTab) {
                 0 -> HomeWorkoutList(homeViewModel)
-                1 -> PlaceholderScreen("Calendario (Próximamente)")
-                2 -> PlaceholderScreen("Análisis (Próximamente)")
+                1 -> CalendarScreen(homeViewModel)
+                2 -> MetricsScreen(homeViewModel)
             }
         }
     }

@@ -81,36 +81,33 @@ frontend-react/vite_log.txt
 #  FRONTEND-ANDROID  (Android / Gradle)
 # ══════════════════════════════════════════
 
-# Build output
-frontend-android/.gradle/
-frontend-android/build/
-frontend-android/*/build/
-frontend-android/local.properties
+# Built variants
+frontend-android/*.apk
+frontend-android/*.ap_
+frontend-android/*.aab
 
-# IntelliJ / Android Studio
+# Android Studio / IntelliJ IDEA
 frontend-android/.idea/
 frontend-android/*.iml
 frontend-android/*.ipr
 frontend-android/*.iws
 frontend-android/.navigation/
 frontend-android/captures/
+frontend-android/.externalNativeBuild/
+frontend-android/.cxx/
+frontend-android/local.properties
 
-# Keystore files
-*.jks
-*.keystore
-
-# Generated / signed APKs – keep out of VCS
-*.apk
-*.aab
-
-# Java heap dumps & profiling snapshots
-*.hprof
-
-# Kotlin incremental caches
+# Gradle
+frontend-android/.gradle/
+frontend-android/build/
+frontend-android/*/build/
 frontend-android/.kotlin/
-
-# Android Studio / IntelliJ profiling & temp files
 frontend-android/captures/
-frontend-android/.navigation/
-frontend-android/lint.xml
-frontend-android/proguard-rules.pro
+frontend-android/.shelf/
+frontend-android/*.hprof
+
+# Keystores (DO NOT TRACK)
+frontend-android/*.jks
+frontend-android/*.keystore
+frontend-android/*.pk8
+frontend-android/*.p12
