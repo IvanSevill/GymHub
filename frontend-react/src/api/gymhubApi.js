@@ -2,7 +2,13 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://gymhub-jd53.onrender.com/api/v1';
 
-const getUserEmail = () => localStorage.getItem('gymhub_user_email');
+const getUserEmail = () => {
+    try {
+        return localStorage.getItem('gymhub_user_email');
+    } catch (e) {
+        return null;
+    }
+};
 
 export const fetchWorkouts = async () => {
     const email = getUserEmail();
@@ -74,6 +80,12 @@ export const disconnectFitbit = async () => {
     const email = getUserEmail();
     if (!email) throw new Error("No user email");
     const response = await axios.post(`${API_URL}/auth/fitbit/disconnect?user_email=${email}`);
+    return response.data;
+};
+
+export const connectFitbit = async (code, redirectUri) => {
+    const email = getUserEmail();
+    const response = await axios.post(`${API_URL}/auth/fitbit/connect?auth_code=${code}&user_email=${encodeURIComponent(email)}&redirect_uri=${encodeURIComponent(redirectUri)}`);
     return response.data;
 };
 

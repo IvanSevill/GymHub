@@ -19,10 +19,10 @@ import {
 } from 'lucide-react'
 
 // API
-import { fetchWorkouts, fetchUser, syncWorkouts, fetchCalendars, disconnectFitbit } from './api/gymhubApi'
+import { fetchWorkouts, fetchUser, syncWorkouts, fetchCalendars, disconnectFitbit, connectFitbit } from './api/gymhubApi'
 
 // Components
-import Analytics from './components/features/analytics/Analytics'
+import PerformanceMetrics from './components/features/metrics/PerformanceMetrics'
 import WorkoutCalendar from './components/features/calendar/WorkoutCalendar'
 import FitbitPanel from './components/features/fitbit/FitbitPanel'
 import StatCard from './components/ui/StatCard'
@@ -44,7 +44,13 @@ function App() {
     const [currentUser, setCurrentUser] = useState(null)
     const [autoSync, setAutoSync] = useState(true)
     const [units, setUnits] = useState('kg')
-    const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('gymhub_user_email'))
+    const [isAuthenticated, setIsAuthenticated] = useState(() => {
+        try {
+            return !!localStorage.getItem('gymhub_user_email');
+        } catch (e) {
+            return false;
+        }
+    })
 
     // Filters
     const [filterFitbit, setFilterFitbit] = useState(false)
@@ -175,20 +181,12 @@ function App() {
                     setLoading(true);
                     setSyncing(true); // Show spinner for Fitbit connection as requested
                     const redirectUri = window.location.origin;
-                    const response = await fetch(
-                        `http://localhost:8000/api/v1/auth/fitbit/connect?auth_code=${code}&user_email=${encodeURIComponent(email)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
-                        { method: 'POST' }
-                    );
-
-                    if (response.ok) {
-                        showToast('¡Cuenta de Fitbit vinculada correctamente!');
-                    } else {
-                        const errorData = await response.json();
-                        showToast(`Error de Fitbit: ${errorData.detail || 'Fallo desconocido'}`, 'error');
-                    }
+                    await connectFitbit(code, redirectUri);
+                    showToast('¡Cuenta de Fitbit vinculada correctamente!');
                     window.history.replaceState({}, document.title, window.location.pathname);
                 } catch (error) {
                     console.error("Error linking fitbit:", error);
+                    showToast('Error al vincular Fitbit', 'error');
                 } finally {
                     setLoading(false);
                     setSyncing(false);
@@ -519,7 +517,7 @@ function App() {
 
                     {activeTab === 'analytics' && (
                         <motion.div key="analytics" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <Analytics workouts={workouts} />
+                            <PerformanceMetrics workouts={workouts} />
                         </motion.div>
                     )}
 

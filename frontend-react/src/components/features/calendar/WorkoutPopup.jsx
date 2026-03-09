@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Dumbbell, Clock, Watch, Heart, Flame, MapPin, Mountain } from 'lucide-react';
 import { format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import WorkoutEditorModal from '../../workouts/WorkoutEditorModal';
+import WorkoutEditorModal from '../workouts/WorkoutEditorModal';
 
 const formatValues = (set) => {
     const vals = [set.value1, set.value2, set.value3, set.value4].filter(v => v != null);

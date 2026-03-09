@@ -1,5 +1,5 @@
 import { useGoogleLogin } from '@react-oauth/google'
-import { connectGoogleWithCode } from '../api/gymhubApi'
+import { connectGoogleWithCode } from '../../../api/gymhubApi'
 import { motion } from 'framer-motion'
 import { Dumbbell, Loader2 } from 'lucide-react'
 import { useState } from 'react'
