@@ -107,7 +107,7 @@ fun MetricCard(title: String, content: @Composable () -> Unit) {
 fun VolumeChart(workouts: List<Workout>) {
     // Simple custom chart using Canvas
     val data = workouts.take(10).reversed().map { w ->
-        w.exercise_sets.sumOf { (it.value1 ?: 0.0) + (it.value2 ?: 0.0) + (it.value3 ?: 0.0) + (it.value4 ?: 0.0) }
+        w.exerciseSets.sumOf { (it.value1 ?: 0.0) + (it.value2 ?: 0.0) + (it.value3 ?: 0.0) + (it.value4 ?: 0.0) }
     }
     
     val maxVal = if (data.isNotEmpty()) data.maxOrNull() ?: 1.0 else 1.0
@@ -164,7 +164,7 @@ fun VolumeChart(workouts: List<Workout>) {
 fun FrequencyChart(workouts: List<Workout>) {
     val muscles = mutableMapOf<String, Int>()
     workouts.forEach { w ->
-        w.muscle_groups?.split(",")?.forEach { m ->
+        w.muscleGroups?.split(",")?.forEach { m ->
             val clean = m.trim()
             if (clean.isNotEmpty()) {
                 muscles[clean] = (muscles[clean] ?: 0) + 1

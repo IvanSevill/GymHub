@@ -5,12 +5,15 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -19,7 +22,7 @@ import com.google.android.gms.common.api.ApiException
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import com.ivansevill.gymhub.ui.HomeWorkoutList
 import com.ivansevill.gymhub.ui.CalendarScreen
@@ -107,12 +110,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun launchGoogleSignIn() {
+        // IMPORTANT: requestServerAuthCode must receive the WEB Client ID (not Android Client ID).
+        // The Android Client ID (with SHA-1) is registered in Google Cloud Console, but the
+        // server needs this Web Client ID to exchange the auth code for tokens.
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestServerAuthCode("67135520736-c8slcjall71jmd9j79amvs1lol9h9aln.apps.googleusercontent.com")
+            .requestServerAuthCode("67135520736-c8slcjall71jmd9j79amvs1lol9h9aln.apps.googleusercontent.com") // Web Client ID
             .requestEmail()
+            .requestProfile()
             .build()
         val client = GoogleSignIn.getClient(this, gso)
-        googleSignInLauncher.launch(client.signInIntent)
+        // Sign out first to force account picker (avoids silent re-login)
+        client.signOut().addOnCompleteListener {
+            googleSignInLauncher.launch(client.signInIntent)
+        }
     }
 }
 
@@ -141,7 +151,7 @@ fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManage
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    icon = { Icon(Icons.Default.TrendingUp, contentDescription = "Métricas") },
+                    icon = { Icon(Icons.Default.Star, contentDescription = "Métricas") },
                     label = { Text("Análisis") }
                 )
             }
@@ -149,7 +159,7 @@ fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManage
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
             when (selectedTab) {
-                0 -> HomeWorkoutList(homeViewModel)
+                0 -> HomeWorkoutList(homeViewModel, sessionManager)
                 1 -> CalendarScreen(homeViewModel)
                 2 -> MetricsScreen(homeViewModel)
             }

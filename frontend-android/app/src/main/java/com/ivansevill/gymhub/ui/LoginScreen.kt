@@ -79,7 +79,7 @@ fun LoginScreen(onSignInClick: () -> Unit, isLoading: Boolean = false) {
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
-                    .fillWidth()
+                    .fillMaxWidth()
                     .height(56.dp)
             ) {
                 if (isLoading) {

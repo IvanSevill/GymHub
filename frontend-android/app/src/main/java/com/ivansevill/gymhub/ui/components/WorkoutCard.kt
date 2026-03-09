@@ -36,7 +36,7 @@ fun WorkoutCard(workout: Workout) {
 
     Card(
         modifier = Modifier
-            .fillWidth()
+            .fillMaxWidth()
             .padding(vertical = 8.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = cardBackground),
@@ -79,9 +79,9 @@ fun WorkoutCard(workout: Workout) {
                 color = Color.White
             )
 
-            if (!workout.muscle_groups.isNullOrBlank()) {
+            if (!workout.muscleGroups.isNullOrBlank()) {
                 Text(
-                    text = workout.muscle_groups,
+                    text = workout.muscleGroups,
                     fontSize = 12.sp,
                     color = accentCyan,
                     fontWeight = FontWeight.Medium,
@@ -99,7 +99,7 @@ fun WorkoutCard(workout: Workout) {
                 // Quick info bits
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "${workout.exercise_sets.size} ejercicios",
+                        text = "${workout.exerciseSets.size} ejercicios",
                         fontSize = 12.sp,
                         color = Color.Gray
                     )

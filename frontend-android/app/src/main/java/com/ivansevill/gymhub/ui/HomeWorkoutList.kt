@@ -50,7 +50,7 @@ fun HomeWorkoutList(viewModel: HomeViewModel, sessionManager: SessionManager) {
             )
             
             IconButton(onClick = { viewModel.loadWorkouts() }) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refrescar", color = Color.Gray)
+                Icon(Icons.Default.Refresh, contentDescription = "Refrescar", tint = Color.Gray)
             }
         }
 

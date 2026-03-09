@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Dumbbell icon for GymHub -->
+    <!-- Bar -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M30,50 L78,50 L78,58 L30,58 Z"/>
+    <!-- Left weight plate outer -->
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M18,38 L30,38 L30,70 L18,70 Z"
+        android:strokeWidth="2"/>
+    <!-- Left weight plate inner -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M22,44 L28,44 L28,64 L22,64 Z"/>
+    <!-- Right weight plate outer -->
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M78,38 L90,38 L90,70 L78,70 Z"/>
+    <!-- Right weight plate inner -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M80,44 L86,44 L86,64 L80,64 Z"/>
+</vector>
