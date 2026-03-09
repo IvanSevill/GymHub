@@ -121,7 +121,7 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
         
         for data in muscle_exercises:
             weight_info = f" {data['weight']}" if data["weight"] else ""
-            lines.append(f"{data['name']} - {data['muscle']}{weight_info}")
+            lines.append(f"{data['muscle']} - {data['name']}{weight_info}")
         
         # Add a newline between muscle groups
         lines.append("")
@@ -236,7 +236,7 @@ def create_weekly_plan(req: CreateWeeklyPlanRequest, db: Session = Depends(get_d
                 
             for data in muscle_exercises:
                 weight_info = f" {data['weight']}" if data["weight"] else ""
-                lines.append(f"{data['name']} - {data['muscle']}{weight_info}")
+                lines.append(f"{data['muscle']} - {data['name']}{weight_info}")
             
             # Add a newline between muscle groups
             lines.append("")
