@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun LoginScreen(onSignInClick: () -> Unit) {
+fun LoginScreen(onSignInClick: () -> Unit, isLoading: Boolean = false) {
     val navyBackground = Color(0xFF020617)
     
     Box(
@@ -75,18 +75,27 @@ fun LoginScreen(onSignInClick: () -> Unit) {
             
             Button(
                 onClick = onSignInClick,
+                enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillWidth()
                     .height(56.dp)
             ) {
-                Text(
-                    "Acceder con Google",
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.Black,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        "Acceder con Google",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
             }
         }
     }

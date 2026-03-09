@@ -32,4 +32,15 @@ def get_db():
         db.close()
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    try:
+        # Wrap in try-except to handle race conditions during startup in multi-worker environments
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        # If the table already exists, it might be due to a race condition between workers.
+        # We can safely ignore "already exists" errors during initialization.
+        error_str = str(e).lower()
+        if "already exists" in error_str or "dup_table" in error_str:
+            import logging
+            logging.getLogger(__name__).info("Database tables already initialized or being initialized by another worker.")
+        else:
+            raise e
