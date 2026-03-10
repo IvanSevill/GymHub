@@ -14,6 +14,12 @@ data class User(
 )
 
 @JsonClass(generateAdapter = true)
+data class Muscle(
+    val id: Int,
+    val name: String
+)
+
+@JsonClass(generateAdapter = true)
 data class ExerciseSet(
     @Json(name = "exercise_name") val exerciseName: String,
     @Json(name = "muscle_group") val muscleGroup: String?,
@@ -23,7 +29,7 @@ data class ExerciseSet(
     val value4: Double?,
     val unit: String?,
     val reps: Int?,
-    @Json(name = "is_pr") val isPr: Int
+    @Json(name = "weight_display") val weightDisplay: String?
 )
 
 @JsonClass(generateAdapter = true)
@@ -45,13 +51,19 @@ data class Workout(
     @Json(name = "start_time") val startTime: String?,
     @Json(name = "end_time") val endTime: String?,
     val source: String,
-    @Json(name = "muscle_groups") val muscleGroups: String?,
+    val muscles: List<Muscle>? = null,
     @Json(name = "exercise_sets") val exerciseSets: List<ExerciseSet>,
     @Json(name = "fitbit_data") val fitbitData: FitbitData?
 )
 
 @JsonClass(generateAdapter = true)
 data class GoogleConnectRequest(val code: String)
+
+@JsonClass(generateAdapter = true)
+data class MobileAuthRequest(
+    @Json(name = "id_token") val idToken: String,
+    @Json(name = "access_token") val accessToken: String? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class AuthResponse(

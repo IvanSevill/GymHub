@@ -79,15 +79,16 @@ fun WorkoutCard(workout: Workout) {
                 color = Color.White
             )
 
-            if (!workout.muscleGroups.isNullOrBlank()) {
+            if (!workout.muscles.isNullOrEmpty()) {
                 Text(
-                    text = workout.muscleGroups,
+                    text = workout.muscles.joinToString(" - ") { it.name },
                     fontSize = 12.sp,
                     color = accentCyan,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
+
 
             Spacer(modifier = Modifier.height(20.dp))
 

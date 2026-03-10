@@ -8,7 +8,7 @@ class WorkoutParser:
     """
 
     VALUE_PATTERN = re.compile(
-        r"(?P<value>[\d.,'\-]+)\s*(?P<unit>kg|min|kilos|minutos)?",
+        r"(?P<value>[\d.,'\-]+)\s*(?P<unit>kg|s|rep|reps|min|kilos|minutos)?",
         re.IGNORECASE
     )
 
@@ -64,10 +64,11 @@ class WorkoutParser:
     @staticmethod
     def _parse_values(text: str):
         text = text.replace('(', '').replace(')', '')
-        unit_match = re.search(r'(kg|min|kilos|minutos)', text, re.IGNORECASE)
+        unit_match = re.search(r'(kg|s|rep|reps|min|kilos|minutos)', text, re.IGNORECASE)
         unit = unit_match.group(1).lower() if unit_match else None
         if unit in ('kilos',): unit = 'kg'
         if unit in ('minutos',): unit = 'min'
+        if unit in ('reps',): unit = 'rep'
         number_pattern = re.compile(r"[\d]+(?:[.,'][0-9]+)?")
         raw_nums = number_pattern.findall(text)
         values = []
@@ -127,8 +128,6 @@ class WorkoutParser:
                 "value3": values[2],
                 "value4": values[3],
                 "unit": unit,
-                "reps": reps,
-                "is_pr": 0,
-                "raw_text": line
+                "reps": reps
             })
         return results

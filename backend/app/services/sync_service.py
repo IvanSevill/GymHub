@@ -9,58 +9,69 @@ from .fitbit import FitbitService
 
 logger = logging.getLogger(__name__)
 
-def parse_muscle_groups(title: str, exercise_muscles: List[str] = None) -> str:
+def parse_muscle_groups(title: str, exercise_muscles: List[str] = None) -> List[str]:
     """
     Extracts muscle group names from a workout title and normalizes them.
     If exercise_muscles is provided, it merges them.
+    Returns a list of unique muscle names.
     """
     import re
     parts = re.split(r'[/\-,+]|\by\b', title, flags=re.IGNORECASE)
     normalized = []
     
+    # Muscle expansion map (e.g. "Pierna" is a category, not a single muscle)
+    LEG_MUSCLES = ["Cuadriceps", "Gluteo", "Isquiotibiales", "Gemelos"]
+    
     # Muscle aliases for normalization
     aliases = {
-        "Piernas": "Pierna", "Pierna": "Pierna",
+        "Piernas": "PIERNA_CAT", "Pierna": "PIERNA_CAT",
         "Bíceps": "Biceps", "Biceps": "Biceps",
         "Tríceps": "Triceps", "Triceps": "Triceps",
         "Abdomen": "Abdominales", "Abdominales": "Abdominales",
-        "Gluteo": "Pierna", "Cuadriceps": "Pierna", "Femoral": "Pierna",
-        "Espalda": "Espalda", "Pecho": "Pecho", "Hombro": "Hombro"
+        "Gluteo": "Gluteo", "Glúteo": "Gluteo", 
+        "Cuadriceps": "Cuadriceps", "Cuádriceps": "Cuadriceps",
+        "Femoral": "Isquiotibiales", "Isquios": "Isquiotibiales",
+        "Espalda": "Espalda", "Pecho": "Pecho", "Hombro": "Hombro",
+        "Gemelos": "Gemelos", "Gemelo": "Gemelos"
     }
     
+    def add_muscle(m_name):
+        if m_name == "PIERNA_CAT":
+            for lm in LEG_MUSCLES:
+                if lm not in normalized: normalized.append(lm)
+        elif m_name not in normalized:
+            normalized.append(m_name)
+
     # 1. Process title parts
     for p in parts:
         p_clean = p.strip().title()
         if p_clean in aliases:
-            normalized.append(aliases[p_clean])
+            add_muscle(aliases[p_clean])
         else:
             # Check for cardio
             cardio_keywords = ["Natacion", "Natación", "Swim", "Pool", "Piscina", "Carrera", "Run", "Running", "Ciclismo", "Bici", "Bike", "Cardio", "Circuito", "Circuit"]
             if any(k.lower() == p_clean.lower() for k in cardio_keywords):
-                normalized.append("Cardio")
+                add_muscle("Cardio")
 
     # 2. Merge with exercise muscles
     if exercise_muscles:
         for m in exercise_muscles:
             m_norm = m.strip().title()
             if m_norm in aliases:
-                normalized.append(aliases[m_norm])
+                add_muscle(aliases[m_norm])
             else:
-                normalized.append(m_norm)
+                add_muscle(m_norm)
     
-    # Unique parts, ignoring 'Extra' or generic titles
-    unique = []
-    for p in normalized:
-        if p not in unique and p.lower() not in ["extra", "gymhub", "entrenamiento"]:
-            unique.append(p)
+    # Filter out generic titles
+    unique = [p for p in normalized if p.lower() not in ["extra", "gymhub", "entrenamiento"]]
             
     if not unique and any(k.lower() in title.lower() for k in ["cardio", "natacion", "swim", "naco", "piscina", "run", "bike"]):
-        return "Cardio"
+        return ["Cardio"]
         
-    return ','.join(unique) or "Otros"
+    return unique or ["Otros"]
 
 def format_fitbit_metadata(fields: dict, owner_email: str) -> str:
-    lines = ["\n[Fitbit Metrics]", f"Owner: {owner_email}"]
+    lines = ["\n\n[Fitbit Metrics]", f"Owner: {owner_email}"]
     if fields.get("calories"): lines.append(f"Calorias: {fields['calories']} kcal")
     if fields.get("heart_rate_avg"): lines.append(f"FC Media: {fields['heart_rate_avg']} bpm")
     if fields.get("steps"): lines.append(f"Pasos: {fields['steps']}")
@@ -87,7 +98,6 @@ def unify_cardio_sessions(user: User, db: Session):
 
     for w in workouts:
         original_title = w.title
-        original_muscles = w.muscle_groups or ""
         
         # Check if it needs unification: if it has "circuito", "circuit", or "cardio" in title
         title_norm = original_title.lower()
@@ -115,10 +125,9 @@ def unify_cardio_sessions(user: User, db: Session):
             elif "Cardio" not in new_title:
                 new_title = f"Cardio - {new_title}"
 
-            if w.title != new_title or w.muscle_groups != "Cardio":
+            if w.title != new_title:
                 w.title = new_title
-                w.muscle_groups = "Cardio"
-                w.sync_muscles_3nf(db)
+                w.sync_muscles(["Cardio"], db)
                 db.commit()
                 count += 1
                 
@@ -201,18 +210,22 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
     # Derived muscles from exercises
     ex_muscles = [ex["muscle_group"] for ex in exercises if ex.get("muscle_group")]
     new_muscles = parse_muscle_groups(workout.title, ex_muscles)
-    if workout.muscle_groups != new_muscles:
-        workout.muscle_groups = new_muscles
-        workout.sync_muscles_3nf(db)
-        db.commit()
+    workout.sync_muscles(new_muscles, db)
+    db.commit()
 
     # Fallback to 'Cardio' if no structured exercises were found
-    if not exercises and (not workout.muscle_groups or workout.muscle_groups == "Otros"):
-        title_norm = workout.title.lower()
-        if any(k in title_norm for k in ["natacion", "swim", "run", "bike", "cardio", "piscina"]):
-             workout.muscle_groups = "Cardio"
-             workout.sync_muscles_3nf(db)
-             db.commit()
+    if not exercises:
+        has_cardio = False
+        for m in workout.muscles:
+            if m.name == "Cardio":
+                has_cardio = True
+                break
+        
+        if not has_cardio:
+            title_norm = workout.title.lower()
+            if any(k in title_norm for k in ["natacion", "swim", "run", "bike", "cardio", "piscina"]):
+                 workout.sync_muscles(["Cardio"], db)
+                 db.commit()
 
 def sync_data_for_user(user: User, db: Session):
     """
@@ -289,7 +302,6 @@ def sync_data_for_user(user: User, db: Session):
                 new_workout = Workout(
                     user_email=user.email,
                     title=title,
-                    muscle_groups=parse_muscle_groups(title),
                     date=start_time,
                     start_time=start_time,
                     end_time=end_time,
@@ -298,7 +310,7 @@ def sync_data_for_user(user: User, db: Session):
                 )
                 db.add(new_workout)
                 db.flush()
-                new_workout.sync_muscles_3nf(db)
+                new_workout.sync_muscles(parse_muscle_groups(title), db)
                 db.commit()
                 db.refresh(new_workout)
 
@@ -481,12 +493,11 @@ def sync_fitbit_for_user(user: User, db: Session):
                     end_time=end_time,
                     source="fitbit",
                     title=translated,
-                    muscle_groups="Cardio",
                     google_event_id=event_id
                 )
                 db.add(matching_workout)
                 db.flush()
-                matching_workout.sync_muscles_3nf(db)
+                matching_workout.sync_muscles(["Cardio"], db)
                 db.commit()
                 db.refresh(matching_workout)
                 user_workouts.append(matching_workout)

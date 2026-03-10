@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
+from typing import List, Optional
 from app.core.database import Base
 
 class Workout(Base):
@@ -13,8 +14,6 @@ class Workout(Base):
     source = Column(String, default="app")  # "app" or "calendar"
     google_event_id = Column(String, unique=True, index=True, nullable=True)
     title = Column(String)  # e.g. "Pecho / Tríceps"
-    # Comma-separated muscle groups extracted from title, e.g. "Pecho,Tríceps"
-    muscle_groups = Column(String, nullable=True)
 
     user = relationship("User", back_populates="workouts")
     exercise_sets = relationship("ExerciseSet", back_populates="workout")
@@ -23,13 +22,11 @@ class Workout(Base):
     # 3NF Relation: EntrenamientoMusculo
     muscles = relationship("Muscle", secondary="entrenamiento_musculo", backref="workouts")
 
-    def sync_muscles_3nf(self, db):
-        from sqlalchemy import select
-        if not self.muscle_groups:
+    def sync_muscles(self, muscle_names: List[str], db):
+        if not muscle_names:
             self.muscles = []
             return
         
-        muscle_names = [m.strip() for m in self.muscle_groups.split(',') if m.strip()]
         new_muscles = []
         for name in muscle_names:
             muscle = db.query(Muscle).filter(Muscle.name == name).first()
@@ -39,6 +36,10 @@ class Workout(Base):
                 db.flush() # Ensure ID is generated
             new_muscles.append(muscle)
         self.muscles = new_muscles
+
+    @property
+    def muscle_ids(self) -> List[int]:
+        return [m.id for m in self.muscles]
 
 class Muscle(Base):
     __tablename__ = "muscles"

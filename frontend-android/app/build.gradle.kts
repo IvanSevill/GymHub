@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,6 +18,18 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Load API_URL from .env
+        val envFile = file("../.env")
+        val properties = Properties()
+        if (envFile.exists()) {
+            properties.load(envFile.inputStream())
+        }
+        val apiUrl = properties.getProperty("API_URL") ?: "https://gymhub-jd53.onrender.com/api/v1/"
+        val googleClientId = properties.getProperty("GOOGLE_CLIENT_ID") ?: ""
+        
+        buildConfigField("String", "API_URL", "\"$apiUrl\"")
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
     }
 
     buildTypes {
@@ -36,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

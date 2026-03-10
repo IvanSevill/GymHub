@@ -11,7 +11,7 @@ class ExerciseSetOut(BaseModel):
     value4: Optional[float]
     unit: Optional[str]
     reps: Optional[int]
-    is_pr: int
+    weight_display: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -36,6 +36,13 @@ class WorkoutCreate(BaseModel):
     title: str
     description: str
 
+class MuscleOut(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 class WorkoutOut(BaseModel):
     id: int
     title: str
@@ -43,7 +50,7 @@ class WorkoutOut(BaseModel):
     start_time: Optional[datetime.datetime]
     end_time: Optional[datetime.datetime]
     source: str
-    muscle_groups: Optional[str]
+    muscles: List[MuscleOut] = []
     exercise_sets: List[ExerciseSetOut]
     fitbit_data: Optional[FitbitDataOut]
 

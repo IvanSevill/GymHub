@@ -51,10 +51,8 @@ def get_workouts(user_email: str, db: Session = Depends(get_db)):
 def get_set_muscle(s: ExerciseSet, w: Workout) -> str:
     if s.muscle_group:
         return WorkoutParser.normalize_muscle(s.muscle_group)
-    if w.muscle_groups:
-        parts = w.muscle_groups.split(',')
-        if parts:
-            return WorkoutParser.normalize_muscle(parts[0])
+    if w.muscles:
+        return w.muscles[0].name
     return 'Otros'
 
 @router.get("/exercises-by-muscle")
@@ -68,24 +66,23 @@ def get_exercises_by_muscle(user_email: str, db: Session = Depends(get_db)):
     logger.info(f"Fetching exercises for user: {user.email}. Root users: {root_emails}")
     
     from sqlalchemy import func
+    from app.models.workout import Muscle
     # 1. Get all unique exercise names available to this user (theirs + root)
     available_sets = (
-        db.query(ExerciseSet.exercise_name, ExerciseSet.muscle_group, Workout.muscle_groups.label("workout_muscles"))
+        db.query(ExerciseSet.exercise_name, ExerciseSet.muscle_group, Muscle.name.label("muscle_name"))
         .join(Workout, ExerciseSet.workout_id == Workout.id)
+        .outerjoin(Workout.muscles)
         .filter(func.lower(Workout.user_email).in_(search_emails))
         .all()
     )
 
     exercise_catalog = {}
-    for es_name, es_muscle, w_muscles in available_sets:
+    for es_name, es_muscle, w_muscle_name in available_sets:
         norm_name = normalize_exercise_name(es_name)
         if norm_name not in exercise_catalog:
             # Determine muscle group
-            muscle = es_muscle
-            if not muscle and w_muscles:
-                parts = w_muscles.split(',')
-                if parts: muscle = parts[0]
-            muscle = WorkoutParser.normalize_muscle(muscle or 'Otros')
+            muscle = es_muscle or w_muscle_name or 'Otros'
+            muscle = WorkoutParser.normalize_muscle(muscle)
             
             if muscle != 'Otros':
                 exercise_catalog[norm_name] = {"name": norm_name, "muscle": muscle, "last_weight": None}
@@ -102,10 +99,7 @@ def get_exercises_by_muscle(user_email: str, db: Session = Depends(get_db)):
     for s in user_sets:
         norm_name = normalize_exercise_name(s.exercise_name)
         if norm_name in exercise_catalog and exercise_catalog[norm_name]["last_weight"] is None:
-            vals = [v for v in [s.value1, s.value2, s.value3, s.value4] if v is not None]
-            weight_str = " - ".join(str(int(v) if v == int(v) else v) for v in vals)
-            if s.unit and weight_str:
-                weight_str += s.unit
+            weight_str = s.weight_display
             exercise_catalog[norm_name]["last_weight"] = weight_str
     
     seen = exercise_catalog
@@ -169,12 +163,11 @@ def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = 
         user_email=user.email,
         title="Master Exercises Mock",
         date=datetime.datetime.now(),
-        muscle_groups="Master",
         source="root_import"
     )
     db.add(master_workout)
     db.flush()
-    master_workout.sync_muscles_3nf(db)
+    master_workout.sync_muscles(["Master"], db)
     db.commit()
     db.refresh(master_workout)
     
@@ -217,10 +210,11 @@ def add_master_exercise(user_email: str, exercise_name: str, muscle: str, db: Se
             user_email=user.email,
             title=f"Master {muscle}",
             date=datetime.datetime.now(),
-            muscle_groups=muscle,
             source="root_added"
         )
         db.add(master_workout)
+        db.flush()
+        master_workout.sync_muscles([muscle], db)
         db.commit()
         db.refresh(master_workout)
     
@@ -241,12 +235,13 @@ def create_workout(workout_in: WorkoutCreate, db: Session = Depends(get_db)):
     new_workout = Workout(
         user_email=user.email,
         title=workout_in.title,
-        muscle_groups=parse_muscle_groups(workout_in.title),
         source="app"
     )
     db.add(new_workout)
     db.flush()
-    new_workout.sync_muscles_3nf(db)
+    
+    muscle_names = [m.strip() for m in parse_muscle_groups(workout_in.title).split(',') if m.strip()]
+    new_workout.sync_muscles(muscle_names, db)
     db.commit()
     db.refresh(new_workout)
 
@@ -264,13 +259,14 @@ def update_workout(workout_id: int, workout_in: WorkoutCreate, db: Session = Dep
     workout = db.query(Workout).filter(Workout.id == workout_id).first()
     if not workout: raise HTTPException(404, "Workout not found")
     workout.title = workout_in.title
-    workout.muscle_groups = parse_muscle_groups(workout_in.title)
+    muscle_names = [m.strip() for m in parse_muscle_groups(workout_in.title).split(',') if m.strip()]
+    workout.sync_muscles(muscle_names, db)
+    
     db.query(ExerciseSet).filter(ExerciseSet.workout_id == workout_id).delete()
     exercises = WorkoutParser.parse_description(workout_in.description)
     for ex in exercises:
         ex_set = ExerciseSet(workout_id=workout.id, **ex)
         db.add(ex_set)
-    workout.sync_muscles_3nf(db)
     db.commit()
     db.refresh(workout)
     return workout

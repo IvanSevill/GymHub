@@ -28,8 +28,8 @@ import com.ivansevill.gymhub.ui.HomeWorkoutList
 import com.ivansevill.gymhub.ui.CalendarScreen
 import com.ivansevill.gymhub.ui.MetricsScreen
 import com.ivansevill.gymhub.ui.PlaceholderScreen
-import com.ivansevill.gymhub.ui.LoginScreen
 import com.ivansevill.gymhub.ui.theme.GymHubTheme
+import com.ivansevill.gymhub.ui.LoginScreen
 import com.ivansevill.gymhub.utils.SessionManager
 import com.ivansevill.gymhub.viewmodel.HomeViewModel
 import com.ivansevill.gymhub.viewmodel.LoginState
@@ -46,11 +46,11 @@ class MainActivity : ComponentActivity() {
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
             val account = task.getResult(ApiException::class.java)
-            val authCode = account?.serverAuthCode
-            if (authCode != null) {
-                loginViewModel.connectWithGoogle(authCode)
+            val idToken = account?.idToken
+            if (idToken != null) {
+                loginViewModel.connectWithGoogleIdToken(idToken)
             } else {
-                Toast.makeText(this, "No se pudo obtener el código de Google.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No se pudo obtener el token de Google.", Toast.LENGTH_SHORT).show()
             }
         } catch (e: ApiException) {
             Toast.makeText(this, "Fallo al iniciar sesión en Google: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
         // The Android Client ID (with SHA-1) is registered in Google Cloud Console, but the
         // server needs this Web Client ID to exchange the auth code for tokens.
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestServerAuthCode("67135520736-c8slcjall71jmd9j79amvs1lol9h9aln.apps.googleusercontent.com") // Web Client ID
+            .requestIdToken("67135520736-c8slcjall71jmd9j79amvs1lol9h9aln.apps.googleusercontent.com") // Web Client ID
             .requestEmail()
             .requestProfile()
             .build()

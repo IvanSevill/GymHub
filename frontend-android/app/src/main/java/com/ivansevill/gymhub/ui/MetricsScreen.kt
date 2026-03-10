@@ -164,8 +164,8 @@ fun VolumeChart(workouts: List<Workout>) {
 fun FrequencyChart(workouts: List<Workout>) {
     val muscles = mutableMapOf<String, Int>()
     workouts.forEach { w ->
-        w.muscleGroups?.split(",")?.forEach { m ->
-            val clean = m.trim()
+        w.muscles?.forEach { m ->
+            val clean = m.name.trim()
             if (clean.isNotEmpty()) {
                 muscles[clean] = (muscles[clean] ?: 0) + 1
             }

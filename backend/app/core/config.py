@@ -15,5 +15,6 @@ class Settings:
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", 8000))
     ROOT_USERS_FILE: str = os.path.join(BASE_DIR, "root_users.json")
     ROOT_EMAILS: str = os.getenv("ROOT_EMAILS", "") # Comma separated
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 settings = Settings()

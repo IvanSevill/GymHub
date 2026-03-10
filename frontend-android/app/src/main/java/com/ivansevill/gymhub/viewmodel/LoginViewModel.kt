@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ivansevill.gymhub.api.RetrofitClient
-import com.ivansevill.gymhub.model.GoogleConnectRequest
+import com.ivansevill.gymhub.model.MobileAuthRequest
 import com.ivansevill.gymhub.model.User
 import com.ivansevill.gymhub.utils.SessionManager
 import kotlinx.coroutines.launch
@@ -22,14 +22,17 @@ class LoginViewModel(private val sessionManager: SessionManager) : ViewModel() {
     private val _state = mutableStateOf<LoginState>(LoginState.Idle)
     val state: State<LoginState> = _state
 
-    fun connectWithGoogle(serverAuthCode: String) {
+    // Mobile flow: use id_token (not serverAuthCode which is for web/postmessage)
+    fun connectWithGoogleIdToken(idToken: String, accessToken: String? = null) {
         viewModelScope.launch {
             _state.value = LoginState.Loading
             try {
-                val response = RetrofitClient.apiService.connectGoogle(GoogleConnectRequest(serverAuthCode))
+                val response = RetrofitClient.apiService.connectGoogleMobile(
+                    MobileAuthRequest(idToken = idToken, accessToken = accessToken)
+                )
                 if (response.isSuccessful && response.body() != null) {
                     val user = response.body()!!.user
-                    sessionManager.saveUser(user.email, user.name)
+                    sessionManager.saveUser(user.email, user.name, user.pictureUrl, user.isRoot)
                     _state.value = LoginState.Success(user)
                 } else {
                     _state.value = LoginState.Error("Error al conectar con el servidor: ${response.code()}")

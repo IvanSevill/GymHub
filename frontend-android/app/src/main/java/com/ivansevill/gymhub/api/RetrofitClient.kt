@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
+import com.ivansevill.gymhub.BuildConfig
 
 object RetrofitClient {
     private const val BASE_URL = "https://gymhub-jd53.onrender.com/api/v1/"

@@ -12,9 +12,15 @@ class ExerciseSet(Base):
     value2 = Column(Float, nullable=True)
     value3 = Column(Float, nullable=True)
     value4 = Column(Float, nullable=True)
-    unit = Column(String, nullable=True)  # 'kg' or 'min'
+    unit = Column(String, nullable=True)  # 'kg', 's', 'rep', etc.
     reps = Column(Integer, nullable=True, default=0)
-    is_pr = Column(Integer, default=0)
-    raw_text = Column(String, nullable=True)
 
     workout = relationship("Workout", back_populates="exercise_sets")
+
+    @property
+    def weight_display(self) -> str:
+        vals = [v for v in [self.value1, self.value2, self.value3, self.value4] if v is not None]
+        s = "-".join(str(int(v) if v == int(v) else v) for v in vals)
+        if self.unit and s:
+            s += self.unit
+        return s

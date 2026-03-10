@@ -35,10 +35,8 @@ def normalize_exercise_name(name: str) -> str:
 def get_set_muscle(s: ExerciseSet, w: Workout) -> str:
     if s.muscle_group:
         return WorkoutParser.normalize_muscle(s.muscle_group)
-    if w.muscle_groups:
-        parts = w.muscle_groups.split(',')
-        if parts:
-            return WorkoutParser.normalize_muscle(parts[0])
+    if w.muscles:
+        return w.muscles[0].name
     return 'Otros'
 
 @router.post("/create-template")
@@ -96,11 +94,7 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
     for s in user_sets:
         name = normalize_exercise_name(s.exercise_name)
         if name in exercises_found and exercises_found[name]["weight"] is None:
-            vals = [v for v in [s.value1, s.value2, s.value3, s.value4] if v is not None]
-            weight_str = " - ".join(str(int(v) if v == int(v) else v) for v in vals)
-            if s.unit and weight_str:
-                weight_str += s.unit
-            exercises_found[name]["weight"] = weight_str
+            exercises_found[name]["weight"] = s.weight_display
 
     seen = exercises_found
 
@@ -221,10 +215,7 @@ def create_weekly_plan(req: CreateWeeklyPlanRequest, db: Session = Depends(get_d
         for s in user_sets_only:
             name = normalize_exercise_name(s.exercise_name)
             if name in exercises_found and exercises_found[name]["weight"] is None:
-                vals = [v for v in [s.value1, s.value2, s.value3, s.value4] if v is not None]
-                weight_str = " - ".join(str(int(v) if v == int(v) else v) for v in vals)
-                if s.unit and weight_str: weight_str += s.unit
-                exercises_found[name]["weight"] = weight_str
+                exercises_found[name]["weight"] = s.weight_display
 
         seen = exercises_found
 

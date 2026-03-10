@@ -23,8 +23,10 @@ class FitbitService:
         return f"Basic {encoded_credentials}"
 
     @staticmethod
-    def exchange_code_for_token(code: str, redirect_uri: str = "http://localhost:5173/auth/fitbit/callback") -> dict:
+    def exchange_code_for_token(code: str, redirect_uri: Optional[str] = None) -> dict:
         """Cambia el código de autorización por los tokens de acceso y refresco."""
+        if not redirect_uri:
+            redirect_uri = settings.FRONTEND_URL
         headers = {
             "Authorization": FitbitService.get_auth_headers(),
             "Content-Type": "application/x-www-form-urlencoded"

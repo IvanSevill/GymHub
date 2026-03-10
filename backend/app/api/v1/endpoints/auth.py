@@ -146,6 +146,28 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
         logger.error(f"Mobile Google auth error: {e}")
         raise HTTPException(400, f"Authentication failed: {str(e)}")
 
+@router.get("/fitbit/connect")
+def fitbit_connect_init(user_email: str):
+    """
+    Initiates the Fitbit OAuth flow by redirecting the user to Fitbit.
+    This is called by the mobile app or browser.
+    """
+    client_id = settings.FITBIT_CLIENT_ID
+    # We use the FRONTEND_URL from settings as the redirect destination
+    redirect_uri = settings.FRONTEND_URL
+    scopes = "activity heartrate sleep profile weight location nutrition settings"
+    
+    auth_url = (
+        f"https://www.fitbit.com/oauth2/authorize?"
+        f"response_type=code&"
+        f"client_id={client_id}&"
+        f"redirect_uri={redirect_uri}&"
+        f"scope={scopes}&"
+        f"prompt=login%20consent"
+    )
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(auth_url)
+
 @router.post("/fitbit/connect")
 def connect_fitbit(
     auth_code: str,

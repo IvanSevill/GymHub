@@ -20,12 +20,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivansevill.gymhub.api.RetrofitClient
 import com.ivansevill.gymhub.utils.SessionManager
+import com.ivansevill.gymhub.BuildConfig
 import kotlinx.coroutines.launch
 
 @Composable
 fun FitbitPanel(sessionManager: SessionManager) {
     val context = LocalContext.current
-    val scope = rememberCoroutineOf() // Note: Need to fix this to rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     var isSyncing by remember { mutableStateOf(false) }
     var userEmail = sessionManager.getEmail() ?: ""
     
@@ -72,7 +73,9 @@ fun FitbitPanel(sessionManager: SessionManager) {
             ) {
                 Button(
                     onClick = { 
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://gymhub-jd53.onrender.com/api/v1/auth/fitbit/connect?user_email=$userEmail"))
+                        val baseUrl = BuildConfig.API_URL
+                        val uri = Uri.parse("${baseUrl}auth/fitbit/connect?user_email=$userEmail")
+                        val intent = Intent(Intent.ACTION_VIEW, uri)
                         context.startActivity(intent)
                     },
                     modifier = Modifier.weight(1f),
