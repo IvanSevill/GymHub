@@ -52,7 +52,7 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
     sets = (
         db.query(ExerciseSet)
         .join(Workout, ExerciseSet.workout_id == Workout.id)
-        .filter(func.lower(Workout.user_email).in_(search_emails))
+        .filter(Workout.user_id.in_(db.query(User.id).filter(func.lower(User.email).in_(search_emails))))
         .order_by(Workout.date.desc())
         .all()
     )
@@ -86,7 +86,7 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
     user_sets = (
         db.query(ExerciseSet)
         .join(Workout, ExerciseSet.workout_id == Workout.id)
-        .filter(Workout.user_email == user.email)
+        .filter(Workout.user_id == user.id)
         .order_by(Workout.date.desc())
         .all()
     )
@@ -96,28 +96,22 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
         if name in exercises_found and exercises_found[name]["weight"] is None:
             exercises_found[name]["weight"] = s.weight_display
 
-    seen = exercises_found
+    from collections import defaultdict
+    grouped_by_actual_muscle = defaultdict(list)
+    for data in exercises_found.values():
+        grouped_by_actual_muscle[data["muscle"]].append(data)
 
     lines = []
-    # Sort the muscles requested to keep template consistent
-    sorted_req_muscles = sorted(req.muscles)
-    
-    for muscle_req in sorted_req_muscles:
-        # Filter and sort exercises for this muscle
-        muscle_exercises = [
-            d for d in seen.values() 
-            if _norm(d["req_muscle"]) == _norm(muscle_req)
-        ]
-        if not muscle_exercises:
-            continue
-            
+    # Sort the actual muscles alphabetically
+    for actual_muscle in sorted(grouped_by_actual_muscle.keys()):
+        muscle_exercises = grouped_by_actual_muscle[actual_muscle]
         muscle_exercises.sort(key=lambda x: x["name"])
         
         for data in muscle_exercises:
             weight_info = f" {data['weight']}" if data["weight"] else ""
             lines.append(f"{data['muscle']} - {data['name']}{weight_info}")
         
-        # Add a newline between muscle groups
+        # Add a newline between actual muscle groups
         lines.append("")
 
     title = " - ".join(req.muscles)
@@ -211,20 +205,20 @@ def create_weekly_plan(req: CreateWeeklyPlanRequest, db: Session = Depends(get_d
                     }
 
         # Second pass: ONLY use current user's sets for weights
-        user_sets_only = [s for s in all_sets if s.workout.user_email == user.email]
+        user_sets_only = [s for s in all_sets if s.workout.user_id == user.id]
         for s in user_sets_only:
             name = normalize_exercise_name(s.exercise_name)
             if name in exercises_found and exercises_found[name]["weight"] is None:
                 exercises_found[name]["weight"] = s.weight_display
 
-        seen = exercises_found
+        from collections import defaultdict
+        grouped_by_actual_muscle = defaultdict(list)
+        for data in exercises_found.values():
+            grouped_by_actual_muscle[data["muscle"]].append(data)
 
         lines = []
-        for muscle_req in sorted(w_req.muscles):
-            muscle_exercises = sorted([d for d in seen.values() if _norm(d["req_muscle"]) == _norm(muscle_req)], key=lambda x: x["name"])
-            if not muscle_exercises:
-                continue
-                
+        for actual_muscle in sorted(grouped_by_actual_muscle.keys()):
+            muscle_exercises = sorted(grouped_by_actual_muscle[actual_muscle], key=lambda x: x["name"])
             for data in muscle_exercises:
                 weight_info = f" {data['weight']}" if data["weight"] else ""
                 lines.append(f"{data['muscle']} - {data['name']}{weight_info}")

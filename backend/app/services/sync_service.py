@@ -86,7 +86,7 @@ def unify_cardio_sessions(user: User, db: Session):
     Also attempts to update Google Calendar titles for persistence.
     """
     logger.info(f"Unifying cardio sessions for {user.email}")
-    workouts = db.query(Workout).filter(Workout.user_email == user.email).all()
+    workouts = db.query(Workout).filter(Workout.user_id == user.id).all()
     count = 0
     
     cal_service = None
@@ -127,7 +127,7 @@ def unify_cardio_sessions(user: User, db: Session):
 
             if w.title != new_title:
                 w.title = new_title
-                w.sync_muscles(["Cardio"], db)
+                # w.sync_muscles(["Cardio"], db)  # Removed as per point 1
                 db.commit()
                 count += 1
                 
@@ -176,10 +176,10 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
         ex_set = ExerciseSet(
             workout_id=workout.id, 
             exercise_id=db_exercise.id,
-            number1=ex.get("number1"),
-            number2=ex.get("number2"),
-            number3=ex.get("number3"),
-            number4=ex.get("number4"),
+            reps=ex.get("reps"),
+            weight=ex.get("weight"),
+            distance=ex.get("distance"),
+            time=ex.get("time"),
             measurement=ex.get("measurement")
         )
         db.add(ex_set)
@@ -192,7 +192,7 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
     
     can_reconstruct = False
     with SessionLocal() as session:
-        user = session.query(User).filter(User.email == workout.user_email).first()
+        user = session.query(User).filter(User.id == workout.user_id).first()
         if user and user.fitbit_access_token:
             can_reconstruct = True
 
@@ -207,7 +207,7 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
             
             if owner_match:
                 extracted_owner = owner_match.group(1).lower()
-                if extracted_owner != workout.user_email.lower():
+                if extracted_owner != user.email.lower():
                     if existing_metrics:
                         logger.warning(f"Purging foreign FitbitData for workout {workout.id} (belonged to {extracted_owner})")
                         db.delete(existing_metrics)
@@ -240,25 +240,13 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
 
     db.commit()
 
-    # Derived muscles from exercises
-    ex_muscles = [ex["muscle_group"] for ex in exercises if ex.get("muscle_group")]
-    new_muscles = parse_muscle_groups(workout.title, ex_muscles)
-    workout.sync_muscles(new_muscles, db)
+    # Derived muscles from exercises are now handled via Workout.muscles property
     db.commit()
 
     # Fallback to 'Cardio' if no structured exercises were found
     if not exercises:
         has_cardio = False
-        for m in workout.muscles:
-            if m.name == "Cardio":
-                has_cardio = True
-                break
-        
-        if not has_cardio:
-            title_norm = workout.title.lower()
-            if any(k in title_norm for k in ["natacion", "swim", "run", "bike", "cardio", "piscina"]):
-                 workout.sync_muscles(["Cardio"], db)
-                 db.commit()
+        pass
 
 def sync_data_for_user(user: User, db: Session):
     """
@@ -307,7 +295,7 @@ def sync_data_for_user(user: User, db: Session):
             # Check if we already have this workout (filtered by user to avoid crossover)
             workout = db.query(Workout).filter(
                 Workout.google_event_id == event_id,
-                Workout.user_email == user.email
+                Workout.user_id == user.id
             ).first()
 
             if workout:
@@ -333,7 +321,7 @@ def sync_data_for_user(user: User, db: Session):
                         end_time = datetime.datetime.fromisoformat(end_time_str)
 
                 new_workout = Workout(
-                    user_email=user.email,
+                    user_id=user.id,
                     title=title,
                     date=start_time,
                     start_time=start_time,
@@ -343,7 +331,7 @@ def sync_data_for_user(user: User, db: Session):
                 )
                 db.add(new_workout)
                 db.flush()
-                new_workout.sync_muscles(parse_muscle_groups(title), db)
+                # new_workout.sync_muscles(parse_muscle_groups(title), db) # Removed
                 db.commit()
                 db.refresh(new_workout)
 
@@ -353,7 +341,7 @@ def sync_data_for_user(user: User, db: Session):
         # or belong to a different calendar (if we just switched)
         # We only prune sessions that have a google_event_id (ones we expect to be in sync)
         existing_local = db.query(Workout).filter(
-            Workout.user_email == user.email,
+            Workout.user_id == user.id,
             Workout.google_event_id.isnot(None)
         ).all()
         
@@ -440,7 +428,7 @@ def sync_fitbit_for_user(user: User, db: Session):
             else:
                 return
 
-        user_workouts = db.query(Workout).filter(Workout.user_email == user.email).all()
+        user_workouts = db.query(Workout).filter(Workout.user_id == user.id).all()
         linked_workout_ids = set()
 
         # Prioritize activity names: Weights > Sport > Others > Walk
@@ -474,7 +462,7 @@ def sync_fitbit_for_user(user: User, db: Session):
                 .join(Workout)
                 .filter(
                     FitbitData.fitbit_log_id == log_id,
-                    Workout.user_email == user.email
+                    Workout.user_id == user.id
                 ).first()
                 if log_id else None
             )
@@ -520,7 +508,7 @@ def sync_fitbit_for_user(user: User, db: Session):
                         logger.error(f"    Failed to create Google Calendar event for Fitbit activity: {e}")
 
                 matching_workout = Workout(
-                    user_email=user.email,
+                    user_id=user.id,
                     date=fitbit_start,
                     start_time=fitbit_start,
                     end_time=end_time,
@@ -530,7 +518,7 @@ def sync_fitbit_for_user(user: User, db: Session):
                 )
                 db.add(matching_workout)
                 db.flush()
-                matching_workout.sync_muscles(["Cardio"], db)
+                # matching_workout.sync_muscles(["Cardio"], db) # Removed
                 db.commit()
                 db.refresh(matching_workout)
                 user_workouts.append(matching_workout)

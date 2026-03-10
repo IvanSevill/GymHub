@@ -6,9 +6,7 @@ import { es } from 'date-fns/locale';
 import WorkoutEditorModal from '../workouts/WorkoutEditorModal';
 
 const formatValues = (set) => {
-    const vals = [set.value1, set.value2, set.value3, set.value4].filter(v => v != null);
-    if (vals.length === 0) return '—';
-    return vals.join(' - ') + (set.unit ? set.unit : '');
+    return set.weight_display || '—';
 };
 
 const WorkoutPopup = ({ day, workouts, onClose, isFitbitConnected, onUpdated }) => {

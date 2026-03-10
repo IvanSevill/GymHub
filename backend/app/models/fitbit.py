@@ -5,7 +5,7 @@ from app.core.database import Base
 class FitbitData(Base):
     __tablename__ = "fitbit_data"
     id = Column(Integer, primary_key=True, index=True)
-    workout_id = Column(Integer, ForeignKey("workouts.id"), unique=True, index=True)
+    workout_id = Column(Integer, ForeignKey("workouts.id"), index=True)
     fitbit_log_id = Column(String, nullable=True, index=True)  # Fitbit's own logId
 
     # Core metrics

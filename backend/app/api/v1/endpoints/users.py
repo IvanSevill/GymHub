@@ -64,6 +64,7 @@ def update_selected_calendar(user_email: str, calendar_id: str, db: Session = De
     user = db.query(User).filter(User.email.ilike(user_email)).first()
     if not user: raise HTTPException(404, "User not found")
     
-    user.selected_calendar_id = calendar_id
+    tokens = user.get_or_create_tokens(db)
+    tokens.selected_calendar_id = calendar_id
     db.commit()
     return {"status": "Calendar updated", "selected_calendar_id": calendar_id}

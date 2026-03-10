@@ -115,10 +115,10 @@ class WorkoutParser:
             results.append({
                 "muscle_group": muscle_group,
                 "exercise_name": exercise_name,
-                "number1": values[0],
-                "number2": values[1],
-                "number3": values[2],
-                "number4": values[3],
+                "reps": values[0],
+                "weight": values[1],
+                "distance": values[2],
+                "time": values[3],
                 "measurement": unit
             })
         return results

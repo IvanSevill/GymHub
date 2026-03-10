@@ -60,8 +60,10 @@ def google_connect(data: dict, db: Session = Depends(get_db)):
             
         user.name = user_info.get("name")
         user.picture_url = user_info.get("picture")
-        user.google_id = user_info.get("sub")
-        user.google_access_token = credentials.token
+        
+        tokens = user.get_or_create_tokens(db)
+        tokens.google_id = user_info.get("sub")
+        tokens.google_access_token = credentials.token
         
         from .users import check_json_for_root, is_user_root
         # Sync the is_root flag to DB if they are in the file during login/signup.
@@ -69,7 +71,7 @@ def google_connect(data: dict, db: Session = Depends(get_db)):
             user.is_root = 1
 
         if credentials.refresh_token:
-            user.google_refresh_token = credentials.refresh_token
+            tokens.google_refresh_token = credentials.refresh_token
             
         db.commit()
         db.refresh(user)
@@ -118,7 +120,9 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
             
         user.name = user_info.get("name")
         user.picture_url = user_info.get("picture")
-        user.google_id = user_info.get("sub")
+        
+        tokens = user.get_or_create_tokens(db)
+        tokens.google_id = user_info.get("sub")
         
         from .users import check_json_for_root, is_user_root
         if check_json_for_root(user.email):
@@ -126,7 +130,7 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
         
         access_token_str = data.get("access_token")
         if access_token_str:
-            user.google_access_token = access_token_str
+            tokens.google_access_token = access_token_str
             
         db.commit()
         db.refresh(user)
@@ -195,16 +199,18 @@ def fitbit_callback(code: str, state: str, db: Session = Depends(get_db)):
         fitbit_id = tokens.get("user_id")
         
         # Check for existing links
-        existing_user = db.query(User).filter(User.fitbit_id == fitbit_id, User.email != user_email).first()
-        if existing_user:
-            existing_user.fitbit_id = None
-            existing_user.fitbit_access_token = None
-            existing_user.fitbit_refresh_token = None
+        from app.models import UserToken
+        existing_tokens = db.query(UserToken).filter(UserToken.fitbit_id == fitbit_id, UserToken.user_id != user.id).first()
+        if existing_tokens:
+            existing_tokens.fitbit_id = None
+            existing_tokens.fitbit_access_token = None
+            existing_tokens.fitbit_refresh_token = None
             db.commit()
 
-        user.fitbit_id = fitbit_id
-        user.fitbit_access_token = tokens.get("access_token")
-        user.fitbit_refresh_token = tokens.get("refresh_token")
+        user_tokens = user.get_or_create_tokens(db)
+        user_tokens.fitbit_id = fitbit_id
+        user_tokens.fitbit_access_token = tokens.get("access_token")
+        user_tokens.fitbit_refresh_token = tokens.get("refresh_token")
         db.commit()
 
         # Redirect back to Android app via deep link
@@ -237,17 +243,19 @@ def connect_fitbit(
         
         # Prevent UNIQUE constraint error (users.fitbit_id)
         # If this Fitbit account is already linked to another GymHub user, transfer it.
-        existing_user = db.query(User).filter(User.fitbit_id == fitbit_id, User.email != user_email).first()
-        if existing_user:
-            logger.warning(f"TRANSFER: Fitbit account {fitbit_id} ({fitbit_name}) was already linked to {existing_user.email}. Moving it to {user_email}.")
-            existing_user.fitbit_id = None
-            existing_user.fitbit_access_token = None
-            existing_user.fitbit_refresh_token = None
+        from app.models import UserToken
+        existing_tokens = db.query(UserToken).filter(UserToken.fitbit_id == fitbit_id, UserToken.user_id != user.id).first()
+        if existing_tokens:
+            logger.warning(f"TRANSFER: Fitbit account {fitbit_id} ({fitbit_name}) was already linked to user {existing_tokens.user_id}. Moving it to {user.id}.")
+            existing_tokens.fitbit_id = None
+            existing_tokens.fitbit_access_token = None
+            existing_tokens.fitbit_refresh_token = None
             db.commit()
 
-        user.fitbit_id = fitbit_id
-        user.fitbit_access_token = access_token
-        user.fitbit_refresh_token = tokens.get("refresh_token")
+        user_tokens = user.get_or_create_tokens(db)
+        user_tokens.fitbit_id = fitbit_id
+        user_tokens.fitbit_access_token = access_token
+        user_tokens.fitbit_refresh_token = tokens.get("refresh_token")
         db.commit()
         return {"status": "Fitbit connected"}
     except Exception as e:
@@ -307,16 +315,18 @@ def fitbit_mobile_callback(code: str, state: str, db: Session = Depends(get_db))
         fitbit_id = tokens.get("user_id")
 
         # Transfer fitbit link if it was on another account
-        existing_user = db.query(User).filter(User.fitbit_id == fitbit_id, User.email != user_email).first()
-        if existing_user:
-            existing_user.fitbit_id = None
-            existing_user.fitbit_access_token = None
-            existing_user.fitbit_refresh_token = None
+        from app.models import UserToken
+        existing_tokens = db.query(UserToken).filter(UserToken.fitbit_id == fitbit_id, UserToken.user_id != user.id).first()
+        if existing_tokens:
+            existing_tokens.fitbit_id = None
+            existing_tokens.fitbit_access_token = None
+            existing_tokens.fitbit_refresh_token = None
             db.commit()
 
-        user.fitbit_id = fitbit_id
-        user.fitbit_access_token = tokens.get("access_token")
-        user.fitbit_refresh_token = tokens.get("refresh_token")
+        user_tokens = user.get_or_create_tokens(db)
+        user_tokens.fitbit_id = fitbit_id
+        user_tokens.fitbit_access_token = tokens.get("access_token")
+        user_tokens.fitbit_refresh_token = tokens.get("refresh_token")
         db.commit()
 
         # Open the Android deep link via JS — more reliable than a bare 301 redirect
@@ -390,9 +400,10 @@ def disconnect_fitbit(user_email: str, db: Session = Depends(get_db)):
         ).delete(synchronize_session=False)
         
         # Clear user fitbit tokens
-        user.fitbit_id = None
-        user.fitbit_access_token = None
-        user.fitbit_refresh_token = None
+        if user.tokens:
+            user.tokens.fitbit_id = None
+            user.tokens.fitbit_access_token = None
+            user.tokens.fitbit_refresh_token = None
         
         db.commit()
         return {"status": "Fitbit disconnected and all assigned data deleted"}
@@ -410,8 +421,9 @@ def mock_google_auth(user_email: str, db: Session = Depends(get_db)):
     
     user.name = "Mock GymHub User"
     user.picture_url = "https://ui-avatars.com/api/?name=Ivan+J+Sevillano&background=06b6d4&color=fff&bold=true"
-    user.google_access_token = "mock_access_token"
-    user.google_refresh_token = "mock_refresh_token"
+    user_tokens = user.get_or_create_tokens(db)
+    user_tokens.google_access_token = "mock_access_token"
+    user_tokens.google_refresh_token = "mock_refresh_token"
     db.commit()
     db.refresh(user)
     return {"status": "Mock Google connected", "user": user}

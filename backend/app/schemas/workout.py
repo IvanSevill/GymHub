@@ -1,19 +1,20 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 import datetime
 
 class ExerciseSetOut(BaseModel):
     exercise_name: str
     muscle_group: Optional[str]
-    number1: Optional[float]
-    number2: Optional[float]
-    number3: Optional[float]
-    number4: Optional[float]
+    reps: Optional[float] = Field(None, alias="number1")
+    weight: Optional[float] = Field(None, alias="number2")
+    distance: Optional[float] = Field(None, alias="number3")
+    time: Optional[float] = Field(None, alias="number4")
     measurement: Optional[str]
     weight_display: Optional[str] = None
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 class FitbitDataOut(BaseModel):
     calories: Optional[int] = None

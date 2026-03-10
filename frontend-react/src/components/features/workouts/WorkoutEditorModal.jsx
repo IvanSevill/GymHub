@@ -68,10 +68,11 @@ export default function WorkoutEditorModal({ workout, onClose, onUpdated }) {
         setError(null)
         try {
             const description = getFormattedDescription()
+            const userEmail = localStorage.getItem('gymhub_user_email');
             await updateWorkout(workout.id, {
                 title,
                 description,
-                user_email: workout.user_email
+                user_email: userEmail
             })
             onUpdated()
             onClose()

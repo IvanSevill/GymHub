@@ -38,7 +38,7 @@ def get_workouts(user_email: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email.ilike(user_email)).first()
     if not user: raise HTTPException(404, "User not found")
     
-    query = db.query(Workout).filter(Workout.user_email == user.email)
+    query = db.query(Workout).filter(Workout.user_id == user.id)
     
     # Hide 'root_import' and 'root_added' workouts from the regular timeline, 
     # since they are just mock containers for the exercise database.
@@ -68,11 +68,14 @@ def get_exercises_by_muscle(user_email: str, db: Session = Depends(get_db)):
     from sqlalchemy import func
     from app.models.workout import Muscle
     # 1. Get all unique exercise names available to this user (theirs + root)
+    from app.models.exercise import ExerciseMuscle
     available_sets = (
         db.query(ExerciseSet.exercise_name, ExerciseSet.muscle_group, Muscle.name.label("muscle_name"))
         .join(Workout, ExerciseSet.workout_id == Workout.id)
-        .outerjoin(Workout.muscles)
-        .filter(func.lower(Workout.user_email).in_(search_emails))
+        .outerjoin(Exercise, ExerciseSet.exercise_id == Exercise.id)
+        .outerjoin(ExerciseMuscle, Exercise.id == ExerciseMuscle.exercise_id)
+        .outerjoin(Muscle, ExerciseMuscle.muscle_id == Muscle.id)
+        .filter(Workout.user_id.in_(db.query(User.id).filter(func.lower(User.email).in_(search_emails))))
         .all()
     )
 
@@ -91,7 +94,7 @@ def get_exercises_by_muscle(user_email: str, db: Session = Depends(get_db)):
     user_sets = (
         db.query(ExerciseSet)
         .join(Workout, ExerciseSet.workout_id == Workout.id)
-        .filter(func.lower(Workout.user_email) == user.email.lower())
+        .filter(Workout.user_id == user.id)
         .order_by(Workout.date.desc())
         .all()
     )
@@ -133,7 +136,7 @@ def export_exercises_mock(user_email: str, db: Session = Depends(get_db)):
     sets = (
         db.query(ExerciseSet)
         .join(Workout)
-        .filter(Workout.user_email == user.email)
+        .filter(Workout.user_id == user.id)
         .all()
     )
     
@@ -143,10 +146,10 @@ def export_exercises_mock(user_email: str, db: Session = Depends(get_db)):
             "exercise_name": s.exercise_name,
             "muscle_group": s.muscle_group,
             "measurement": s.measurement,
-            "number1": s.number1,
-            "number2": s.number2,
-            "number3": s.number3,
-            "number4": s.number4
+            "reps": s.reps,
+            "weight": s.weight,
+            "distance": s.distance,
+            "time": s.time
         })
     return mock_data
 
@@ -159,14 +162,12 @@ def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = 
     
     # Create a dummy workout to hold these exercises
     master_workout = Workout(
-        user_email=user.email,
+        user_id=user.id,
         title="Master Exercises Mock",
         date=datetime.datetime.now(),
         source="root_import"
     )
     db.add(master_workout)
-    db.flush()
-    master_workout.sync_muscles(["Master"], db)
     db.commit()
     db.refresh(master_workout)
     
@@ -196,10 +197,10 @@ def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = 
             workout_id=master_workout.id,
             exercise_id=db_exercise.id,
             measurement=item.get("measurement"),
-            number1=item.get("number1"),
-            number2=item.get("number2"),
-            number3=item.get("number3"),
-            number4=item.get("number4")
+            reps=item.get("reps") or item.get("number1"),
+            weight=item.get("weight") or item.get("number2"),
+            distance=item.get("distance") or item.get("number3"),
+            time=item.get("time") or item.get("number4")
         )
         db.add(ex_set)
     
@@ -225,14 +226,12 @@ def add_master_exercise(user_email: str, exercise_name: str, muscle: str, db: Se
     
     if not master_workout:
         master_workout = Workout(
-            user_email=user.email,
+            user_id=user.id,
             title=f"Master {muscle}",
             date=datetime.datetime.now(),
             source="root_added"
         )
         db.add(master_workout)
-        db.flush()
-        master_workout.sync_muscles([muscle], db)
         db.commit()
         db.refresh(master_workout)
     
@@ -267,15 +266,11 @@ def create_workout(workout_in: WorkoutCreate, db: Session = Depends(get_db)):
     if not user: raise HTTPException(404, "User not found")
 
     new_workout = Workout(
-        user_email=user.email,
+        user_id=user.id,
         title=workout_in.title,
         source="app"
     )
     db.add(new_workout)
-    db.flush()
-    
-    muscle_names = [m.strip() for m in parse_muscle_groups(workout_in.title).split(',') if m.strip()]
-    new_workout.sync_muscles(muscle_names, db)
     db.commit()
     db.refresh(new_workout)
 
@@ -303,10 +298,10 @@ def create_workout(workout_in: WorkoutCreate, db: Session = Depends(get_db)):
         ex_set = ExerciseSet(
             workout_id=new_workout.id, 
             exercise_id=db_exercise.id,
-            number1=ex.get("number1"),
-            number2=ex.get("number2"),
-            number3=ex.get("number3"),
-            number4=ex.get("number4"),
+            reps=ex.get("reps"),
+            weight=ex.get("weight"),
+            distance=ex.get("distance"),
+            time=ex.get("time"),
             measurement=ex.get("measurement")
         )
         db.add(ex_set)
@@ -320,8 +315,6 @@ def update_workout(workout_id: int, workout_in: WorkoutCreate, db: Session = Dep
     workout = db.query(Workout).filter(Workout.id == workout_id).first()
     if not workout: raise HTTPException(404, "Workout not found")
     workout.title = workout_in.title
-    muscle_names = [m.strip() for m in parse_muscle_groups(workout_in.title).split(',') if m.strip()]
-    workout.sync_muscles(muscle_names, db)
     
     db.query(ExerciseSet).filter(ExerciseSet.workout_id == workout_id).delete()
     exercises = WorkoutParser.parse_description(workout_in.description)
@@ -348,13 +341,30 @@ def update_workout(workout_id: int, workout_in: WorkoutCreate, db: Session = Dep
         ex_set = ExerciseSet(
             workout_id=workout.id, 
             exercise_id=db_exercise.id,
-            number1=ex.get("number1"),
-            number2=ex.get("number2"),
-            number3=ex.get("number3"),
-            number4=ex.get("number4"),
+            reps=ex.get("reps"),
+            weight=ex.get("weight"),
+            distance=ex.get("distance"),
+            time=ex.get("time"),
             measurement=ex.get("measurement")
         )
         db.add(ex_set)
     db.commit()
     db.refresh(workout)
+
+    # Automatically sync updates back to Google Calendar if this workout originated there
+    user = workout.user
+    if workout.google_event_id and user and user.google_access_token:
+        try:
+            from app.services.google_calendar import GoogleCalendarService
+            g_service = GoogleCalendarService(user, db)
+            cal_id = user.selected_calendar_id or 'primary'
+            g_service.update_event(
+                event_id=workout.google_event_id,
+                title=workout.title,
+                description=workout_in.description,
+                calendar_id=cal_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to update Google Calendar event {workout.google_event_id}: {e}")
+
     return workout

@@ -7,7 +7,7 @@ from app.core.database import Base
 class Workout(Base):
     __tablename__ = "workouts"
     id = Column(Integer, primary_key=True, index=True)
-    user_email = Column(String, ForeignKey("users.email"))
+    user_id = Column(Integer, ForeignKey("users.id"))
     date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
@@ -18,35 +18,21 @@ class Workout(Base):
     user = relationship("User", back_populates="workouts")
     exercise_sets = relationship("ExerciseSet", back_populates="workout")
     fitbit_data = relationship("FitbitData", back_populates="workout", uselist=False)
-    
-    # 3NF Relation: EntrenamientoMusculo
-    muscles = relationship("Muscle", secondary="entrenamiento_musculo", backref="workouts")
-
-    def sync_muscles(self, muscle_names: List[str], db):
-        if not muscle_names:
-            self.muscles = []
-            return
-        
-        new_muscles = []
-        for name in muscle_names:
-            muscle = db.query(Muscle).filter(Muscle.name == name).first()
-            if not muscle:
-                muscle = Muscle(name=name)
-                db.add(muscle)
-                db.flush() # Ensure ID is generated
-            new_muscles.append(muscle)
-        self.muscles = new_muscles
 
     @property
-    def muscle_ids(self) -> List[int]:
-        return [m.id for m in self.muscles]
+    def muscles(self):
+        """Dynamic retrieval of muscles worked in this workout"""
+        muscle_list = []
+        seen = set()
+        for es in self.exercise_sets:
+            if es.exercise:
+                for m in es.exercise.muscles:
+                    if m.id not in seen:
+                        muscle_list.append(m)
+                        seen.add(m.id)
+        return muscle_list
 
 class Muscle(Base):
     __tablename__ = "muscles"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-
-class WorkoutMuscle(Base):
-    __tablename__ = "entrenamiento_musculo"
-    workout_id = Column(Integer, ForeignKey("workouts.id"), primary_key=True)
-    muscle_id = Column(Integer, ForeignKey("muscles.id"), primary_key=True)

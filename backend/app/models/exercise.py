@@ -21,10 +21,10 @@ class ExerciseSet(Base):
     workout_id = Column(Integer, ForeignKey("workouts.id"))
     exercise_id = Column(Integer, ForeignKey("exercises.id"), nullable=True) # 3NF Link
     
-    number1 = Column(Float, nullable=True)
-    number2 = Column(Float, nullable=True)
-    number3 = Column(Float, nullable=True)
-    number4 = Column(Float, nullable=True)
+    reps = Column(Float, nullable=True)
+    weight = Column(Float, nullable=True)
+    distance = Column(Float, nullable=True)
+    time = Column(Float, nullable=True)
     measurement = Column(String, nullable=True)  # 'kg', 's', 'rep', etc.
 
     workout = relationship("Workout", back_populates="exercise_sets")
@@ -42,7 +42,7 @@ class ExerciseSet(Base):
 
     @property
     def weight_display(self) -> str:
-        vals = [v for v in [self.number1, self.number2, self.number3, self.number4] if v is not None]
+        vals = [v for v in [self.reps, self.weight, self.distance, self.time] if v is not None]
         s = "-".join(str(int(v) if v == int(v) else v) for v in vals)
         if self.measurement and s:
             s += self.measurement

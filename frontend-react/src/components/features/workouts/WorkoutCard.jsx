@@ -155,10 +155,6 @@ export default function WorkoutCard({ workout, idx, isSmall = false, isFitbitCon
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {workout.exercise_sets.map((set, i) => {
-                    const values = [set.value1, set.value2, set.value3, set.value4].filter(v => v !== null && v !== undefined);
-                    const valStr = values.join('-');
-                    const unitStr = set.unit || '';
-
                     return (
                         <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                             <div className="flex items-center gap-3">
@@ -167,7 +163,7 @@ export default function WorkoutCard({ workout, idx, isSmall = false, isFitbitCon
                             </div>
                             <div className="flex items-center gap-3">
                                 <span className="font-black text-purple-400">
-                                    {valStr}{unitStr}
+                                    {set.weight_display || '—'}
                                 </span>
                                 {set.is_pr === 1 && (
                                     <Trophy className="text-yellow-400 w-4 h-4" />
