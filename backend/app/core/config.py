@@ -11,6 +11,8 @@ class Settings:
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET")
     FITBIT_CLIENT_ID: str = os.getenv("FITBIT_CLIENT_ID")
     FITBIT_CLIENT_SECRET: str = os.getenv("FITBIT_CLIENT_SECRET")
+    FITBIT_MOBILE_CLIENT_ID: str = os.getenv("FITBIT_MOBILE_CLIENT_ID", "")
+    FITBIT_MOBILE_CLIENT_SECRET: str = os.getenv("FITBIT_MOBILE_CLIENT_SECRET", "")
     BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", 8000))
     ROOT_USERS_FILE: str = os.path.join(BASE_DIR, "root_users.json")

@@ -137,7 +137,7 @@ fun SettingsScreen(sessionManager: SessionManager, fitbitRefreshKey: Int = 0, on
             isConnected = isFitbitConnected,
             onConnectTap = {
                 val baseUrl = BuildConfig.API_URL
-                val uri = Uri.parse("${baseUrl}auth/fitbit/connect?user_email=$userEmail")
+                val uri = Uri.parse("${baseUrl}auth/fitbit/mobile-connect?user_email=$userEmail")
                 val intent = Intent(Intent.ACTION_VIEW, uri)
                 context.startActivity(intent)
             },

@@ -255,6 +255,111 @@ def connect_fitbit(
         logger.error(f"Fitbit auth error: {e}")
         raise HTTPException(400, f"Failed to connect Fitbit account: {str(e)}")
 
+@router.get("/fitbit/mobile-connect")
+def fitbit_mobile_connect_init(user_email: str):
+    """
+    Initiates the Fitbit OAuth flow for the Android app.
+    Uses a separate Fitbit app (23TY4J) with its own redirect_uri.
+    """
+    import urllib.parse
+    client_id = settings.FITBIT_MOBILE_CLIENT_ID
+    redirect_uri = "https://gymhub-jd53.onrender.com/api/v1/auth/fitbit/mobile-callback"
+    scopes = "activity heartrate sleep profile weight location nutrition settings"
+    state = urllib.parse.quote(user_email)
+
+    auth_url = (
+        f"https://www.fitbit.com/oauth2/authorize?"
+        f"response_type=code&"
+        f"client_id={client_id}&"
+        f"redirect_uri={urllib.parse.quote(redirect_uri, safe='')}&"
+        f"scope={urllib.parse.quote(scopes, safe='')}&"
+        f"state={state}&"
+        f"prompt=login%20consent"
+    )
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(auth_url)
+
+
+@router.get("/fitbit/mobile-callback")
+def fitbit_mobile_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """
+    Callback for the Android Fitbit OAuth flow.
+    Exchanges code for tokens using the mobile app credentials, saves to DB,
+    then redirects back to the Android app via deep link: gymhub://auth-callback
+    """
+    import urllib.parse
+    user_email = urllib.parse.unquote(state)
+    redirect_uri = "https://gymhub-jd53.onrender.com/api/v1/auth/fitbit/mobile-callback"
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("gymhub://auth-callback?status=error&reason=user_not_found")
+
+    try:
+        # Use mobile-specific credentials
+        tokens = FitbitService.exchange_code_for_token(
+            code,
+            redirect_uri=redirect_uri,
+            client_id=settings.FITBIT_MOBILE_CLIENT_ID,
+            client_secret=settings.FITBIT_MOBILE_CLIENT_SECRET
+        )
+        fitbit_id = tokens.get("user_id")
+
+        # Transfer fitbit link if it was on another account
+        existing_user = db.query(User).filter(User.fitbit_id == fitbit_id, User.email != user_email).first()
+        if existing_user:
+            existing_user.fitbit_id = None
+            existing_user.fitbit_access_token = None
+            existing_user.fitbit_refresh_token = None
+            db.commit()
+
+        user.fitbit_id = fitbit_id
+        user.fitbit_access_token = tokens.get("access_token")
+        user.fitbit_refresh_token = tokens.get("refresh_token")
+        db.commit()
+
+        # Open the Android deep link via JS — more reliable than a bare 301 redirect
+        deep_link = f"gymhub://auth-callback?status=success&email={urllib.parse.quote(user_email)}"
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Conectando con GymHub...</title>
+    <style>
+        body {{ font-family: sans-serif; background: #020617; color: white;
+               display: flex; flex-direction: column; align-items: center;
+               justify-content: center; height: 100vh; margin: 0; }}
+        h1 {{ color: #06b6d4; }}
+        p {{ color: #94a3b8; }}
+        a {{ background: #06b6d4; color: white; text-decoration: none;
+             padding: 12px 24px; border-radius: 12px; font-weight: bold; margin-top: 16px; display: inline-block; }}
+    </style>
+</head>
+<body>
+    <h1>✅ ¡Fitbit Conectado!</h1>
+    <p>Volviendo a GymHub...</p>
+    <a href="{deep_link}">Abrir GymHub</a>
+    <script>
+        // Try to open the app immediately
+        window.location.href = "{deep_link}";
+        // If the app doesn't open in 2s (e.g. browser blocks it), show the button
+        setTimeout(function() {{
+            document.querySelector('p').textContent = 'Pulsa el botón si la app no se abrió:';
+        }}, 2000);
+    </script>
+</body>
+</html>
+        """)
+
+    except Exception as e:
+        logger.error(f"Fitbit Mobile Callback Error: {e}")
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(f"gymhub://auth-callback?status=error&reason={urllib.parse.quote(str(e))}")
+
+
 @router.post("/fitbit/disconnect")
 def disconnect_fitbit(user_email: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_email).first()

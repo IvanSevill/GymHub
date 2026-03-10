@@ -23,16 +23,26 @@ class FitbitService:
         return f"Basic {encoded_credentials}"
 
     @staticmethod
-    def exchange_code_for_token(code: str, redirect_uri: Optional[str] = None) -> dict:
+    def exchange_code_for_token(
+        code: str,
+        redirect_uri: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None
+    ) -> dict:
         """Cambia el código de autorización por los tokens de acceso y refresco."""
         if not redirect_uri:
             redirect_uri = settings.FRONTEND_URL
+        # Allow overriding credentials (e.g. for mobile app with separate Fitbit client)
+        _client_id = client_id or settings.FITBIT_CLIENT_ID
+        _client_secret = client_secret or settings.FITBIT_CLIENT_SECRET
+        credentials = f"{_client_id}:{_client_secret}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
         headers = {
-            "Authorization": FitbitService.get_auth_headers(),
+            "Authorization": f"Basic {encoded_credentials}",
             "Content-Type": "application/x-www-form-urlencoded"
         }
         data = {
-            "clientId": settings.FITBIT_CLIENT_ID,
+            "clientId": _client_id,
             "grant_type": "authorization_code",
             "redirect_uri": redirect_uri,
             "code": code

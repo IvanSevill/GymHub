@@ -40,4 +40,9 @@ class HomeViewModel(private val sessionManager: SessionManager) : ViewModel() {
             }
         }
     }
+
+    /** Called on logout to clear stale data immediately before a new user logs in. */
+    fun clearState() {
+        _state.value = HomeState.Loading
+    }
 }

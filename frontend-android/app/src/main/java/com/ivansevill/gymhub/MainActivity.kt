@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
                             )
                             
                             if (loginState is LoginState.Success) {
+                                homeViewModel.loadWorkouts()
                                 currentMainScreen = "dashboard"
                             }
                             
@@ -116,6 +117,7 @@ class MainActivity : ComponentActivity() {
                                 sessionManager = sessionManager,
                                 fitbitRefreshKey = fitbitEvent,
                                 onLogout = { 
+                                    homeViewModel.clearState()
                                     loginViewModel.resetState()
                                     currentMainScreen = "login" 
                                 }
