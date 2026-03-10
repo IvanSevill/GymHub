@@ -46,6 +46,22 @@ fun SettingsScreen(sessionManager: SessionManager, fitbitRefreshKey: Int = 0, on
     var isImporting by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
 
+    // On first composition (or after fitbitRefreshKey bump), verify real status from server
+    LaunchedEffect(fitbitRefreshKey) {
+        if (userEmail.isNotEmpty()) {
+            try {
+                val resp = RetrofitClient.apiService.getFitbitStatus(userEmail)
+                if (resp.isSuccessful && resp.body() != null) {
+                    val connected = resp.body()!!["connected"] as? Boolean ?: false
+                    isFitbitConnected = connected
+                    sessionManager.setFitbitConnected(connected)
+                }
+            } catch (_: Exception) {
+                // If offline, keep the cached value
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()

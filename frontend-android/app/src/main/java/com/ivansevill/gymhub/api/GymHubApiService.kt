@@ -28,6 +28,9 @@ interface GymHubApiService {
 
     @POST("auth/fitbit/disconnect")
     suspend fun disconnectFitbit(@Query("user_email") userEmail: String): Response<Map<String, Any>>
+
+    @GET("auth/fitbit/status")
+    suspend fun getFitbitStatus(@Query("user_email") userEmail: String): Response<Map<String, Any>>
     
     @GET("workouts/root/export-mock")
     suspend fun exportData(@Query("user_email") userEmail: String): Response<List<Map<String, Any?>>>

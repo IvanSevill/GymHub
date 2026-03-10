@@ -360,6 +360,15 @@ def fitbit_mobile_callback(code: str, state: str, db: Session = Depends(get_db))
         return RedirectResponse(f"gymhub://auth-callback?status=error&reason={urllib.parse.quote(str(e))}")
 
 
+@router.get("/fitbit/status")
+def fitbit_status(user_email: str, db: Session = Depends(get_db)):
+    """Returns whether the user has a Fitbit account linked."""
+    user = db.query(User).filter(User.email.ilike(user_email)).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    return {"connected": bool(user.fitbit_id and user.fitbit_access_token)}
+
+
 @router.post("/fitbit/disconnect")
 def disconnect_fitbit(user_email: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_email).first()
