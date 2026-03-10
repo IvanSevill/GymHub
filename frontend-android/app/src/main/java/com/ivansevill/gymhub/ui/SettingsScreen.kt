@@ -31,7 +31,7 @@ import com.ivansevill.gymhub.utils.SessionManager
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(sessionManager: SessionManager, onLogout: () -> Unit) {
+fun SettingsScreen(sessionManager: SessionManager, fitbitRefreshKey: Int = 0, onLogout: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -41,7 +41,8 @@ fun SettingsScreen(sessionManager: SessionManager, onLogout: () -> Unit) {
     val userPicture = sessionManager.getPictureUrl()
     val isRoot = sessionManager.isRoot()
     
-    var isFitbitConnected by remember { mutableStateOf(sessionManager.isFitbitConnected()) }
+    // Re-read from sessionManager whenever fitbitRefreshKey changes (after deep link callback)
+    var isFitbitConnected by remember(fitbitRefreshKey) { mutableStateOf(sessionManager.isFitbitConnected()) }
     var isImporting by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
 

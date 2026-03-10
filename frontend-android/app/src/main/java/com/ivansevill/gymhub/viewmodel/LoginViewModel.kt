@@ -48,4 +48,8 @@ class LoginViewModel(private val sessionManager: SessionManager) : ViewModel() {
             }
         }
     }
+
+    fun resetState() {
+        _state.value = LoginState.Idle
+    }
 }

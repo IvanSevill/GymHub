@@ -20,7 +20,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Load API_URL from .env
-        val envFile = file("../.env")
+        val envFile = file("../backend/.env")
         val properties = Properties()
         if (envFile.exists()) {
             properties.load(envFile.inputStream())

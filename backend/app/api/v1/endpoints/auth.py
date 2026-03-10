@@ -153,28 +153,21 @@ def fitbit_connect_init(user_email: str):
     """
     client_id = settings.FITBIT_CLIENT_ID
     
-    # Use a specific callback URL on the backend instead of the frontend URL
-    # This avoids 'localhost' issues if the FRONTEND_URL is set to localhost.
-    # We will let the server handle the token exchange and then redirect back.
-    redirect_uri = f"{settings.FRONTEND_URL}/api/v1/auth/fitbit/callback"
-    if "localhost" in settings.FRONTEND_URL and "ivans" in str(os.getcwd()):
-         # If we are in dev and frontend is localhost, maybe we need the actual backend IP?
-         # But for now, let's assume FRONTEND_URL is the base for the API too if they are co-located, 
-         # or we can use a dedicated setting. 
-         # Actually, Fitbit NEEDS a pre-registered redirect_uri. 
-         pass
+    # redirect_uri must EXACTLY match what is registered in the Fitbit Developer Portal
+    redirect_uri = "https://gymhub-jd53.onrender.com"
 
     scopes = "activity heartrate sleep profile weight location nutrition settings"
     
     # Encode user_email in state to retrieve it in callback
-    state = user_email
+    import urllib.parse
+    state = urllib.parse.quote(user_email)
 
     auth_url = (
         f"https://www.fitbit.com/oauth2/authorize?"
         f"response_type=code&"
         f"client_id={client_id}&"
-        f"redirect_uri={redirect_uri}&"
-        f"scope={scopes}&"
+        f"redirect_uri={urllib.parse.quote(redirect_uri, safe='')}&"
+        f"scope={urllib.parse.quote(scopes, safe='')}&"
         f"state={state}&"
         f"prompt=login%20consent"
     )
@@ -185,14 +178,17 @@ def fitbit_connect_init(user_email: str):
 def fitbit_callback(code: str, state: str, db: Session = Depends(get_db)):
     """
     Handle the callback from Fitbit, exchange code for tokens, and link to user.
+    After success, redirect to the Android deep link gymhub://auth-callback?status=success
     """
-    user_email = state
-    redirect_uri = f"{settings.FRONTEND_URL}/api/v1/auth/fitbit/callback"
+    import urllib.parse
+    user_email = urllib.parse.unquote(state)
+    # Must match EXACTLY the registered Redirect URL in the Fitbit Developer Portal
+    redirect_uri = "https://gymhub-jd53.onrender.com"
     
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
-        from fastapi.responses import HTMLResponse
-        return HTMLResponse("<h2>Usuario no encontrado</h2>", status_code=404)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("gymhub://auth-callback?status=error&reason=user_not_found")
 
     try:
         tokens = FitbitService.exchange_code_for_token(code, redirect_uri=redirect_uri)
@@ -211,19 +207,13 @@ def fitbit_callback(code: str, state: str, db: Session = Depends(get_db)):
         user.fitbit_refresh_token = tokens.get("refresh_token")
         db.commit()
 
-        from fastapi.responses import HTMLResponse
-        return HTMLResponse("""
-            <div style='font-family: sans-serif; text-align: center; padding: 50px;'>
-                <h1 style='color: #06b6d4;'>¡Conexión Exitosa!</h1>
-                <p>Tu cuenta de Fitbit ha sido vinculada correctamente con GymHub.</p>
-                <p>Ya puedes cerrar esta ventana y volver a la aplicación.</p>
-                <button onclick='window.close()' style='background: #06b6d4; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;'>Cerrar</button>
-            </div>
-        """)
+        # Redirect back to Android app via deep link
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(f"gymhub://auth-callback?status=success&email={urllib.parse.quote(user_email)}")
     except Exception as e:
         logger.error(f"Fitbit Callback Error: {e}")
-        from fastapi.responses import HTMLResponse
-        return HTMLResponse(f"<h2>Error al conectar: {str(e)}</h2>", status_code=400)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(f"gymhub://auth-callback?status=error&reason={urllib.parse.quote(str(e))}")
 
 @router.post("/fitbit/connect")
 def connect_fitbit(

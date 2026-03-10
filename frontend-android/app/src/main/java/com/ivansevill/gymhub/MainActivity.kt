@@ -1,5 +1,6 @@
 package com.ivansevill.gymhub
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -41,6 +42,8 @@ import androidx.compose.ui.graphics.Color
 class MainActivity : ComponentActivity() {
     private lateinit var sessionManager: SessionManager
     private lateinit var loginViewModel: LoginViewModel
+    // Mutable state to trigger recomposition from onNewIntent
+    private val fitbitConnectedEvent = mutableStateOf(0)
 
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -63,6 +66,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         sessionManager = SessionManager(this)
         
+        // Handle deep link if app was opened fresh via gymhub://auth-callback
+        handleFitbitDeepLink(intent)
+
         // Manual DI for simplicity, normally use Hilt
         val factory = object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -82,6 +88,8 @@ class MainActivity : ComponentActivity() {
                 var currentMainScreen by remember { 
                     mutableStateOf(if (sessionManager.isLoggedIn()) "dashboard" else "login") 
                 }
+                // Observe fitbitConnectedEvent to refresh SettingsScreen state if needed
+                val fitbitEvent by fitbitConnectedEvent
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -103,11 +111,43 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         "dashboard" -> {
-                            MainTabbedScreen(homeViewModel, sessionManager, onLogout = { currentMainScreen = "login" })
+                            MainTabbedScreen(
+                                homeViewModel = homeViewModel,
+                                sessionManager = sessionManager,
+                                fitbitRefreshKey = fitbitEvent,
+                                onLogout = { 
+                                    loginViewModel.resetState()
+                                    currentMainScreen = "login" 
+                                }
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+
+    // Called when app is already running and gets opened again via deep link
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleFitbitDeepLink(intent)
+    }
+
+    private fun handleFitbitDeepLink(intent: Intent) {
+        val data = intent.data ?: return
+        if (data.scheme == "gymhub" && data.host == "auth-callback") {
+            val status = data.getQueryParameter("status")
+            if (status == "success") {
+                sessionManager.setFitbitConnected(true)
+                // Bump counter to trigger recomposition in settings
+                fitbitConnectedEvent.value++
+                Toast.makeText(this, "✅ Fitbit conectado correctamente", Toast.LENGTH_LONG).show()
+            } else {
+                val reason = data.getQueryParameter("reason") ?: "Error desconocido"
+                Toast.makeText(this, "❌ Error al conectar Fitbit: $reason", Toast.LENGTH_LONG).show()
+            }
+            // Clear the intent so it doesn't re-process on rotation
+            this.intent = Intent()
         }
     }
 
@@ -128,8 +168,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
 @Composable
-fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManager, onLogout: () -> Unit) {
+fun MainTabbedScreen(
+    homeViewModel: HomeViewModel,
+    sessionManager: SessionManager,
+    fitbitRefreshKey: Int = 0,
+    onLogout: () -> Unit
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Scaffold(
@@ -170,7 +216,7 @@ fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManage
                 0 -> HomeWorkoutList(homeViewModel, sessionManager)
                 1 -> CalendarScreen(homeViewModel)
                 2 -> MetricsScreen(homeViewModel)
-                3 -> SettingsScreen(sessionManager, onLogout)
+                3 -> SettingsScreen(sessionManager, fitbitRefreshKey, onLogout)
             }
         }
     }
