@@ -125,11 +125,6 @@ fun HomeWorkoutList(viewModel: HomeViewModel, sessionManager: SessionManager) {
                 }
             }
 
-            // Fitbit connection panel at the top
-            FitbitPanel(sessionManager = sessionManager)
-            
-            Spacer(modifier = Modifier.size(8.dp))
-
             when (state) {
                 is HomeState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
