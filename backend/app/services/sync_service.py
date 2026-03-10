@@ -173,7 +173,15 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
             if db_muscle not in db_exercise.muscles:
                 db_exercise.muscles.append(db_muscle)
 
-        ex_set = ExerciseSet(workout_id=workout.id, exercise_id=db_exercise.id, **ex)
+        ex_set = ExerciseSet(
+            workout_id=workout.id, 
+            exercise_id=db_exercise.id,
+            number1=ex.get("number1"),
+            number2=ex.get("number2"),
+            number3=ex.get("number3"),
+            number4=ex.get("number4"),
+            measurement=ex.get("measurement")
+        )
         db.add(ex_set)
     
     # Reconstruction logic: Parse Fitbit metrics from text

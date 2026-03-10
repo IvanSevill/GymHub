@@ -19,7 +19,7 @@ function getColor(muscle) {
 }
 
 function getMaxWeight(set) {
-    const vals = [set.value1, set.value2, set.value3, set.value4].filter(v => v != null)
+    const vals = [set.number1, set.number2, set.number3, set.number4].filter(v => v != null)
     return vals.length ? Math.max(...vals) : null
 }
 
@@ -55,7 +55,7 @@ export default function MaxLifts({ workouts }) {
         const map = {}
         for (const workout of workouts) {
             for (const s of workout.exercise_sets) {
-                const rawName = s.exercise_name?.trim()
+                const rawName = (s.exercise_name || s.exercise?.name)?.trim()
                 if (!rawName) continue
                 const name = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase()
                 const max = getMaxWeight(s)
@@ -118,7 +118,7 @@ export default function MaxLifts({ workouts }) {
                             className="font-black text-base min-w-[64px] text-right"
                             style={{ color: MUSCLE_COLORS[ex.muscle] || '#fff' }}
                         >
-                            {ex.max}{ex.unit}
+                            {ex.max}{ex.measurement || 'kg'}
                         </span>
                     </div>
                 </div>

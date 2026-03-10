@@ -60,7 +60,7 @@ function getPeriodStart(period) {
 
 
 function getTotalVolume(set) {
-    const vals = [set.value1, set.value2, set.value3, set.value4].filter(v => v != null);
+    const vals = [set.number1, set.number2, set.number3, set.number4].filter(v => v != null);
     if (vals.length === 0) return 0;
     const totalWeight = vals.reduce((a, b) => a + b, 0);
     // If reps are recorded, multiply for true volume load; otherwise just sum of set weights
@@ -247,7 +247,7 @@ const PerformanceMetrics = ({ workouts }) => {
                 w.exercise_sets.forEach(s => {
                     const sMuscle = getMacroMuscle(getSetMuscle(s, w));
                     if (sMuscle === muscleFreq) {
-                        const rawName = s.exercise_name?.trim();
+                        const rawName = (s.exercise_name || s.exercise?.name)?.trim();
                         if (rawName) {
                             const exName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
                             exercisesInWorkout.add(exName);

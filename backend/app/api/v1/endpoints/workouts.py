@@ -171,10 +171,30 @@ def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = 
     db.refresh(master_workout)
     
     for item in mock_data:
+        # 3NF Link: find or create exercise
+        ex_name = item.get("exercise_name", "Desconocido")
+        norm_name = normalize_exercise_name(ex_name)
+        db_exercise = db.query(Exercise).filter(Exercise.name == norm_name).first()
+        if not db_exercise:
+            db_exercise = Exercise(name=norm_name)
+            db.add(db_exercise)
+            db.flush()
+
+        # Link muscle if present
+        m_group = item.get("muscle_group")
+        if m_group:
+            m_name = WorkoutParser.normalize_muscle(m_group)
+            db_muscle = db.query(Muscle).filter(Muscle.name == m_name).first()
+            if not db_muscle:
+                db_muscle = Muscle(name=m_name)
+                db.add(db_muscle)
+                db.flush()
+            if db_muscle not in db_exercise.muscles:
+                db_exercise.muscles.append(db_muscle)
+
         ex_set = ExerciseSet(
             workout_id=master_workout.id,
-            exercise_name=item.get("exercise_name"),
-            muscle_group=item.get("muscle_group"),
+            exercise_id=db_exercise.id,
             measurement=item.get("measurement"),
             number1=item.get("number1"),
             number2=item.get("number2"),
@@ -216,10 +236,26 @@ def add_master_exercise(user_email: str, exercise_name: str, muscle: str, db: Se
         db.commit()
         db.refresh(master_workout)
     
+    # 3NF Link
+    db_exercise = db.query(Exercise).filter(Exercise.name == norm).first()
+    if not db_exercise:
+        db_exercise = Exercise(name=norm)
+        db.add(db_exercise)
+        db.flush()
+    
+    # Muscle link
+    m_name = WorkoutParser.normalize_muscle(muscle)
+    db_muscle = db.query(Muscle).filter(Muscle.name == m_name).first()
+    if not db_muscle:
+        db_muscle = Muscle(name=m_name)
+        db.add(db_muscle)
+        db.flush()
+    if db_muscle not in db_exercise.muscles:
+        db_exercise.muscles.append(db_muscle)
+
     ex_set = ExerciseSet(
         workout_id=master_workout.id,
-        exercise_name=exercise_name,
-        muscle_group=muscle
+        exercise_id=db_exercise.id
     )
     db.add(ex_set)
     db.commit()
@@ -264,7 +300,15 @@ def create_workout(workout_in: WorkoutCreate, db: Session = Depends(get_db)):
             if db_muscle not in db_exercise.muscles:
                 db_exercise.muscles.append(db_muscle)
 
-        ex_set = ExerciseSet(workout_id=new_workout.id, exercise_id=db_exercise.id, **ex)
+        ex_set = ExerciseSet(
+            workout_id=new_workout.id, 
+            exercise_id=db_exercise.id,
+            number1=ex.get("number1"),
+            number2=ex.get("number2"),
+            number3=ex.get("number3"),
+            number4=ex.get("number4"),
+            measurement=ex.get("measurement")
+        )
         db.add(ex_set)
 
     db.commit()
@@ -301,7 +345,15 @@ def update_workout(workout_id: int, workout_in: WorkoutCreate, db: Session = Dep
             if db_muscle not in db_exercise.muscles:
                 db_exercise.muscles.append(db_muscle)
 
-        ex_set = ExerciseSet(workout_id=workout.id, exercise_id=db_exercise.id, **ex)
+        ex_set = ExerciseSet(
+            workout_id=workout.id, 
+            exercise_id=db_exercise.id,
+            number1=ex.get("number1"),
+            number2=ex.get("number2"),
+            number3=ex.get("number3"),
+            number4=ex.get("number4"),
+            measurement=ex.get("measurement")
+        )
         db.add(ex_set)
     db.commit()
     db.refresh(workout)

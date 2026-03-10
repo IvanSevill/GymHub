@@ -36,7 +36,7 @@ class ExerciseSet(Base):
 
     @property
     def muscle_group(self) -> str:
-        if self.exercise and self.exercise.muscles:
+        if self.exercise and self.exercise.muscles and len(self.exercise.muscles) > 0:
             return self.exercise.muscles[0].name
         return "Otros"
 
