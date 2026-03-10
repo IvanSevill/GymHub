@@ -23,11 +23,11 @@ data class Muscle(
 data class ExerciseSet(
     @Json(name = "exercise_name") val exerciseName: String,
     @Json(name = "muscle_group") val muscleGroup: String?,
-    val value1: Double?,
-    val value2: Double?,
-    val value3: Double?,
-    val value4: Double?,
-    val unit: String?,
+    val number1: Double?,
+    val number2: Double?,
+    val number3: Double?,
+    val number4: Double?,
+    val measurement: String?,
     @Json(name = "weight_display") val weightDisplay: String?
 )
 

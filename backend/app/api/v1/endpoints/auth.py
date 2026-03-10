@@ -150,23 +150,80 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
 def fitbit_connect_init(user_email: str):
     """
     Initiates the Fitbit OAuth flow by redirecting the user to Fitbit.
-    This is called by the mobile app or browser.
     """
     client_id = settings.FITBIT_CLIENT_ID
-    # We use the FRONTEND_URL from settings as the redirect destination
-    redirect_uri = settings.FRONTEND_URL
+    
+    # Use a specific callback URL on the backend instead of the frontend URL
+    # This avoids 'localhost' issues if the FRONTEND_URL is set to localhost.
+    # We will let the server handle the token exchange and then redirect back.
+    redirect_uri = f"{settings.FRONTEND_URL}/api/v1/auth/fitbit/callback"
+    if "localhost" in settings.FRONTEND_URL and "ivans" in str(os.getcwd()):
+         # If we are in dev and frontend is localhost, maybe we need the actual backend IP?
+         # But for now, let's assume FRONTEND_URL is the base for the API too if they are co-located, 
+         # or we can use a dedicated setting. 
+         # Actually, Fitbit NEEDS a pre-registered redirect_uri. 
+         pass
+
     scopes = "activity heartrate sleep profile weight location nutrition settings"
     
+    # Encode user_email in state to retrieve it in callback
+    state = user_email
+
     auth_url = (
         f"https://www.fitbit.com/oauth2/authorize?"
         f"response_type=code&"
         f"client_id={client_id}&"
         f"redirect_uri={redirect_uri}&"
         f"scope={scopes}&"
+        f"state={state}&"
         f"prompt=login%20consent"
     )
     from fastapi.responses import RedirectResponse
     return RedirectResponse(auth_url)
+
+@router.get("/fitbit/callback")
+def fitbit_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """
+    Handle the callback from Fitbit, exchange code for tokens, and link to user.
+    """
+    user_email = state
+    redirect_uri = f"{settings.FRONTEND_URL}/api/v1/auth/fitbit/callback"
+    
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse("<h2>Usuario no encontrado</h2>", status_code=404)
+
+    try:
+        tokens = FitbitService.exchange_code_for_token(code, redirect_uri=redirect_uri)
+        fitbit_id = tokens.get("user_id")
+        
+        # Check for existing links
+        existing_user = db.query(User).filter(User.fitbit_id == fitbit_id, User.email != user_email).first()
+        if existing_user:
+            existing_user.fitbit_id = None
+            existing_user.fitbit_access_token = None
+            existing_user.fitbit_refresh_token = None
+            db.commit()
+
+        user.fitbit_id = fitbit_id
+        user.fitbit_access_token = tokens.get("access_token")
+        user.fitbit_refresh_token = tokens.get("refresh_token")
+        db.commit()
+
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse("""
+            <div style='font-family: sans-serif; text-align: center; padding: 50px;'>
+                <h1 style='color: #06b6d4;'>¡Conexión Exitosa!</h1>
+                <p>Tu cuenta de Fitbit ha sido vinculada correctamente con GymHub.</p>
+                <p>Ya puedes cerrar esta ventana y volver a la aplicación.</p>
+                <button onclick='window.close()' style='background: #06b6d4; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;'>Cerrar</button>
+            </div>
+        """)
+    except Exception as e:
+        logger.error(f"Fitbit Callback Error: {e}")
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(f"<h2>Error al conectar: {str(e)}</h2>", status_code=400)
 
 @router.post("/fitbit/connect")
 def connect_fitbit(

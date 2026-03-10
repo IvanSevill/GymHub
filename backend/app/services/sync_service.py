@@ -2,7 +2,7 @@ import datetime
 import logging
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from app.models import User, Workout, ExerciseSet, FitbitData
+from app.models import User, Workout, ExerciseSet, FitbitData, Exercise, Muscle
 from .workout_parser import WorkoutParser
 from .google_calendar import GoogleCalendarService
 from .fitbit import FitbitService
@@ -148,7 +148,32 @@ def update_exercises_from_text(workout: Workout, text: str, db: Session):
     db.query(ExerciseSet).filter(ExerciseSet.workout_id == workout.id).delete()
     exercises = WorkoutParser.parse_description(text)
     for ex in exercises:
-        ex_set = ExerciseSet(workout_id=workout.id, **ex)
+        # 3NF Link: find or create exercise
+        # Need a helper or local imports since we are in sync_service
+        import unicodedata as _ud
+        def _norm_ex(name):
+            nksfd = _ud.normalize('NFKD', name)
+            return "".join([c for c in nksfd if not _ud.combining(c)]).strip().title()
+        
+        norm_name = _norm_ex(ex["exercise_name"])
+        db_exercise = db.query(Exercise).filter(Exercise.name == norm_name).first()
+        if not db_exercise:
+            db_exercise = Exercise(name=norm_name)
+            db.add(db_exercise)
+            db.flush()
+        
+        # Link muscle if present
+        if ex.get("muscle_group"):
+            m_name = WorkoutParser.normalize_muscle(ex["muscle_group"])
+            db_muscle = db.query(Muscle).filter(Muscle.name == m_name).first()
+            if not db_muscle:
+                db_muscle = Muscle(name=m_name)
+                db.add(db_muscle)
+                db.flush()
+            if db_muscle not in db_exercise.muscles:
+                db_exercise.muscles.append(db_muscle)
+
+        ex_set = ExerciseSet(workout_id=workout.id, exercise_id=db_exercise.id, **ex)
         db.add(ex_set)
     
     # Reconstruction logic: Parse Fitbit metrics from text

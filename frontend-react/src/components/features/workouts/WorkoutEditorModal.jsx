@@ -15,8 +15,8 @@ export default function WorkoutEditorModal({ workout, onClose, onUpdated }) {
                 id: s.id,
                 exercise_name: s.exercise_name,
                 muscle_group: s.muscle_group,
-                values: [s.value1, s.value2, s.value3, s.value4].filter(v => v != null),
-                unit: s.unit || 'kg'
+                values: [s.number1, s.number2, s.number3, s.number4].filter(v => v != null),
+                unit: s.measurement || 'kg'
             })))
         }
     }, [workout])

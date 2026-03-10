@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.models import User, Workout, ExerciseSet
+from app.models import User, Workout, ExerciseSet, Exercise, Muscle
 from app.schemas.workout import WorkoutOut, WorkoutCreate
 from app.services.workout_parser import WorkoutParser
 from app.services.sync_service import parse_muscle_groups
@@ -245,7 +245,26 @@ def create_workout(workout_in: WorkoutCreate, db: Session = Depends(get_db)):
 
     exercises = WorkoutParser.parse_description(workout_in.description)
     for ex in exercises:
-        ex_set = ExerciseSet(workout_id=new_workout.id, **ex)
+        # 3NF Link: find or create exercise
+        norm_name = normalize_exercise_name(ex["exercise_name"])
+        db_exercise = db.query(Exercise).filter(Exercise.name == norm_name).first()
+        if not db_exercise:
+            db_exercise = Exercise(name=norm_name)
+            db.add(db_exercise)
+            db.flush()
+        
+        # Associate muscle to exercise if possible
+        if ex.get("muscle_group"):
+            m_name = WorkoutParser.normalize_muscle(ex["muscle_group"])
+            db_muscle = db.query(Muscle).filter(Muscle.name == m_name).first()
+            if not db_muscle:
+                db_muscle = Muscle(name=m_name)
+                db.add(db_muscle)
+                db.flush()
+            if db_muscle not in db_exercise.muscles:
+                db_exercise.muscles.append(db_muscle)
+
+        ex_set = ExerciseSet(workout_id=new_workout.id, exercise_id=db_exercise.id, **ex)
         db.add(ex_set)
 
     db.commit()
@@ -263,7 +282,26 @@ def update_workout(workout_id: int, workout_in: WorkoutCreate, db: Session = Dep
     db.query(ExerciseSet).filter(ExerciseSet.workout_id == workout_id).delete()
     exercises = WorkoutParser.parse_description(workout_in.description)
     for ex in exercises:
-        ex_set = ExerciseSet(workout_id=workout.id, **ex)
+        # 3NF Link: find or create exercise
+        norm_name = normalize_exercise_name(ex["exercise_name"])
+        db_exercise = db.query(Exercise).filter(Exercise.name == norm_name).first()
+        if not db_exercise:
+            db_exercise = Exercise(name=norm_name)
+            db.add(db_exercise)
+            db.flush()
+
+        # Associate muscle to exercise if possible
+        if ex.get("muscle_group"):
+            m_name = WorkoutParser.normalize_muscle(ex["muscle_group"])
+            db_muscle = db.query(Muscle).filter(Muscle.name == m_name).first()
+            if not db_muscle:
+                db_muscle = Muscle(name=m_name)
+                db.add(db_muscle)
+                db.flush()
+            if db_muscle not in db_exercise.muscles:
+                db_exercise.muscles.append(db_muscle)
+
+        ex_set = ExerciseSet(workout_id=workout.id, exercise_id=db_exercise.id, **ex)
         db.add(ex_set)
     db.commit()
     db.refresh(workout)

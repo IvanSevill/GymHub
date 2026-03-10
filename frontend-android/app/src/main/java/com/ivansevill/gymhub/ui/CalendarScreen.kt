@@ -53,60 +53,72 @@ fun CalendarScreen(viewModel: HomeViewModel) {
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // Premium Week selector
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(24.dp))
-                .padding(12.dp)
+        // Premium Week selector with Navigation
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+            IconButton(onClick = { selectedDate = selectedDate.minusWeeks(1) }) {
+                Text("<", color = accentCyan, fontWeight = FontWeight.Black)
+            }
+            
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(24.dp))
+                    .padding(12.dp)
             ) {
-                // Focus on 7 days around the current week
-                val startOfWeek = selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
-                (0..6).forEach { dayOffset ->
-                    val date = startOfWeek.plusDays(dayOffset.toLong())
-                    val isSelected = date == selectedDate
-                    val isToday = date == now
-                    val dayName = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("es", "ES")).substring(0, 1).uppercase()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val startOfWeek = selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
+                    (0..6).forEach { dayOffset ->
+                        val date = startOfWeek.plusDays(dayOffset.toLong())
+                        val isSelected = date == selectedDate
+                        val isToday = date == now
+                        val dayName = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("es", "ES")).substring(0, 1).uppercase()
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { selectedDate = date }
-                            .padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = dayName, 
-                            color = if (isSelected) accentCyan else Color.Gray.copy(alpha = 0.6f), 
-                            fontSize = 10.sp, 
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Box(
+                        Column(
                             modifier = Modifier
-                                .size(40.dp)
-                                .background(
-                                    color = if (isSelected) accentCyan else if (isToday) Color.White.copy(alpha = 0.1f) else Color.Transparent,
-                                    shape = RoundedCornerShape(12.dp)
-                                ),
-                            contentAlignment = Alignment.Center
+                                .weight(1f)
+                                .clickable { selectedDate = date }
+                                .padding(vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = date.dayOfMonth.toString(),
-                                color = if (isSelected) Color.Black else Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium
+                                text = dayName, 
+                                color = if (isSelected) accentCyan else Color.Gray.copy(alpha = 0.6f), 
+                                fontSize = 10.sp, 
+                                fontWeight = FontWeight.Bold
                             )
-                        }
-                        if (isToday && !isSelected) {
-                            Box(modifier = Modifier.padding(top = 4.dp).size(4.dp).background(accentCyan, CircleShape))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(
+                                        color = if (isSelected) accentCyan else if (isToday) Color.White.copy(alpha = 0.1f) else Color.Transparent,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = date.dayOfMonth.toString(),
+                                    color = if (isSelected) Color.Black else Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium
+                                )
+                            }
+                            if (isToday && !isSelected) {
+                                Box(modifier = Modifier.padding(top = 4.dp).size(4.dp).background(accentCyan, CircleShape))
+                            }
                         }
                     }
                 }
+            }
+            
+            IconButton(onClick = { selectedDate = selectedDate.plusWeeks(1) }) {
+                Text(">", color = accentCyan, fontWeight = FontWeight.Black)
             }
         }
 

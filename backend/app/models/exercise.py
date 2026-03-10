@@ -21,10 +21,6 @@ class ExerciseSet(Base):
     workout_id = Column(Integer, ForeignKey("workouts.id"))
     exercise_id = Column(Integer, ForeignKey("exercises.id"), nullable=True) # 3NF Link
     
-    # Raw data for backwards compatibility/parsing
-    muscle_group = Column(String, nullable=True) 
-    exercise_name = Column(String)
-    
     number1 = Column(Float, nullable=True)
     number2 = Column(Float, nullable=True)
     number3 = Column(Float, nullable=True)
@@ -33,6 +29,16 @@ class ExerciseSet(Base):
 
     workout = relationship("Workout", back_populates="exercise_sets")
     exercise = relationship("Exercise")
+
+    @property
+    def exercise_name(self) -> str:
+        return self.exercise.name if self.exercise else "Desconocido"
+
+    @property
+    def muscle_group(self) -> str:
+        if self.exercise and self.exercise.muscles:
+            return self.exercise.muscles[0].name
+        return "Otros"
 
     @property
     def weight_display(self) -> str:
