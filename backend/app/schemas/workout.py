@@ -4,12 +4,12 @@ import datetime
 
 class ExerciseSetOut(BaseModel):
     exercise_name: str
-    muscle_group: Optional[str]
-    reps: Optional[float] = Field(None, alias="number1")
-    weight: Optional[float] = Field(None, alias="number2")
-    distance: Optional[float] = Field(None, alias="number3")
-    time: Optional[float] = Field(None, alias="number4")
-    measurement: Optional[str]
+    muscle_group: Optional[str] = None
+    reps: Optional[float] = None
+    weight: Optional[float] = None
+    distance: Optional[float] = None
+    time: Optional[float] = None
+    measurement: Optional[str] = None
     weight_display: Optional[str] = None
 
     class Config:
@@ -51,6 +51,7 @@ class WorkoutOut(BaseModel):
     end_time: Optional[datetime.datetime]
     source: str
     muscles: List[MuscleOut] = []
+    muscle_groups: Optional[str] = None
     exercise_sets: List[ExerciseSetOut]
     fitbit_data: Optional[FitbitDataOut]
 

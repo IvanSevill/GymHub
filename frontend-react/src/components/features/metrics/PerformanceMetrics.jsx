@@ -60,12 +60,9 @@ function getPeriodStart(period) {
 
 
 function getTotalVolume(set) {
-    const vals = [set.number1, set.number2, set.number3, set.number4].filter(v => v != null);
-    if (vals.length === 0) return 0;
-    const totalWeight = vals.reduce((a, b) => a + b, 0);
-    // If reps are recorded, multiply for true volume load; otherwise just sum of set weights
-    const reps = set.reps && set.reps > 0 ? set.reps : 1;
-    return totalWeight * reps;
+    const weight = parseFloat(set.weight) || 0;
+    const reps = parseInt(set.reps) || 0;
+    return weight * (reps > 0 ? reps : 1);
 }
 
 const PeriodSelector = ({ value, onChange }) => (

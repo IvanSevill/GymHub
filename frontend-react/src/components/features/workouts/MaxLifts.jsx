@@ -19,7 +19,10 @@ function getColor(muscle) {
 }
 
 function getMaxWeight(set) {
-    const vals = [set.number1, set.number2, set.number3, set.number4].filter(v => v != null)
+    // Usually weight is what we track for "Max Lifts"
+    if (set.weight != null) return set.weight;
+    // Fallback to max of other numeric fields if weight is missing
+    const vals = [set.reps, set.distance, set.time].filter(v => v != null)
     return vals.length ? Math.max(...vals) : null
 }
 
@@ -64,7 +67,7 @@ export default function MaxLifts({ workouts }) {
                     map[name] = {
                         name,
                         max,
-                        unit: s.unit || 'kg',
+                        measurement: s.measurement || 'kg',
                         muscle: getSetMuscle(s, workout),
                         date: new Date(workout.date)
                     }

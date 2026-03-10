@@ -45,10 +45,21 @@ def google_connect(data: dict, db: Session = Depends(get_db)):
         credentials = flow.credentials
         
         request = requests.Request()
-        user_info = id_token.verify_oauth2_token(
-            credentials.id_token, request, settings.GOOGLE_CLIENT_ID
-        )
+        user_info = None
+        if credentials.id_token:
+            try:
+                user_info = id_token.verify_oauth2_token(
+                    credentials.id_token, request, settings.GOOGLE_CLIENT_ID
+                )
+            except Exception as e:
+                logger.warning(f"ID token verification failed, falling back to userinfo: {e}")
         
+        if not user_info:
+            resp = flow.authorized_session().get("https://www.googleapis.com/oauth2/v3/userinfo")
+            if resp.status_code != 200:
+                raise HTTPException(400, f"Could not get user info from Google: {resp.text}")
+            user_info = resp.json()
+            
         email = user_info.get("email")
         if not email:
             raise HTTPException(400, "Could not get email from Google")
@@ -57,6 +68,7 @@ def google_connect(data: dict, db: Session = Depends(get_db)):
         if not user:
             user = User(email=email)
             db.add(user)
+            db.flush()
             
         user.name = user_info.get("name")
         user.picture_url = user_info.get("picture")
@@ -117,6 +129,7 @@ def google_auth_mobile(data: dict, db: Session = Depends(get_db)):
         if not user:
             user = User(email=email)
             db.add(user)
+            db.flush()
             
         user.name = user_info.get("name")
         user.picture_url = user_info.get("picture")
@@ -426,4 +439,13 @@ def mock_google_auth(user_email: str, db: Session = Depends(get_db)):
     user_tokens.google_refresh_token = "mock_refresh_token"
     db.commit()
     db.refresh(user)
-    return {"status": "Mock Google connected", "user": user}
+    user_data = {
+        "email": user.email,
+        "name": user.name,
+        "picture_url": user.picture_url,
+        "selected_calendar_id": user.selected_calendar_id,
+        "fitbit_access_token": user.fitbit_access_token,
+        "is_root": bool(user.is_root)
+    }
+    session_token = create_access_token({"sub": user.email})
+    return {"status": "Mock Google connected", "user": user_data, "token": session_token}

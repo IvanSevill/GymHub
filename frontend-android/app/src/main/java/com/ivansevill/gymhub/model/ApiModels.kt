@@ -23,10 +23,10 @@ data class Muscle(
 data class ExerciseSet(
     @Json(name = "exercise_name") val exerciseName: String,
     @Json(name = "muscle_group") val muscleGroup: String?,
-    val number1: Double?,
-    val number2: Double?,
-    val number3: Double?,
-    val number4: Double?,
+    val reps: Double?,
+    val weight: Double?,
+    val distance: Double?,
+    val time: Double?,
     val measurement: String?,
     @Json(name = "weight_display") val weightDisplay: String?
 )
@@ -67,5 +67,6 @@ data class MobileAuthRequest(
 @JsonClass(generateAdapter = true)
 data class AuthResponse(
     val user: User,
-    val status: String?
+    val token: String?,
+    val status: String? = null
 )

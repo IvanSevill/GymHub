@@ -31,6 +31,11 @@ class Workout(Base):
                         muscle_list.append(m)
                         seen.add(m.id)
         return muscle_list
+    
+    @property
+    def muscle_groups(self) -> str:
+        """Helper to return a comma-separated string of muscle names for legacy frontend support"""
+        return ", ".join([m.name for m in self.muscles])
 
 class Muscle(Base):
     __tablename__ = "muscles"

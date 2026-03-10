@@ -102,7 +102,7 @@ const WorkoutCalendar = ({ workouts, onRefresh, isFitbitConnected }) => {
                     if (w.source !== 'calendar') return false;
                     if (w.fitbit_data) return false;
                     if (w.exercise_sets && w.exercise_sets.length > 0) {
-                        const hasValues = w.exercise_sets.some(s => s.value1 !== null || s.value2 !== null || s.value3 !== null || s.value4 !== null);
+                        const hasValues = w.exercise_sets.some(s => s.reps !== null || s.weight !== null || s.distance !== null || s.time !== null);
                         if (hasValues) return false;
                     }
                     return true;

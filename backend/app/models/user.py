@@ -30,47 +30,61 @@ class User(Base):
     def google_access_token(self): return self.tokens.google_access_token if self.tokens else None
     @google_access_token.setter
     def google_access_token(self, value):
-        if not self.tokens: raise ValueError("Tokens object not initialized")
+        if not self.tokens:
+            from .auth import UserToken
+            self.tokens = UserToken()
         self.tokens.google_access_token = value
 
     @property
     def google_refresh_token(self): return self.tokens.google_refresh_token if self.tokens else None
     @google_refresh_token.setter
     def google_refresh_token(self, value):
-        if not self.tokens: raise ValueError("Tokens object not initialized")
+        if not self.tokens:
+            from .auth import UserToken
+            self.tokens = UserToken()
         self.tokens.google_refresh_token = value
 
     @property
     def fitbit_access_token(self): return self.tokens.fitbit_access_token if self.tokens else None
     @fitbit_access_token.setter
     def fitbit_access_token(self, value):
-        if not self.tokens: raise ValueError("Tokens object not initialized")
+        if not self.tokens:
+            from .auth import UserToken
+            self.tokens = UserToken()
         self.tokens.fitbit_access_token = value
 
     @property
     def fitbit_refresh_token(self): return self.tokens.fitbit_refresh_token if self.tokens else None
     @fitbit_refresh_token.setter
     def fitbit_refresh_token(self, value):
-        if not self.tokens: raise ValueError("Tokens object not initialized")
+        if not self.tokens:
+            from .auth import UserToken
+            self.tokens = UserToken()
         self.tokens.fitbit_refresh_token = value
 
     @property
     def selected_calendar_id(self): return self.tokens.selected_calendar_id if self.tokens else None
     @selected_calendar_id.setter
     def selected_calendar_id(self, value):
-        if not self.tokens: raise ValueError("Tokens object not initialized")
+        if not self.tokens:
+            from .auth import UserToken
+            self.tokens = UserToken()
         self.tokens.selected_calendar_id = value
 
     @property
     def google_id(self): return self.tokens.google_id if self.tokens else None
     @google_id.setter
     def google_id(self, value):
-        if not self.tokens: raise ValueError("Tokens object not initialized")
+        if not self.tokens:
+            from .auth import UserToken
+            self.tokens = UserToken()
         self.tokens.google_id = value
 
     @property
     def fitbit_id(self): return self.tokens.fitbit_id if self.tokens else None
     @fitbit_id.setter
     def fitbit_id(self, value):
-        if not self.tokens: raise ValueError("Tokens object not initialized")
+        if not self.tokens:
+            from .auth import UserToken
+            self.tokens = UserToken()
         self.tokens.fitbit_id = value

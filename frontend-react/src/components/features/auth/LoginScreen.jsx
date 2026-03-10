@@ -9,7 +9,7 @@ export default function LoginScreen({ onLoginSuccess }) {
 
     const login = useGoogleLogin({
         flow: 'auth-code',
-        scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+        scope: 'openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
         onSuccess: async (codeResponse) => {
             try {
                 setLoading(true)

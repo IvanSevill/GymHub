@@ -325,10 +325,9 @@ function App() {
                                                 title="Volumen Total (kg)"
                                                 value={(pastWorkouts || []).reduce((acc, w) =>
                                                     acc + (w.exercise_sets || []).reduce((a, s) => {
-                                                        const vals = [s.value1, s.value2, s.value3, s.value4].map(v => parseFloat(v)).filter(v => !isNaN(v));
-                                                        const sum = vals.reduce((x, y) => x + y, 0);
+                                                        const weight = parseFloat(s.weight) || 0;
                                                         const reps = parseInt(s.reps) || 0;
-                                                        return a + (sum * (reps > 0 ? reps : 1));
+                                                        return a + (weight * (reps > 0 ? reps : 1));
                                                     }, 0), 0).toLocaleString('es-ES')}
                                                 icon={<Zap className="text-yellow-400" />}
                                                 delay={0.3}
