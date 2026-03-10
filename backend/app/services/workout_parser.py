@@ -12,10 +12,6 @@ class WorkoutParser:
         re.IGNORECASE
     )
 
-    REPS_PATTERN = re.compile(
-        r"(\d+)\s*(?:reps?|rpt|x)\s*(\d+)?",
-        re.IGNORECASE
-    )
 
     # Normalization map for muscle groups
     MUSCLE_SYNONYMS = {
@@ -28,7 +24,7 @@ class WorkoutParser:
         "Pecho": ["Pecho", "Pectoral", "Pectorales"],
         "Espalda": ["Espalda", "Dorsal", "Dorsales"],
         "Cuadriceps": ["Cuadricep", "Cuadriceps", "Cuádriceps"],
-        "Isquiotibiales": ["Isquios", "Isquiotibiales"],
+        "Femoral": ["Femoral", "Isquios", "Isquiotibiales"],
         "Gemelos": ["Gemelo", "Gemelos"],
         "Trapecio": ["Trapecio", "Trapecios"],
         "Antebrazo": ["Antebrazo", "Antebrazos"],
@@ -111,10 +107,6 @@ class WorkoutParser:
             exercise_name = re.sub(r'[\s\-–:]+$', '', exercise_name).strip()
             if not exercise_name:
                 continue
-            reps = 0
-            reps_match = WorkoutParser.REPS_PATTERN.search(weight_text or exercise_part)
-            if reps_match:
-                reps = int(reps_match.group(1))
             values, unit = WorkoutParser._parse_values(weight_text)
             if not unit and values:
                 unit = 'kg'
@@ -123,11 +115,10 @@ class WorkoutParser:
             results.append({
                 "muscle_group": muscle_group,
                 "exercise_name": exercise_name,
-                "value1": values[0],
-                "value2": values[1],
-                "value3": values[2],
-                "value4": values[3],
-                "unit": unit,
-                "reps": reps
+                "number1": values[0],
+                "number2": values[1],
+                "number3": values[2],
+                "number4": values[3],
+                "measurement": unit
             })
         return results

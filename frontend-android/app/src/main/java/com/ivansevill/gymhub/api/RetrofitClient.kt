@@ -9,8 +9,6 @@ import java.util.concurrent.TimeUnit
 import com.ivansevill.gymhub.BuildConfig
 
 object RetrofitClient {
-    private const val BASE_URL = "https://gymhub-jd53.onrender.com/api/v1/"
-
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
@@ -22,7 +20,7 @@ object RetrofitClient {
         .build()
 
     private val retrofit = Retrofit.Builder()
-        .baseUrl(BASE_URL)
+        .baseUrl(BuildConfig.API_URL)
         .client(okHttpClient)
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()

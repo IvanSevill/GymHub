@@ -6,8 +6,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.runtime.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -90,7 +90,56 @@ fun WorkoutCard(workout: Workout) {
             }
 
 
-            Spacer(modifier = Modifier.height(20.dp))
+            var expanded by remember { mutableStateOf(false) }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = Color.White.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Fitbit Data if present
+                workout.fitbitData?.let { fd ->
+                    Text(
+                        "DATOS FITBIT",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = accentCyan,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        fd.calories?.let { DetailItem("🔥", "$it kcal") }
+                        fd.heartRateAvg?.let { DetailItem("❤️", "$it bpm") }
+                        fd.steps?.let { DetailItem("👣", "$it steps") }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Exercises
+                Text(
+                    "EJERCICIOS",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = accentPurple,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                workout.exerciseSets.forEach { set ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(set.exerciseName, color = Color.White, fontSize = 14.sp)
+                        Text(
+                            text = set.weightDisplay ?: "",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -107,15 +156,29 @@ fun WorkoutCard(workout: Workout) {
                 }
 
                 Button(
-                    onClick = { /* TODO: Navigation to Details */ },
+                    onClick = { expanded = !expanded },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
                     modifier = Modifier.height(36.dp)
                 ) {
-                    Text("Ver más", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (expanded) "Cerrar" else "Ver más",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun DetailItem(icon: String, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(icon, fontSize = 14.sp)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(text, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }

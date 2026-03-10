@@ -15,7 +15,6 @@ export default function WorkoutEditorModal({ workout, onClose, onUpdated }) {
                 id: s.id,
                 exercise_name: s.exercise_name,
                 muscle_group: s.muscle_group,
-                reps: s.reps || 0,
                 values: [s.value1, s.value2, s.value3, s.value4].filter(v => v != null),
                 unit: s.unit || 'kg'
             })))
@@ -26,7 +25,6 @@ export default function WorkoutEditorModal({ workout, onClose, onUpdated }) {
         setSets([...sets, {
             exercise_name: exerciseName,
             muscle_group: muscle,
-            reps: 10,
             values: [0],
             unit: 'kg',
             isNew: true
@@ -61,7 +59,7 @@ export default function WorkoutEditorModal({ workout, onClose, onUpdated }) {
         return sets.map(s => {
             const vals = s.values.join('-')
             const musclePrefix = s.muscle_group ? `${s.muscle_group} - ` : ''
-            return `✅ ${musclePrefix}${s.exercise_name} (${vals}${s.unit}) ${s.reps}x`
+            return `✅ ${musclePrefix}${s.exercise_name} (${vals}${s.unit})`
         }).join('\n')
     }
 
@@ -143,7 +141,7 @@ export default function WorkoutEditorModal({ workout, onClose, onUpdated }) {
                                                 </button>
                                             </div>
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 gap-4">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     {s.values.map((v, vi) => (
                                                         <input
@@ -157,15 +155,6 @@ export default function WorkoutEditorModal({ workout, onClose, onUpdated }) {
                                                     ))}
                                                     <button onClick={() => addValueToSet(idx)} className="w-8 h-8 flex items-center justify-center bg-white/5 rounded-lg text-gray-400">+</button>
                                                     <span className="text-xs text-gray-500 font-bold ml-1">{s.unit}</span>
-                                                </div>
-                                                <div className="flex items-center justify-end gap-3">
-                                                    <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Reps</span>
-                                                    <input
-                                                        type="number"
-                                                        value={s.reps}
-                                                        onChange={e => updateSet(idx, 'reps', parseInt(e.target.value) || 0)}
-                                                        className="w-16 bg-black/20 border border-white/10 rounded-lg py-1.5 text-center text-sm focus:border-cyan-500"
-                                                    />
                                                 </div>
                                             </div>
                                         </div>

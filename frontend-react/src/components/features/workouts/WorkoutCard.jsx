@@ -24,15 +24,23 @@ export default function WorkoutCard({ workout, idx, isSmall = false, isFitbitCon
                     </div>
                 </div>
 
-                {workout.muscle_groups && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                        {workout.muscle_groups.split(',').map(m => (
-                            <span key={m} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[9px] font-black uppercase rounded-md border border-purple-500/10">
-                                {m.trim()}
-                            </span>
-                        ))}
-                    </div>
-                )}
+                {(() => {
+                    const fromList = workout.muscles ? workout.muscles.map(m => m.name) : [];
+                    const fromString = workout.muscle_groups ? workout.muscle_groups.split(',').map(m => m.trim()) : [];
+                    const allMuscles = Array.from(new Set([...fromList, ...fromString])).filter(Boolean);
+
+                    if (allMuscles.length === 0) return null;
+
+                    return (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                            {allMuscles.map(m => (
+                                <span key={m} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[9px] font-black uppercase rounded-md border border-purple-500/10">
+                                    {m}
+                                </span>
+                            ))}
+                        </div>
+                    );
+                })()}
             </motion.div>
         );
     }
@@ -66,15 +74,23 @@ export default function WorkoutCard({ workout, idx, isSmall = false, isFitbitCon
                 </div>
             </div>
 
-            {workout.muscle_groups && (
-                <div className="flex flex-wrap gap-2 mb-6">
-                    {workout.muscle_groups.split(',').map(m => (
-                        <span key={m} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-black uppercase rounded-md border border-purple-500/20">
-                            {m.trim()}
-                        </span>
-                    ))}
-                </div>
-            )}
+            {(() => {
+                const fromList = workout.muscles ? workout.muscles.map(m => m.name) : [];
+                const fromString = workout.muscle_groups ? workout.muscle_groups.split(',').map(m => m.trim()) : [];
+                const allMuscles = Array.from(new Set([...fromList, ...fromString])).filter(Boolean);
+
+                if (allMuscles.length === 0) return null;
+
+                return (
+                    <div className="flex flex-wrap gap-2 mb-6">
+                        {allMuscles.map(m => (
+                            <span key={m} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-[10px] font-black uppercase rounded-md border border-purple-500/20">
+                                {m}
+                            </span>
+                        ))}
+                    </div>
+                );
+            })()}
 
             {isFitbitConnected && workout.fitbit_data && (() => {
                 const fd = workout.fitbit_data;
@@ -151,7 +167,7 @@ export default function WorkoutCard({ workout, idx, isSmall = false, isFitbitCon
                             </div>
                             <div className="flex items-center gap-3">
                                 <span className="font-black text-purple-400">
-                                    {valStr}{unitStr} {set.reps > 0 && `x ${set.reps}`}
+                                    {valStr}{unitStr}
                                 </span>
                                 {set.is_pr === 1 && (
                                     <Trophy className="text-yellow-400 w-4 h-4" />

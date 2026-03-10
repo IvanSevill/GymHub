@@ -60,7 +60,7 @@ def create_event_template(req: CreateEventTemplateRequest, db: Session = Depends
     # First pass: Identify available exercises from both user and root
     exercises_found = {}
     def _norm(t): return _ud.normalize('NFD', t).encode('ascii', 'ignore').decode().lower()
-    leg_muscles_norm = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+    leg_muscles_norm = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "gemelo", "gemelos"]
 
     for s in sets:
         raw_name = s.exercise_name.strip()
@@ -183,7 +183,7 @@ def create_weekly_plan(req: CreateWeeklyPlanRequest, db: Session = Depends(get_d
         .all()
     )
 
-    leg_muscles_norm = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+    leg_muscles_norm = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "gemelo", "gemelos"]
     def _norm(t): return _ud.normalize('NFD', t).encode('ascii', 'ignore').decode().lower()
 
     created_ids = []

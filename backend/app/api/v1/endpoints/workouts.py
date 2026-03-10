@@ -142,12 +142,11 @@ def export_exercises_mock(user_email: str, db: Session = Depends(get_db)):
         mock_data.append({
             "exercise_name": s.exercise_name,
             "muscle_group": s.muscle_group,
-            "unit": s.unit,
-            "reps": s.reps,
-            "value1": s.value1,
-            "value2": s.value2,
-            "value3": s.value3,
-            "value4": s.value4
+            "measurement": s.measurement,
+            "number1": s.number1,
+            "number2": s.number2,
+            "number3": s.number3,
+            "number4": s.number4
         })
     return mock_data
 
@@ -176,12 +175,11 @@ def import_exercises_mock(user_email: str, mock_data: List[dict], db: Session = 
             workout_id=master_workout.id,
             exercise_name=item.get("exercise_name"),
             muscle_group=item.get("muscle_group"),
-            unit=item.get("unit"),
-            reps=item.get("reps"),
-            value1=item.get("value1"),
-            value2=item.get("value2"),
-            value3=item.get("value3"),
-            value4=item.get("value4")
+            measurement=item.get("measurement"),
+            number1=item.get("number1"),
+            number2=item.get("number2"),
+            number3=item.get("number3"),
+            number4=item.get("number4")
         )
         db.add(ex_set)
     

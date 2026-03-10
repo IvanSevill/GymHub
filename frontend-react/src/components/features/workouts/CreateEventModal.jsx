@@ -32,10 +32,10 @@ const MUSCLE_COLORS = {
     // Sub-muscles
     'Glúteo': '#fb7185', 'Gluteo': '#fb7185',
     'Cuádriceps': '#fca5a5', 'Cuadriceps': '#fca5a5',
-    'Femoral': '#bef264', 'Isquios': '#bef264',
-    'Aductores': '#fde047', 'Gemelo': '#86efac'
+    'Femoral': '#bef264',
+    'Gemelo': '#86efac'
 }
-const LEG_MUSCLES = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "aductores", "gemelo", "gemelos", "isquios"]
+const LEG_MUSCLES = ["pierna", "piernas", "gluteo", "cuadriceps", "femoral", "gemelo", "gemelos"]
 // Normalizes accents and lowercase for robust comparison
 const normStr = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
@@ -246,76 +246,6 @@ export default function CreateEventModal({ onClose, onCreated }) {
                             <p className="text-red-400 text-sm text-center py-8">{error}</p>
                         ) : step === 1 ? (
                             <div className="space-y-6">
-                                {/* Time Selection Section */}
-                                <div className="bg-white/5 border border-white/5 rounded-3xl p-5 space-y-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">Fecha</label>
-                                        <input
-                                            type="date"
-                                            value={date}
-                                            onChange={e => setDate(e.target.value)}
-                                            className="w-full bg-black/20 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-colors"
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> Inicio
-                                            </label>
-                                            <div className="flex gap-2">
-                                                <select
-                                                    value={startHour}
-                                                    onChange={e => handleStartHourChange(e.target.value)}
-                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
-                                                >
-                                                    {Array.from({ length: 24 }).map((_, i) => (
-                                                        <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                                    ))}
-                                                </select>
-                                                <span className="flex items-center text-gray-500 font-bold">:</span>
-                                                <select
-                                                    value={startMin}
-                                                    onChange={e => handleStartMinChange(e.target.value)}
-                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
-                                                >
-                                                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
-                                                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> Fin (Predef. 1:30h)
-                                            </label>
-                                            <div className="flex gap-2">
-                                                <select
-                                                    value={endHour}
-                                                    onChange={e => setEndHour(+e.target.value)}
-                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
-                                                >
-                                                    {Array.from({ length: 24 }).map((_, i) => (
-                                                        <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                                    ))}
-                                                </select>
-                                                <span className="flex items-center text-gray-500 font-bold">:</span>
-                                                <select
-                                                    value={endMin}
-                                                    onChange={e => setEndMin(+e.target.value)}
-                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
-                                                >
-                                                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
-                                                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {!isTimeValid && (
-                                        <p className="text-red-400 text-[10px] font-bold">⚠️ La hora de fin debe ser posterior.</p>
-                                    )}
-                                </div>
-
                                 <div className="space-y-3">
                                     {(() => {
                                         // Separar las piernas del resto
@@ -401,6 +331,79 @@ export default function CreateEventModal({ onClose, onCreated }) {
                                             </>
                                         )
                                     })()}
+                                </div>
+
+                                <div className="h-px bg-white/5 my-6" />
+
+                                {/* Time Selection Section */}
+                                <div className="bg-white/5 border border-white/5 rounded-3xl p-5 space-y-4">
+                                    <p className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-2">¿Cuándo vas a entrenar?</p>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2">Fecha</label>
+                                        <input
+                                            type="date"
+                                            value={date}
+                                            onChange={e => setDate(e.target.value)}
+                                            className="w-full bg-black/20 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" /> Inicio
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <select
+                                                    value={startHour}
+                                                    onChange={e => handleStartHourChange(e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {Array.from({ length: 24 }).map((_, i) => (
+                                                        <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="flex items-center text-gray-500 font-bold">:</span>
+                                                <select
+                                                    value={startMin}
+                                                    onChange={e => handleStartMinChange(e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                                                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-2 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" /> Fin
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <select
+                                                    value={endHour}
+                                                    onChange={e => setEndHour(+e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {Array.from({ length: 24 }).map((_, i) => (
+                                                        <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="flex items-center text-gray-500 font-bold">:</span>
+                                                <select
+                                                    value={endMin}
+                                                    onChange={e => setEndMin(+e.target.value)}
+                                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-3 py-3 text-white appearance-none text-center focus:outline-none focus:border-cyan-500 transition-colors"
+                                                >
+                                                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                                                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {!isTimeValid && (
+                                        <p className="text-red-400 text-[10px] font-bold">⚠️ La hora de fin debe ser posterior.</p>
+                                    )}
                                 </div>
                             </div>
                         ) : (

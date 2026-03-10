@@ -1,5 +1,5 @@
 from app.core.database import Base
 from .user import User
-from .workout import Workout
-from .exercise import ExerciseSet
+from .workout import Workout, Muscle
+from .exercise import ExerciseSet, Exercise, ExerciseMuscle
 from .fitbit import FitbitData

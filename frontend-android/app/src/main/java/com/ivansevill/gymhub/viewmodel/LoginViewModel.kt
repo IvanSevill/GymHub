@@ -32,7 +32,13 @@ class LoginViewModel(private val sessionManager: SessionManager) : ViewModel() {
                 )
                 if (response.isSuccessful && response.body() != null) {
                     val user = response.body()!!.user
-                    sessionManager.saveUser(user.email, user.name, user.pictureUrl, user.isRoot)
+                    sessionManager.saveUser(
+                        user.email,
+                        user.name,
+                        user.pictureUrl,
+                        user.isRoot,
+                        user.fitbitAccessToken != null
+                    )
                     _state.value = LoginState.Success(user)
                 } else {
                     _state.value = LoginState.Error("Error al conectar con el servidor: ${response.code()}")

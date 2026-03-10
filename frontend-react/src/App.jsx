@@ -377,7 +377,11 @@ function App() {
                                                 <div className="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
 
                                                 <div className="flex-1 flex flex-wrap gap-2">
-                                                    {Array.from(new Set(pastWorkouts.flatMap(w => w.muscle_groups ? w.muscle_groups.split(',').map(m => m.trim()) : [])))
+                                                    {Array.from(new Set(pastWorkouts.flatMap(w => {
+                                                        const fromList = w.muscles ? w.muscles.map(m => m.name) : [];
+                                                        const fromString = w.muscle_groups ? w.muscle_groups.split(',').map(m => m.trim()) : [];
+                                                        return [...fromList, ...fromString];
+                                                    })))
                                                         .filter(Boolean)
                                                         .sort()
                                                         .map(m => (
@@ -409,14 +413,16 @@ function App() {
                                                                 let mM = true;
                                                                 if (filterMuscles.length > 0) {
                                                                     const norm = (s) => s?.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() || '';
-                                                                    const wm = w.muscle_groups ? w.muscle_groups.split(',').map(m => norm(m.trim())) : [];
+                                                                    const wm_legacy = w.muscle_groups ? w.muscle_groups.split(',').map(m => norm(m.trim())) : [];
+                                                                    const wm_new = w.muscles ? w.muscles.map(m => norm(m.name)) : [];
+                                                                    const wm = [...new Set([...wm_legacy, ...wm_new])];
                                                                     const em = w.exercise_sets ? w.exercise_sets.map(s => norm(s.muscle_group)) : [];
                                                                     const allTM = [...new Set([...wm, ...em])];
 
                                                                     mM = filterMuscles.every(m => {
                                                                         const nm = norm(m);
                                                                         if (nm === 'pierna') {
-                                                                            return allTM.some(tm => ['pierna', 'gluteo', 'cuadriceps', 'femoral', 'gemelo', 'isquios', 'aductores'].includes(tm));
+                                                                            return allTM.some(tm => ['pierna', 'gluteo', 'cuadriceps', 'femoral', 'gemelo'].includes(tm));
                                                                         }
                                                                         return allTM.includes(nm);
                                                                     });
@@ -424,7 +430,11 @@ function App() {
 
                                                                 // Final check: if fitbit is NOT connected, hide pure cardio workouts
                                                                 if (!currentUser?.fitbit_access_token) {
-                                                                    const isPureCardio = (w.muscle_groups && w.muscle_groups.split(',').every(m => m.trim().toLowerCase() === 'cardio')) || w.source === 'fitbit';
+                                                                    const workoutMusclesRaw = [
+                                                                        ...(w.muscles ? w.muscles.map(m => m.name.toLowerCase()) : []),
+                                                                        ...(w.muscle_groups ? w.muscle_groups.split(',').map(m => m.trim().toLowerCase()) : [])
+                                                                    ];
+                                                                    const isPureCardio = (workoutMusclesRaw.length > 0 && workoutMusclesRaw.every(m => m === 'cardio')) || w.source === 'fitbit';
                                                                     if (isPureCardio && (!w.exercise_sets || w.exercise_sets.length === 0)) return false;
                                                                 }
 
@@ -463,8 +473,9 @@ function App() {
                                                         if (filterMuscles.length > 0) {
                                                             const norm = (s) => s?.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() || '';
 
-                                                            // 1. Check muscle_groups field
-                                                            const workoutMuscles = w.muscle_groups ? w.muscle_groups.split(',').map(m => norm(m.trim())) : [];
+                                                            const wm_legacy = w.muscle_groups ? w.muscle_groups.split(',').map(m => norm(m.trim())) : [];
+                                                            const wm_new = w.muscles ? w.muscles.map(m => norm(m.name)) : [];
+                                                            const workoutMuscles = [...new Set([...wm_legacy, ...wm_new])];
 
                                                             // 2. Check individual exercises
                                                             const exerciseMuscles = w.exercise_sets ? w.exercise_sets.map(s => norm(s.muscle_group)) : [];
@@ -474,7 +485,7 @@ function App() {
                                                             matchesMuscle = filterMuscles.every(m => {
                                                                 const nm = norm(m);
                                                                 if (nm === 'pierna') {
-                                                                    const legMuscles = ['pierna', 'gluteo', 'cuadriceps', 'femoral', 'gemelo', 'isquios', 'aductores'];
+                                                                    const legMuscles = ['pierna', 'gluteo', 'cuadriceps', 'femoral', 'gemelo'];
                                                                     return allTrainedMuscles.some(tm => legMuscles.includes(tm));
                                                                 }
                                                                 return allTrainedMuscles.includes(nm);
@@ -482,7 +493,11 @@ function App() {
                                                         }
 
                                                         if (!currentUser?.fitbit_access_token) {
-                                                            const isPureCardio = (w.muscle_groups && w.muscle_groups.split(',').every(m => m.trim().toLowerCase() === 'cardio')) || w.source === 'fitbit';
+                                                            const workoutMusclesRaw = [
+                                                                ...(w.muscles ? w.muscles.map(m => m.name.toLowerCase()) : []),
+                                                                ...(w.muscle_groups ? w.muscle_groups.split(',').map(m => m.trim().toLowerCase()) : [])
+                                                            ];
+                                                            const isPureCardio = (workoutMusclesRaw.length > 0 && workoutMusclesRaw.every(m => m === 'cardio')) || w.source === 'fitbit';
                                                             if (isPureCardio && (!w.exercise_sets || w.exercise_sets.length === 0)) return false;
                                                         }
 

@@ -5,12 +5,11 @@ import datetime
 class ExerciseSetOut(BaseModel):
     exercise_name: str
     muscle_group: Optional[str]
-    value1: Optional[float]
-    value2: Optional[float]
-    value3: Optional[float]
-    value4: Optional[float]
-    unit: Optional[str]
-    reps: Optional[int]
+    number1: Optional[float]
+    number2: Optional[float]
+    number3: Optional[float]
+    number4: Optional[float]
+    measurement: Optional[str]
     weight_display: Optional[str] = None
 
     class Config:

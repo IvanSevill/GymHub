@@ -109,8 +109,8 @@ const WorkoutCalendar = ({ workouts, onRefresh, isFitbitConnected }) => {
                 });
 
                 // Decide color based on workout types
-                const hasCardio = dayWorkouts.some(w => (w.muscle_groups && String(w.muscle_groups).includes('Cardio')) || (w.source === 'fitbit' && (!w.exercise_sets || w.exercise_sets.length === 0)));
-                const hasMuscle = dayWorkouts.some(w => w.muscle_groups && !String(w.muscle_groups).includes('Cardio'));
+                const hasCardio = dayWorkouts.some(w => (w.muscles?.some(m => m.name.includes('Cardio')) || (w.muscle_groups && String(w.muscle_groups).includes('Cardio'))) || (w.source === 'fitbit' && (!w.exercise_sets || w.exercise_sets.length === 0)));
+                const hasMuscle = dayWorkouts.some(w => (w.muscles?.some(m => !m.name.includes('Cardio')) || (w.muscle_groups && !String(w.muscle_groups).includes('Cardio'))));
 
                 let theme = hasMuscle ? 'cyan' : (hasCardio ? 'emerald' : 'cyan');
                 let ThemeIcon = hasMuscle ? Target : Heart;

@@ -23,10 +23,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import com.ivansevill.gymhub.ui.HomeWorkoutList
 import com.ivansevill.gymhub.ui.CalendarScreen
 import com.ivansevill.gymhub.ui.MetricsScreen
+import com.ivansevill.gymhub.ui.SettingsScreen
 import com.ivansevill.gymhub.ui.PlaceholderScreen
 import com.ivansevill.gymhub.ui.theme.GymHubTheme
 import com.ivansevill.gymhub.ui.LoginScreen
@@ -101,7 +103,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         "dashboard" -> {
-                            MainTabbedScreen(homeViewModel, sessionManager)
+                            MainTabbedScreen(homeViewModel, sessionManager, onLogout = { currentMainScreen = "login" })
                         }
                     }
                 }
@@ -127,7 +129,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManager) {
+fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManager, onLogout: () -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Scaffold(
@@ -154,6 +156,12 @@ fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManage
                     icon = { Icon(Icons.Default.Star, contentDescription = "Métricas") },
                     label = { Text("Análisis") }
                 )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Ajustes") },
+                    label = { Text("Ajustes") }
+                )
             }
         }
     ) { padding ->
@@ -162,6 +170,7 @@ fun MainTabbedScreen(homeViewModel: HomeViewModel, sessionManager: SessionManage
                 0 -> HomeWorkoutList(homeViewModel, sessionManager)
                 1 -> CalendarScreen(homeViewModel)
                 2 -> MetricsScreen(homeViewModel)
+                3 -> SettingsScreen(sessionManager, onLogout)
             }
         }
     }

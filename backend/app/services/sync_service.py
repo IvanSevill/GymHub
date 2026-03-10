@@ -20,7 +20,7 @@ def parse_muscle_groups(title: str, exercise_muscles: List[str] = None) -> List[
     normalized = []
     
     # Muscle expansion map (e.g. "Pierna" is a category, not a single muscle)
-    LEG_MUSCLES = ["Cuadriceps", "Gluteo", "Isquiotibiales", "Gemelos"]
+    LEG_MUSCLES = ["Cuadriceps", "Gluteo", "Femoral", "Gemelos"]
     
     # Muscle aliases for normalization
     aliases = {
@@ -30,7 +30,7 @@ def parse_muscle_groups(title: str, exercise_muscles: List[str] = None) -> List[
         "Abdomen": "Abdominales", "Abdominales": "Abdominales",
         "Gluteo": "Gluteo", "Glúteo": "Gluteo", 
         "Cuadriceps": "Cuadriceps", "Cuádriceps": "Cuadriceps",
-        "Femoral": "Isquiotibiales", "Isquios": "Isquiotibiales",
+        "Femoral": "Femoral", "Isquios": "Femoral", "Isquiotibiales": "Femoral",
         "Espalda": "Espalda", "Pecho": "Pecho", "Hombro": "Hombro",
         "Gemelos": "Gemelos", "Gemelo": "Gemelos"
     }

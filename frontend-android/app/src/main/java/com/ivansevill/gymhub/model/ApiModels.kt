@@ -28,7 +28,6 @@ data class ExerciseSet(
     val value3: Double?,
     val value4: Double?,
     val unit: String?,
-    val reps: Int?,
     @Json(name = "weight_display") val weightDisplay: String?
 )
 

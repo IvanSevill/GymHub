@@ -67,38 +67,81 @@ fun FitbitPanel(sessionManager: SessionManager) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            var isConnected by remember { mutableStateOf(sessionManager.isFitbitConnected()) }
+
+            if (isConnected) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(Color.Green.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).padding(10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("✅ Fitbit Conectado", color = Color.Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Button(
-                    onClick = { 
-                        val baseUrl = BuildConfig.API_URL
-                        val uri = Uri.parse("${baseUrl}auth/fitbit/connect?user_email=$userEmail")
-                        val intent = Intent(Intent.ACTION_VIEW, uri)
-                        context.startActivity(intent)
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B0B9)), // Fitbit Teal
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Conectar", fontWeight = FontWeight.Bold)
-                }
+                if (!isConnected) {
+                    Button(
+                        onClick = {
+                            val baseUrl = BuildConfig.API_URL
+                            val uri = Uri.parse("${baseUrl}auth/fitbit/connect?user_email=$userEmail")
+                            val intent = Intent(Intent.ACTION_VIEW, uri)
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B0B9)), // Fitbit Teal
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Conectar", fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                isSyncing = true
+                                try {
+                                    RetrofitClient.apiService.syncWorkouts(userEmail)
+                                } catch (e: Exception) { }
+                                isSyncing = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isSyncing
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Sincronizar", fontSize = 12.sp)
+                        }
+                    }
 
-                OutlinedButton(
-                    onClick = { 
-                        // Sync logic
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = !isSyncing
-                ) {
-                    if (isSyncing) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sincronizar", fontSize = 12.sp)
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val resp = RetrofitClient.apiService.disconnectFitbit(userEmail)
+                                    if (resp.isSuccessful) {
+                                        // Update local state - unfortunately SessionManager doesn't have a setFitbitConnected
+                                        // But we can clear and let user know
+                                        isConnected = false
+                                        // In a real app we'd update SharedPreferences here too
+                                    }
+                                } catch (e: Exception) { }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red.copy(alpha = 0.7f)),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.linearGradient(listOf(Color.Red.copy(alpha = 0.3f), Color.Red.copy(alpha = 0.3f)))),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Desvincular", fontSize = 12.sp)
                     }
                 }
             }
