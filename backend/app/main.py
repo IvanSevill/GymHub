@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from .database import engine, Base
+from . import models
 from .routers import auth_routes, workouts, exercises, analytics
 from . import admin
 

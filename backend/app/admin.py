@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from .. import models, database, auth
+from . import models, database, auth
 import json
 
 router = APIRouter(prefix="/admin", tags=["admin"])

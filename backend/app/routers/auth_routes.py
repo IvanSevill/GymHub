@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from .. import models, schemas, database, auth, fitbit_utils
 import os
 import requests
+import base64
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from datetime import datetime
@@ -65,7 +67,16 @@ def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(database.g
     db.commit()
     
     access_token = auth.create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": {
+            "email": user.email,
+            "name": user.name,
+            "picture_url": user.picture_url,
+            "is_root": user.is_root
+        }
+    }
 
 @router.get("/fitbit")
 def fitbit_auth_init(current_user: models.User = Depends(auth.get_current_user)):
@@ -122,6 +133,3 @@ def disconnect_fitbit(current_user: models.User = Depends(auth.get_current_user)
     
     db.commit()
     return {"message": "Fitbit disconnected and data removed"}
-
-import base64
-from fastapi.responses import RedirectResponse

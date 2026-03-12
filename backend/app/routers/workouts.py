@@ -1,18 +1,40 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
-from .. import models, schemas, database, auth, calendar_utils, fitbit_utils
+from datetime import datetime, timedelta
+from .. import models, schemas, database, auth, fitbit_utils, calendar_utils
 import os
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
+
+@router.get("/calendars")
+def list_calendars(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+    
+    creds = Credentials(token=user_tokens.google_access_token)
+    service = build('calendar', 'v3', credentials=creds)
+    
+    try:
+        calendar_list = service.calendarList().list().execute()
+        calendars = calendar_list.get('items', [])
+        return [
+            {"id": c["id"], "summary": c["summary"], "primary": c.get("primary", False)}
+            for c in calendars
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch calendars: {str(e)}")
 
 # Google Calendar API Helper (Simplified)
 def update_google_calendar_event(user_tokens: models.UserTokens, workout: models.Workout, fitbit_data: Optional[models.FitbitData] = None):
     # This would use google-api-python-client
     # For now, it's a placeholder logic
-    from googleapiclient.discovery import build
-    from google.oauth2.credentials import Credentials
     
     if not user_tokens or not user_tokens.google_access_token:
         return None
@@ -141,8 +163,6 @@ def delete_workout(
     if db_workout.google_event_id:
         user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
         try:
-            from googleapiclient.discovery import build
-            from google.oauth2.credentials import Credentials
             creds = Credentials(token=user_tokens.google_access_token)
             service = build('calendar', 'v3', credentials=creds)
             calendar_id = user_tokens.selected_calendar_id or 'primary'
@@ -211,10 +231,6 @@ def sync_all_from_calendar(
     user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
     if not user_tokens or not user_tokens.google_access_token:
         raise HTTPException(status_code=400, detail="Google Calendar not connected")
-    
-    from googleapiclient.discovery import build
-    from google.oauth2.credentials import Credentials
-    from datetime import timedelta
     
     creds = Credentials(token=user_tokens.google_access_token)
     service = build('calendar', 'v3', credentials=creds)
