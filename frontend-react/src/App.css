@@ -1,0 +1,41 @@
+/* Custom styles not covered by Tailwind */
+
+.react-calendar {
+  width: 100% !important;
+  background: transparent !important;
+  border: none !important;
+  font-family: inherit !important;
+  color: white !important;
+}
+
+.react-calendar__tile {
+  @apply rounded-xl aspect-square flex items-center justify-center text-sm font-medium transition-colors !important;
+}
+
+.react-calendar__tile--now {
+  @apply bg-primary/20 text-primary !important;
+}
+
+.react-calendar__tile--active {
+  @apply bg-primary text-white !important;
+}
+
+.react-calendar__tile:hover {
+  @apply bg-white/5 !important;
+}
+
+.react-calendar__navigation button {
+  @apply text-white text-lg font-bold min-w-[44px] hover:bg-white/5 rounded-lg !important;
+}
+
+.react-calendar__month-view__weekdays__weekday {
+  @apply text-slate-500 font-bold text-xs uppercase mb-4 !important;
+}
+
+.react-calendar__month-view__days__day--neighboringMonth {
+  @apply opacity-20 !important;
+}
+
+.loading-spinner {
+  @apply animate-spin rounded-full border-2 border-primary border-t-transparent h-5 w-5;
+}

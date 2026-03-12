@@ -80,18 +80,17 @@ def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(database.g
 
 @router.get("/fitbit")
 def fitbit_auth_init(current_user: models.User = Depends(auth.get_current_user)):
-    # Return the Fitbit authorization URL
+    # Return the Fitbit authorization URL with user_id as state
     scope = "activity heartrate profile sleep weight"
     redirect_uri = f"{BACKEND_HOST}/auth/fitbit/callback"
-    url = f"https://www.fitbit.com/oauth2/authorize?response_type=code&client_id={FITBIT_CLIENT_ID}&redirect_uri={redirect_uri}&scope={scope}"
+    state = str(current_user.id)
+    url = f"https://www.fitbit.com/oauth2/authorize?response_type=code&client_id={FITBIT_CLIENT_ID}&redirect_uri={redirect_uri}&scope={scope}&state={state}"
     return {"url": url}
 
 @router.get("/fitbit/callback")
-def fitbit_callback(code: str, db: Session = Depends(database.get_db)):
-    # This endpoint is called by Fitbit redirect. 
-    # Usually it needs state to know which user it is. 
-    # For simplicity, we might need the user to be logged in or pass state.
-    # In a real app, 'state' would contain the user ID or a session token.
+def fitbit_callback(code: str, state: str, db: Session = Depends(database.get_db)):
+    # Fitbit redirect provides the 'state' which is our user_id
+    user_id = int(state)
     
     token_url = "https://api.fitbit.com/oauth2/token"
     auth_header = base64.b64encode(f"{FITBIT_CLIENT_ID}:{FITBIT_CLIENT_SECRET}".encode()).decode()
@@ -112,9 +111,17 @@ def fitbit_callback(code: str, db: Session = Depends(database.get_db)):
     tokens = response.json()
     fitbit_id = tokens["user_id"]
     
-    # How do we know which user? We'd need state. 
-    # Let's assume for this mock/logic that we have a temporary way or the user is identified via another cookie/session if this was a browser flow.
-    # But since this is an API, we'll probably need 'state' to be the user_id.
+    # Save tokens to the user
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == user_id).first()
+    if not user_tokens:
+        user_tokens = models.UserTokens(user_id=user_id)
+        db.add(user_tokens)
+    
+    user_tokens.fitbit_id = fitbit_id
+    user_tokens.fitbit_access_token = tokens["access_token"]
+    user_tokens.fitbit_refresh_token = tokens["refresh_token"]
+    
+    db.commit()
     
     # Redirect back to frontend
     return RedirectResponse(url=f"{FRONTEND_URL}/fitbit-success")
