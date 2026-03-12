@@ -25,7 +25,12 @@ def list_calendars(
         calendar_list = service.calendarList().list().execute()
         calendars = calendar_list.get('items', [])
         return [
-            {"id": c["id"], "summary": c["summary"], "primary": c.get("primary", False)}
+            {
+                "id": c["id"], 
+                "summary": c["summary"], 
+                "primary": c.get("primary", False),
+                "selected": c["id"] == (user_tokens.selected_calendar_id if user_tokens else None)
+            }
             for c in calendars
         ]
     except Exception as e:
@@ -104,8 +109,8 @@ def update_google_calendar_event(db: Session, user_tokens: models.UserTokens, wo
     event_body = {
         'summary': workout.title,
         'description': description,
-        'start': {'dateTime': workout.start_time.isoformat()},
-        'end': {'dateTime': workout.end_time.isoformat()},
+        'start': {'dateTime': workout.start_time.isoformat() + "+01:00"},
+        'end': {'dateTime': workout.end_time.isoformat() + "+01:00"},
     }
     
     calendar_id = user_tokens.selected_calendar_id or 'primary'
@@ -209,29 +214,54 @@ def update_workout(
     # Sync to Calendar
     user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
     
-    # Proactively try to sync Fitbit if connected and no data exists
-    if user_tokens and user_tokens.fitbit_access_token and not db_workout.fitbit_data:
+    # Proactively try to sync Fitbit if connected
+    if user_tokens and user_tokens.fitbit_access_token:
         try:
             activity = fitbit_utils.get_fitbit_activity(db, user_tokens, db_workout.start_time, db_workout.end_time)
             if activity:
-                fitbit_data = models.FitbitData(
-                    workout_id=db_workout.id,
-                    fitbit_log_id=str(activity.get("logId")),
-                    calories=activity.get("calories", 0),
-                    heart_rate_avg=activity.get("averageHeartRate", 0),
-                    duration_ms=activity.get("duration", 0),
-                    distance_km=activity.get("distance", 0.0),
-                    elevation_gain_m=activity.get("elevationGain", 0.0),
-                    activity_name=activity.get("activityName", "Unknown")
-                )
-                azm = activity.get("activeZoneMinutes", {})
-                fitbit_data.azm_fat_burn = azm.get("fatBurnMinutes", 0)
-                fitbit_data.azm_cardio = azm.get("cardioMinutes", 0)
-                fitbit_data.azm_peak = azm.get("peakMinutes", 0)
-                db.add(fitbit_data)
+                fitbit_data = db.query(models.FitbitData).filter(models.FitbitData.workout_id == workout_id).first()
+                if not fitbit_data:
+                    fitbit_data = models.FitbitData(workout_id=db_workout.id)
+                    db.add(fitbit_data)
+                
+                fitbit_data.fitbit_log_id = str(activity.get("logId"))
+                fitbit_data.calories = activity.get("calories", 0)
+                fitbit_data.heart_rate_avg = activity.get("averageHeartRate", 0)
+                fitbit_data.duration_ms = activity.get("duration", 0)
+                fitbit_data.distance_km = activity.get("distance", 0.0)
+                fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
+                fitbit_data.activity_name = activity.get("activityName", "Unknown")
+                
+                azm_data = fitbit_utils.extract_azm(activity)
+                fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)
+                fitbit_data.azm_cardio = azm_data.get("cardioMinutes", 0)
+                fitbit_data.azm_peak = azm_data.get("peakMinutes", 0)
+                
                 db.flush()
                 db_workout.fitbit_data = fitbit_data
-        except:
+
+                # Cardio Logic: If activity is not Weights or Walk, add a 'cardio' exercise set
+                act_name_lower = fitbit_data.activity_name.lower()
+                if "weights" not in act_name_lower and "walk" not in act_name_lower:
+                    cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
+                    if cardio_ex:
+                        # Check if cardio set already exists
+                        existing_cardio = db.query(models.ExerciseSet).filter(
+                            models.ExerciseSet.workout_id == workout_id,
+                            models.ExerciseSet.exercise_id == cardio_ex.id
+                        ).first()
+                        if not existing_cardio:
+                            db_set = models.ExerciseSet(
+                                workout_id=db_workout.id,
+                                exercise_id=cardio_ex.id,
+                                value=str(fitbit_data.duration_ms // 60000),
+                                measurement="min",
+                                is_completed=True
+                            )
+                            db.add(db_set)
+                            print(f"Added cardio set for activity: {fitbit_data.activity_name}")
+        except Exception as e:
+            print(f"Auto-sync Fitbit error: {e}")
             pass
 
     update_google_calendar_event(db, user_tokens, db_workout, db_workout.fitbit_data)
@@ -300,13 +330,33 @@ def sync_fitbit(
     fitbit_data.activity_name = activity.get("activityName", "Unknown")
     
     # Active Zone Minutes
-    azm = activity.get("activeZoneMinutes", {})
-    fitbit_data.azm_fat_burn = azm.get("fatBurnMinutes", 0)
-    fitbit_data.azm_cardio = azm.get("cardioMinutes", 0)
-    fitbit_data.azm_peak = azm.get("peakMinutes", 0)
+    azm_data = fitbit_utils.extract_azm(activity)
+    fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)
+    fitbit_data.azm_cardio = azm_data.get("cardioMinutes", 0)
+    fitbit_data.azm_peak = azm_data.get("peakMinutes", 0)
     
     db.commit()
     db.refresh(fitbit_data)
+
+    # Cardio Logic: If activity is not Weights or Walk, add a 'cardio' exercise set
+    act_name_lower = fitbit_data.activity_name.lower()
+    if "weights" not in act_name_lower and "walk" not in act_name_lower:
+        cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
+        if cardio_ex:
+            existing_cardio = db.query(models.ExerciseSet).filter(
+                models.ExerciseSet.workout_id == workout_id,
+                models.ExerciseSet.exercise_id == cardio_ex.id
+            ).first()
+            if not existing_cardio:
+                db_set = models.ExerciseSet(
+                    workout_id=workout_id,
+                    exercise_id=cardio_ex.id,
+                    value=str(fitbit_data.duration_ms // 60000),
+                    measurement="min",
+                    is_completed=True
+                )
+                db.add(db_set)
+                db.commit()
     
     # Update Calendar event with new metrics
     update_google_calendar_event(db, user_tokens, db_workout, fitbit_data)
@@ -328,7 +378,9 @@ def sync_all_from_calendar(
     calendar_id = user_tokens.selected_calendar_id or 'primary'
     
     # Fetch events from the last 2 years (730 days)
-    time_min = (datetime.utcnow() - timedelta(days=730)).isoformat() + "Z"
+    sync_days = 730
+    time_min_dt = datetime.utcnow() - timedelta(days=sync_days)
+    time_min = time_min_dt.isoformat() + "Z"
     
     all_events = []
     page_token = None
@@ -348,12 +400,15 @@ def sync_all_from_calendar(
         raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {str(e)}")
 
     processed_count = 0
+    calendar_event_ids = set()
     muscle_map = {m.name.lower(): m.id for m in db.query(models.Muscle).all()}
     # Create a case-insensitive exercise map
     exercise_map = {e.name.lower(): e.id for e in db.query(models.Exercise).all()}
 
     for event in events:
         desc = event.get('description', '')
+        event_id = event.get('id')
+        calendar_event_ids.add(event_id)
         
         # Determine if this is a GymHub event
         is_gymhub = "[GymHub]" in desc or "[gymhub]" in desc.lower()
@@ -374,11 +429,11 @@ def sync_all_from_calendar(
         end_dt = datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None)
         
         # Check if workout already exists by google_event_id
-        workout = db.query(models.Workout).filter(models.Workout.google_event_id == event['id']).first()
+        workout = db.query(models.Workout).filter(models.Workout.google_event_id == event_id).first()
         if not workout:
             workout = models.Workout(
                 user_id=current_user.id,
-                google_event_id=event['id'],
+                google_event_id=event_id,
                 start_time=start_dt,
                 end_time=end_dt,
                 title=event.get('summary', 'Workout')
@@ -449,5 +504,22 @@ def sync_all_from_calendar(
         if sets_added > 0:
             processed_count += 1
 
+    # Cleanup: Delete local workouts that were deleted from Google Calendar
+    # Only check workouts that have a google_event_id and are within the sync time range
+    local_workouts = db.query(models.Workout).filter(
+        models.Workout.user_id == current_user.id,
+        models.Workout.google_event_id != None,
+        models.Workout.start_time >= time_min_dt
+    ).all()
+    
+    deleted_count = 0
+    for lw in local_workouts:
+        if lw.google_event_id not in calendar_event_ids:
+            db.delete(lw)
+            deleted_count += 1
+    
     db.commit()
-    return {"message": f"Successfully synced {processed_count} workouts from Google Calendar"}
+    msg = f"Successfully synced {processed_count} workouts from Google Calendar"
+    if deleted_count > 0:
+        msg += f" (deleted {deleted_count} orphaned workouts)"
+    return {"message": msg}

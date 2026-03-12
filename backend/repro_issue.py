@@ -1,16 +1,45 @@
-from app.calendar_utils import parse_calendar_description
+import sys
+import os
+
+# Mock models and objects
+class MockMuscle:
+    def __init__(self, name):
+        self.name = name
+
+class MockExercise:
+    def __init__(self, name, muscle_name):
+        self.name = name
+        self.muscle = MockMuscle(muscle_name)
+
+class MockWorkout:
+    def __init__(self, title, exercise_sets):
+        self.title = title
+        self.exercise_sets = exercise_sets
+
+# Mock the calendar_utils.py imports and environment if needed
+# But we can just import the function if we fix the path
+
+sys.path.append(os.path.join(os.getcwd(), 'backend'))
+from app import calendar_utils
 
 def test_repro():
-    description = """[GymHub]
-✅Biceps - Mancuernas 10-12'5kg
-"""
-    muscle_map = {"biceps": "b-id"}
-    result = parse_calendar_description(description, muscle_map)
-    sets = result["sets"]
+    print("Testing KeyError reproduction...")
     
-    print(f"Total sets found: {len(sets)}")
-    for i, s in enumerate(sets):
-        print(f"Set {i+1}: Muscle: {s['muscle_name']}, Exercise: {s['exercise_name']}, Value: {s['value']}, Unit: {s['measurement']}")
+    # Workout with "pierna" in title but NO sets
+    workout = MockWorkout(title="Pierna Workout", exercise_sets=[])
+    
+    # This should trigger the "if 'pierna' in workout.title.lower()" block
+    # then if all_exercises_by_muscle is empty or missing 'pierna' sub-muscles,
+    # it will fall back to session_sets_by_muscle[m_name]
+    
+    try:
+        description = calendar_utils.generate_calendar_description(workout, fitbit_data=None, all_exercises_by_muscle={})
+        print("Description generated successfully (unexpected if bug exists):")
+        print(description)
+    except KeyError as e:
+        print(f"Caught expected KeyError: {e}")
+    except Exception as e:
+        print(f"Caught unexpected Exception: {type(e).__name__}: {e}")
 
 if __name__ == "__main__":
     test_repro()

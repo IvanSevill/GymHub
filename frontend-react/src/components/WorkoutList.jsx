@@ -90,6 +90,11 @@ const WorkoutList = () => {
               >
                 <div className="workout-info">
                   <h3>{workout.title || 'Untitled Workout'}</h3>
+                  {(() => {
+                    const isCardio = workout.exercise_sets.length === 0 && workout.fitbit_data;
+                    if (isCardio) return <span className="cardio-label">Cardio Session</span>;
+                    return null;
+                  })()}
                   <div className="meta">
                     <div className="meta-item">
                       <Calendar size={14} />
@@ -103,12 +108,26 @@ const WorkoutList = () => {
                 </div>
 
                 <div className="workout-stats">
-                  {workout.exercise_sets.length > 0 && (
-                    <div className="stat">
-                      <Activity size={16} />
-                      <span>{workout.exercise_sets.length} Sets</span>
-                    </div>
-                  )}
+                  {(() => {
+                    const isCardio = workout.exercise_sets.length === 0 && workout.fitbit_data;
+                    if (isCardio) {
+                      return (
+                        <div className="stat cardio">
+                          <Clock size={16} />
+                          <span>{(workout.fitbit_data.duration_ms / 60000).toFixed(0)} min</span>
+                        </div>
+                      );
+                    }
+                    if (workout.exercise_sets.length > 0) {
+                      return (
+                        <div className="stat">
+                          <Activity size={16} />
+                          <span>{workout.exercise_sets.length} Sets</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   {workout.fitbit_data && (
                     <div className="fitbit-badge">
                       <Activity size={14} />

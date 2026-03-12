@@ -517,8 +517,8 @@ const CalendarPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         <header className="lg:col-span-12 flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-4xl font-black text-white tracking-tight">Registro de Rendimiento</h2>
-            <p className="text-slate-500 font-medium">Sigue tu consistencia y planificación</p>
+            <h2 className="text-3xl font-black text-white tracking-tight">Registro de Rendimiento</h2>
+            <p className="text-slate-500 font-medium text-sm">Sigue tu consistencia y planificación</p>
           </div>
           <div className="flex gap-4">
             <button onClick={() => fetchWorkouts(true)} className="w-12 h-12 glass-card flex items-center justify-center text-slate-400 hover:text-primary transition-all"><Activity size={20} /></button>
@@ -528,7 +528,7 @@ const CalendarPage = () => {
 
         <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           <div className="lg:col-span-8 animate-in">
-            <div className="glass-card p-4 md:p-10 relative overflow-hidden min-h-[500px]">
+            <div className="glass-card !p-6 relative overflow-hidden min-h-[450px]">
               <motion.div 
                 animate={{ 
                   scale: [1, 1.2, 1],
@@ -548,7 +548,27 @@ const CalendarPage = () => {
                 className="absolute bottom-0 left-0 w-96 h-96 bg-secondary/20 blur-[120px] -ml-48 -mb-48 rounded-full" 
               />
               <div className="relative z-10 w-full">
-                <Calendar onChange={setDate} value={date} tileContent={({ date: cellDate, view }) => view === 'month' && workouts.some(w => isSameDay(new Date(w.start_time), cellDate)) ? <div className="calendar-workout-indicator" /> : null} />
+                <Calendar 
+                  onChange={setDate} 
+                  value={date} 
+                  tileContent={({ date: cellDate, view }) => {
+                    if (view !== 'month') return null;
+                    const dayWorkouts = workouts.filter(w => isSameDay(new Date(w.start_time), cellDate));
+                    if (dayWorkouts.length === 0) return null;
+
+                    const hasLifting = dayWorkouts.some(w => w.exercise_sets.length > 0);
+                    const hasCardio = dayWorkouts.some(w => w.exercise_sets.length === 0 && w.fitbit_data);
+                    const hasFuture = dayWorkouts.some(w => new Date(w.start_time) > new Date());
+
+                    return (
+                      <div className="calendar-indicators-container">
+                        {hasLifting && <div className={`indicator lifting ${hasFuture ? 'planned' : ''}`}><Dumbbell size={6} /></div>}
+                        {hasCardio && <div className={`indicator cardio ${hasFuture ? 'planned' : ''}`}><Activity size={6} /></div>}
+                        {!hasLifting && !hasCardio && hasFuture && <div className="indicator planned"><Clock size={6} /></div>}
+                      </div>
+                    );
+                  }} 
+                />
               </div>
             </div>
           </div>
@@ -556,23 +576,38 @@ const CalendarPage = () => {
           <div className="lg:col-span-4 space-y-6">
             <div className="glass-card p-8 border-primary/10 h-full">
               <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-lg shadow-primary/5"><CalendarIcon size={28} /></div>
+                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary shadow-lg shadow-primary/5"><CalendarIcon size={24} /></div>
                 <div>
-                  <h3 className="text-2xl font-black text-white tracking-tight capitalize">{format(date, 'EEEE', { locale: undefined })}</h3>
-                  <p className="text-primary font-black uppercase text-[10px] tracking-widest">{format(date, 'dd MMMM, yyyy')}</p>
+                  <h3 className="text-xl font-black text-white tracking-tight capitalize">{format(date, 'EEEE', { locale: undefined })}</h3>
+                  <p className="text-primary font-black uppercase text-[9px] tracking-widest">{format(date, 'dd MMMM, yyyy')}</p>
                 </div>
               </div>
               <div className="space-y-4">
                 {workoutsOnSelectedDay.length > 0 ? (
                   workoutsOnSelectedDay.map(w => (
                     <div key={w.id} onClick={() => setSelectedWorkout(w)} className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-3xl p-6 cursor-pointer transition-all group active:scale-95">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-black text-white text-lg group-hover:text-primary transition-colors">{w.title || 'Entrenamiento'}</h4>
-                        <ChevronRight size={20} className="text-slate-600 group-hover:text-primary transition-all" />
+                      <div className="flex flex-col gap-2">
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-black text-white text-base group-hover:text-primary transition-colors">{w.title || 'Entrenamiento'}</h4>
+                          <ChevronRight size={18} className="text-slate-600 group-hover:text-primary transition-all" />
+                        </div>
+                        {(() => {
+                          const isCardio = w.exercise_sets.length === 0 && w.fitbit_data;
+                          if (isCardio) return <span className="px-2 py-0.5 bg-accent/20 text-accent rounded text-[8px] font-black uppercase w-fit">Sesión de Cardio</span>;
+                          return null;
+                        })()}
                       </div>
-                      <div className="flex items-center gap-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                        <Clock size={14} className="text-primary" />
-                        {format(new Date(w.start_time), 'HH:mm')}
+                      <div className="flex items-center gap-6 mt-4">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                          <Clock size={14} className="text-primary" />
+                          {format(new Date(w.start_time), 'HH:mm')}
+                        </div>
+                        {w.fitbit_data && (
+                          <div className="flex items-center gap-2 text-xs font-bold text-accent uppercase tracking-widest">
+                            <Activity size={14} />
+                            {(w.fitbit_data.duration_ms / 60000).toFixed(0)} min
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))

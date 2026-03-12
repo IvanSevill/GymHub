@@ -27,11 +27,11 @@ const WorkoutCard = ({ workout, onClick }) => {
     <motion.div 
       layout
       onClick={onClick}
-      className="glass-card p-5 hover:border-primary/30 transition-all group cursor-pointer"
+      className="glass-card !p-4 hover:border-primary/30 transition-all group cursor-pointer"
     >
       <div className="flex justify-between items-start mb-4">
         <div>
-          <h3 className="text-xl font-bold text-white group-hover:text-primary transition-colors">
+          <h3 className="text-lg font-bold text-white group-hover:text-primary transition-colors">
             {workout.title || 'Entrenamiento sin título'}
           </h3>
           <div className="flex items-center gap-3 mt-1 text-slate-400 text-sm font-medium">
@@ -247,7 +247,7 @@ const Dashboard = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-black text-white">Entrenamientos Recientes</h2>
+            <h2 className="text-2xl font-black text-white">Entrenamientos Recientes</h2>
             <div className="bg-primary/10 text-primary px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider">
               {filteredWorkouts.length} Resultados
             </div>
@@ -321,7 +321,7 @@ const Dashboard = () => {
                 <div className="w-2 h-2 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]" />
                 <h2 className="text-xl font-black text-white uppercase tracking-widest">Próximos / Hoy</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-6">
                 {upcomingWorkouts.map(w => (
                   <WorkoutCard key={w.id} workout={w} onClick={() => setSelectedWorkout(w)} />
                 ))}
@@ -337,7 +337,7 @@ const Dashboard = () => {
             </div>
             
             {pastWorkouts.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 gap-5">
                 {pastWorkouts.map(w => (
                   <WorkoutCard key={w.id} workout={w} onClick={() => setSelectedWorkout(w)} />
                 ))}

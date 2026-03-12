@@ -40,7 +40,25 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens):
         # Handle error or log
         return None
 
+def extract_azm(activity_data: dict) -> dict:
+    """
+    Extracts Active Zone Minutes from Fitbit activity data.
+    Handles both flat and nested structures.
+    """
+    azm = activity_data.get("activeZoneMinutes", {})
+    
+    # If it's a list or doesn't have the expected keys, try flat structure
+    if not isinstance(azm, dict) or not any(k in azm for k in ["fatBurnMinutes", "cardioMinutes", "peakMinutes"]):
+        return {
+            "fatBurnMinutes": activity_data.get("fatBurnMinutes", 0),
+            "cardioMinutes": activity_data.get("cardioMinutes", 0),
+            "peakMinutes": activity_data.get("peakMinutes", 0)
+        }
+    
+    return azm
+
 def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time: datetime, end_time: datetime):
+
     """
     Finds a Fitbit activity within a time range, handles token refresh.
     """

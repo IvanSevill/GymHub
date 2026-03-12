@@ -14,6 +14,10 @@ export default {
         accent: '#10b981',
         danger: '#ef4444',
       },
+      screens: {
+        '3xl': '1800px',
+        '4xl': '2100px',
+      },
     },
   },
   plugins: [],

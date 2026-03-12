@@ -35,10 +35,10 @@ const Navigation = () => {
   return (
     <>
       {/* Desktop Side Navigation */}
-      <nav className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-72 glass-card rounded-l-none border-y-0 border-l-0 z-[60] p-8">
-        <div className="flex items-center gap-4 mb-12">
-          <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
-            <LayoutDashboard size={28} />
+      <nav className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 glass-card rounded-l-none border-y-0 border-l-0 z-[60] p-6">
+        <div className="flex items-center gap-4 mb-10">
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
+            <LayoutDashboard size={24} />
           </div>
           <div>
             <h1 className="text-xl font-black text-white tracking-widest">GymHub</h1>
@@ -156,8 +156,8 @@ const AppContent = () => {
     <div className="flex min-h-screen">
       <Navigation />
 
-      <main className="flex-1 lg:ml-72 flex flex-col min-h-screen">
-        <div className="flex-1 p-6 md:p-12 lg:p-16">
+      <main className="flex-1 lg:ml-64 flex flex-col min-h-screen">
+        <div className="flex-1 w-full max-w-[2400px] mx-auto p-6 md:p-10 lg:p-12">
           <SyncHandler />
           <Routes>
             <Route path="/" element={<Dashboard />} />

@@ -11,37 +11,39 @@ def seed():
         
         exercises = [
             # Pecho
-            {"name": "Press de Banca", "muscle": "pecho"},
-            {"name": "Press Inclinado", "muscle": "pecho"},
-            {"name": "Aperturas con Mancuernas", "muscle": "pecho"},
+            {"name": "press de banca", "muscle": "pecho"},
+            {"name": "press inclinado", "muscle": "pecho"},
+            {"name": "aperturas con mancuernas", "muscle": "pecho"},
             # Hombro
-            {"name": "Press Militar", "muscle": "hombro"},
-            {"name": "Elevaciones Laterales", "muscle": "hombro"},
-            {"name": "Pájaros", "muscle": "hombro"},
+            {"name": "press militar", "muscle": "hombro"},
+            {"name": "elevaciones laterales", "muscle": "hombro"},
+            {"name": "pájaros", "muscle": "hombro"},
             # Triceps
-            {"name": "Extensión de Triceps", "muscle": "triceps"},
-            {"name": "Press Francés", "muscle": "triceps"},
-            {"name": "Fondos", "muscle": "triceps"},
+            {"name": "extensión de triceps", "muscle": "triceps"},
+            {"name": "press francés", "muscle": "triceps"},
+            {"name": "fondos", "muscle": "triceps"},
             # Biceps
-            {"name": "Curl de Biceps", "muscle": "biceps"},
-            {"name": "Curl Martillo", "muscle": "biceps"},
-            {"name": "Curl Concentrado", "muscle": "biceps"},
+            {"name": "curl de biceps", "muscle": "biceps"},
+            {"name": "curl martillo", "muscle": "biceps"},
+            {"name": "curl concentrado", "muscle": "biceps"},
             # Espalda
-            {"name": "Dominadas", "muscle": "espalda"},
-            {"name": "Remo con Barra", "muscle": "espalda"},
-            {"name": "Jalón al Pecho", "muscle": "espalda"},
+            {"name": "dominadas", "muscle": "espalda"},
+            {"name": "remo con barra", "muscle": "espalda"},
+            {"name": "jalón al pecho", "muscle": "espalda"},
             # Abdominales
-            {"name": "Crunch Abdominal", "muscle": "abdominales"},
-            {"name": "Plancha", "muscle": "abdominales"},
-            {"name": "Elevación de Piernas", "muscle": "abdominales"},
+            {"name": "crunch abdominal", "muscle": "abdominales"},
+            {"name": "plancha", "muscle": "abdominales"},
+            {"name": "elevación de piernas", "muscle": "abdominales"},
             # Pierna
-            {"name": "Sentadillas", "muscle": "cuadriceps"},
-            {"name": "Prensa", "muscle": "cuadriceps"},
-            {"name": "Peso Muerto Rumano", "muscle": "femoral"},
-            {"name": "Curl Femoral", "muscle": "femoral"},
-            {"name": "Extensiones de Cuadriceps", "muscle": "cuadriceps"},
-            {"name": "Elevación de Gemelos", "muscle": "gemelos"},
-            {"name": "Hip Thrust", "muscle": "gluteos"},
+            {"name": "sentadillas", "muscle": "cuadriceps"},
+            {"name": "prensa", "muscle": "cuadriceps"},
+            {"name": "peso muerto rumano", "muscle": "femoral"},
+            {"name": "curl femoral", "muscle": "femoral"},
+            {"name": "extensiones de cuadriceps", "muscle": "cuadriceps"},
+            {"name": "elevación de gemelos", "muscle": "gemelos"},
+            {"name": "hip thrust", "muscle": "gluteos"},
+            # Cardio
+            {"name": "cardio", "muscle": "cardio"},
         ]
 
         for e_data in exercises:

@@ -68,14 +68,16 @@ def parse_calendar_description(description: str, muscle_map: Dict[str, str]) -> 
         # Try to extract weight/value from the end of the rest string
         # Match pattern like "Exercise Name 50-55kg" or just "Exercise Name"
         # We look for a pattern of numbers followed by optional units at the end
-        weight_match = re.search(r"\s+([\d\-\.\,']+)\s*([a-zA-Z]*)$", rest)
+        # UPDATED: More robust pattern to handle trailing dashes or spaces
+        weight_match = re.search(r"\s+([\d\-\.\,']+)\s*([a-zA-Z]*)\s*[-]*$", rest)
         
         if weight_match:
-            exercise_name = rest[:weight_match.start()].strip()
+            exercise_name = rest[:weight_match.start()].strip().lower()
             values_str = weight_match.group(1).strip()
             unit = weight_match.group(2).strip() or "kg"
         else:
-            exercise_name = rest
+            # Clean up the exercise name if no weight match
+            exercise_name = rest.strip().lower().rstrip("- ").strip()
             values_str = "0"
             unit = "kg"
 
@@ -104,7 +106,7 @@ def generate_calendar_description(workout: models.Workout, fitbit_data: Optional
     Generates the Google Calendar event description from a Workout object.
     all_exercises_by_muscle: {muscle_name: [Exercise, ...]}
     """
-    description = "[GymHub]\n"
+    description = "[Gimnasio]\n"
     
     # Group sets by muscle for easy lookup
     session_sets_by_muscle = {}
@@ -122,8 +124,15 @@ def generate_calendar_description(workout: models.Workout, fitbit_data: Optional
             session_sets_by_muscle[m_name][e_name] = []
         session_sets_by_muscle[m_name][e_name].append(es)
     
-    # Sort muscles (only those involved in the workout)
-    sorted_muscles = sorted(session_sets_by_muscle.keys())
+    # Determine muscles to show
+    involved_muscles = set(session_sets_by_muscle.keys())
+    
+    # If "Pierna" is in title, include ALL leg muscles even if no sets recorded
+    if workout.title and "pierna" in workout.title.lower():
+        involved_muscles.update([m.capitalize() for m in PIERNA_MUSCLES])
+    
+    # Sort muscles
+    sorted_muscles = sorted(list(involved_muscles))
     
     for m_name in sorted_muscles:
         # Get all catalog exercises for this muscle
@@ -135,13 +144,13 @@ def generate_calendar_description(workout: models.Workout, fitbit_data: Optional
         
         # If catalog is empty for some reason, fallback to session exercises
         if not sorted_catalog_names:
-            sorted_catalog_names = sorted(session_sets_by_muscle[m_name].keys())
+            sorted_catalog_names = sorted(session_sets_by_muscle.get(m_name, {}).keys())
 
         for e_name in sorted_catalog_names:
-            session_sets = session_sets_by_muscle[m_name].get(e_name, [])
+            session_sets = session_sets_by_muscle.get(m_name, {}).get(e_name, [])
             is_completed = any(s.is_completed for s in session_sets)
             
-            line_text = f"{m_name.capitalize()} - {e_name}"
+            line_text = f"{m_name.capitalize()} - {e_name.lower()}"
             
             if session_sets:
                 # Group values by measurement
@@ -153,17 +162,16 @@ def generate_calendar_description(workout: models.Workout, fitbit_data: Optional
                 # Append weights if any
                 weights_parts = []
                 for meas, vals in by_measure.items():
-                    vals_str = "-".join(v for v in vals if v)
-                    if vals_str:
+                    # Only include values that are not "0" or "0.0"
+                    valid_vals = [v for v in vals if v and v not in ["0", "0.0", "0,0"]]
+                    if valid_vals:
+                        vals_str = "-".join(valid_vals)
                         weights_parts.append(f"{vals_str}{meas}")
                 
                 if weights_parts:
                     line_text += f" {' '.join(weights_parts)}"
 
-            if is_completed:
-                description += f"✅ {line_text}\n"
-            else:
-                description += f"{line_text}\n"
+            description += f"{line_text}\n"
         
         description += "\n" # Blank line between muscle groups
 

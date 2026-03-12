@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 from .database import engine, Base
 from . import models
@@ -33,11 +34,19 @@ async def global_exception_handler(request, exc):
     import traceback
     print("GLOBAL EXCEPTION CAUGHT:")
     traceback.print_exc()
+    
+    # Ensure CORS headers are present even on error
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin in origins:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error", "traceback": str(exc)},
+        headers=headers
     )
-from fastapi.responses import JSONResponse
 
 # Include routers
 app.include_router(auth_routes.router)

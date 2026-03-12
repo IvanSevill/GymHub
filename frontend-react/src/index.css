@@ -8,6 +8,8 @@
   --color-accent: #10b981;
   --accent-rgb: 16, 185, 129;
   --color-danger: #ef4444;
+  --breakpoint-3xl: 1800px;
+  --breakpoint-4xl: 2100px;
 }
 
 @layer base {
@@ -16,7 +18,7 @@
   }
 
   ::-webkit-scrollbar {
-    @apply w-1.5;
+    @apply w-1;
   }
 
   ::-webkit-scrollbar-track {
@@ -30,7 +32,7 @@
 
 @layer components {
   .glass-card {
-    @apply bg-surface/50 backdrop-blur-xl border border-white/10 rounded-2xl;
+    @apply bg-surface/50 backdrop-blur-xl border border-white/10 rounded-2xl p-4 md:p-6;
   }
 
   .btn-primary {
@@ -54,11 +56,57 @@
   }
 
   .avatar-img {
-    @apply w-10 h-10 rounded-xl border border-white/10 shadow-lg object-cover;
+    @apply w-8 h-8 rounded-lg border border-white/10 shadow-lg object-cover;
   }
 
   .user-name {
     @apply text-sm tracking-tight;
+  }
+
+  /* Cardio specific */
+  .cardio-label {
+    @apply px-2 py-0.5 bg-accent/20 text-accent rounded text-[8px] font-black uppercase w-fit;
+  }
+
+  .stat.cardio {
+    @apply text-accent border-accent/20 bg-accent/5;
+  }
+
+  /* Settings Modal Refinements */
+  .calendar-item {
+    @apply flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 transition-all hover:bg-white/[0.05] active:scale-[0.98];
+  }
+
+  .calendar-item.selected {
+    @apply bg-primary/10 border-primary/30 shadow-lg shadow-primary/5;
+  }
+
+  .cal-check {
+    @apply w-5 h-5 rounded-lg border-2 border-white/10 flex items-center justify-center transition-all;
+  }
+
+  .cal-check.active {
+    @apply bg-primary border-primary shadow-lg shadow-primary/20;
+  }
+
+  .tag.selected-tag {
+    @apply bg-primary text-white ml-auto;
+  }
+
+  .profile-avatar-large {
+    @apply w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-3xl font-black text-white shadow-2xl;
+  }
+
+  .badge-row {
+    @apply flex flex-wrap gap-2 mt-2;
+  }
+
+  .admin-badge {
+    @apply px-2 py-1 bg-danger/20 text-danger rounded-lg text-[10px] font-black uppercase flex items-center gap-1;
+  }
+
+  .email-label {
+    @apply px-2 py-1 bg-white/5 text-slate-500 rounded-lg text-[10px] font-black uppercase flex items-center gap-1;
   }
 }
 
@@ -187,24 +235,65 @@
 }
 
 /* Indicators for workout days */
-.calendar-workout-indicator {
-  position: absolute;
-  bottom: 8px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.8);
+.calendar-indicators-container {
+  @apply absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 items-center justify-center;
+  bottom: 8px !important;
+}
+
+.indicator {
+  @apply w-3 h-3 rounded-full flex items-center justify-center transition-all duration-300;
+  width: 12px !important;
+  height: 12px !important;
+  font-size: 6px;
+}
+
+.indicator.lifting {
+  @apply bg-primary text-white;
+  background-color: var(--color-primary) !important;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.6) !important;
+}
+
+.indicator.cardio {
+  @apply bg-accent text-white;
+  background-color: var(--color-accent) !important;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6) !important;
+}
+
+.indicator.planned {
+  @apply bg-transparent border border-white/40 shadow-none;
+  background-color: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+
+.indicator.lifting.planned {
+  @apply border-primary/60 text-primary;
+  border-color: rgba(99, 102, 241, 0.6) !important;
+  color: var(--color-primary) !important;
+}
+
+.indicator.cardio.planned {
+  @apply border-accent/60 text-accent;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+  color: var(--color-accent) !important;
 }
 
 .calendar-workout-glow {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
-  pointer-events: none;
+  @apply absolute inset-2 rounded-2xl bg-primary/5 blur-md pointer-events-none;
 }
 
-.react-calendar__tile--active .calendar-workout-indicator {
-  background: white;
-  box-shadow: 0 0 10px white;
+.react-calendar__tile--active .indicator {
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  box-shadow: none !important;
+}
+
+.react-calendar__tile--active .indicator.lifting {
+  @apply bg-white text-primary;
+  background-color: white !important;
+  color: var(--color-primary) !important;
+}
+
+.react-calendar__tile--active .indicator.cardio {
+  @apply bg-white text-accent;
+  background-color: white !important;
+  color: var(--color-accent) !important;
 }

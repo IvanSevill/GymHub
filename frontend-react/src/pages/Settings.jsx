@@ -69,12 +69,43 @@ const Settings = () => {
   const [loadingFitbit, setLoadingFitbit] = useState(false);
   const [muscles, setMuscles] = useState([]);
   const [isNewExerciseOpen, setIsNewExerciseOpen] = useState(false);
+  
+  const [calendars, setCalendars] = useState([]);
+  const [loadingCalendars, setLoadingCalendars] = useState(false);
+  const [updatingCalendar, setUpdatingCalendar] = useState(false);
 
   useEffect(() => {
     if (user?.is_root) {
       exerciseApi.getMuscles().then(res => setMuscles(res.data));
     }
+    fetchCalendars();
   }, [user]);
+
+  const fetchCalendars = async () => {
+    setLoadingCalendars(true);
+    try {
+      const res = await workoutApi.getCalendars();
+      setCalendars(res.data);
+    } catch (err) {
+      console.error("Failed to fetch calendars", err);
+    } finally {
+      setLoadingCalendars(false);
+    }
+  };
+
+  const handleSetCalendar = async (calendarId) => {
+    setUpdatingCalendar(true);
+    const tid = toast.loading("Actualizando calendario...");
+    try {
+      await workoutApi.setCalendar(calendarId);
+      toast.success("Calendario actualizado", { id: tid });
+      fetchCalendars(); // Refresh selection
+    } catch (err) {
+      toast.error("Error al actualizar calendario", { id: tid });
+    } finally {
+      setUpdatingCalendar(false);
+    }
+  };
 
   const handleFitbitConnect = async () => {
     setLoadingFitbit(true);
@@ -96,7 +127,7 @@ const Settings = () => {
       updateFitbitStatus(false);
       toast.success("Fitbit desconectado", { id: tid });
     } catch (err) {
-      toast.error("Error al desconectar", { id: tid });
+      toast.error("Error al conectar", { id: tid });
     }
   };
 
@@ -155,8 +186,56 @@ const Settings = () => {
           </div>
         </motion.div>
 
-        {/* Fitbit Integration */}
+        {/* Google Calendar Selection */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="lg:col-span-6 glass-card p-10">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary border border-primary/20">
+              <Plus size={24} />
+            </div>
+            <div>
+              <h3 className="font-black text-white text-lg tracking-tight">Google Calendar</h3>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sincronización de Entrenamientos</p>
+            </div>
+          </div>
+          
+          <p className="text-slate-400 text-sm mb-10 leading-relaxed font-medium">
+            Selecciona el calendario donde se guardarán tus sesiones. Solo los eventos de este calendario se sincronizarán con GymHub.
+          </p>
+
+          <div className="space-y-3">
+            {loadingCalendars ? (
+              <div className="flex justify-center p-4">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : calendars.length > 0 ? (
+              calendars.map(cal => (
+                <button
+                  key={cal.id}
+                  onClick={() => handleSetCalendar(cal.id)}
+                  disabled={updatingCalendar}
+                  className={`w-full p-4 rounded-2xl border transition-all flex items-center justify-between group ${
+                    cal.selected 
+                      ? 'bg-primary/10 border-primary/30 text-white shadow-[0_0_20px_rgba(59,130,246,0.1)]' 
+                      : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${cal.selected ? 'bg-primary animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]' : 'bg-slate-700'}`} />
+                    <span className="font-black text-[11px] uppercase tracking-widest truncate">{cal.summary}</span>
+                  </div>
+                  {cal.selected && <Check size={16} className="text-primary" strokeWidth={3} />}
+                </button>
+              ))
+            ) : (
+              <div className="text-center p-6 border border-dashed border-white/10 rounded-3xl">
+                <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">No se detectaron calendarios</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Fitbit Integration */}
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-6 glass-card p-10">
           <div className="flex items-center gap-4 mb-8">
             <div className="w-12 h-12 bg-accent/10 rounded-2xl flex items-center justify-center text-accent border border-accent/20">
               <Activity size={24} />
@@ -198,7 +277,7 @@ const Settings = () => {
 
         {/* Admin Panel */}
         {user?.is_root === 1 && (
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-6 glass-card p-10 bg-gradient-to-br from-white/[0.03] to-transparent">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-12 glass-card p-10 bg-gradient-to-br from-white/[0.03] to-transparent">
             <div className="flex items-center gap-4 mb-8">
               <div className="w-12 h-12 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary border border-secondary/20">
                 <Shield size={24} />
@@ -209,7 +288,7 @@ const Settings = () => {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <button 
                 onClick={async () => {
                   const res = await adminApi.exportMock();
@@ -233,38 +312,38 @@ const Settings = () => {
                 <Plus size={24} strokeWidth={3} />
                 <span className="text-[10px] font-black uppercase tracking-widest text-white">Nuevo Ejercicio</span>
               </button>
-            </div>
 
-            <div className="mt-6">
-               <input 
-                 type="file" 
-                 id="import-catalog" 
-                 className="hidden" 
-                 accept=".json"
-                 onChange={async (e) => {
-                   const file = e.target.files?.[0];
-                   if (!file) return;
-                   const reader = new FileReader();
-                   reader.onload = async (event) => {
-                     const tid = toast.loading("Importando catálogo...");
-                     try {
-                        const data = JSON.parse(event.target.result);
-                        await adminApi.importMock(data);
-                        toast.success("Catálogo importado con éxito", { id: tid });
-                     } catch (err) {
-                        toast.error("JSON inválido o error en la importación", { id: tid });
-                     }
-                   };
-                   reader.readAsText(file);
-                 }}
-               />
-               <button 
-                onClick={() => document.getElementById('import-catalog').click()}
-                className="w-full p-4 bg-white/5 border border-white/5 rounded-2xl text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-white/10 transition-colors"
-               >
-                 <Upload size={16} />
-                 Importar JSON Mock
-               </button>
+              <div className="relative group">
+                <input 
+                  type="file" 
+                  id="import-catalog" 
+                  className="hidden" 
+                  accept=".json"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                      const tid = toast.loading("Importando catálogo...");
+                      try {
+                          const data = JSON.parse(event.target.result);
+                          await adminApi.importMock(data);
+                          toast.success("Catálogo importado con éxito", { id: tid });
+                      } catch (err) {
+                          toast.error("JSON inválido o error en la importación", { id: tid });
+                      }
+                    };
+                    reader.readAsText(file);
+                  }}
+                />
+                <button 
+                  onClick={() => document.getElementById('import-catalog').click()}
+                  className="w-full h-full p-4 bg-white/5 border border-white/5 rounded-3xl text-[10px] font-black text-slate-500 uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-white/10 transition-colors border-dashed"
+                >
+                  <Upload size={24} />
+                  Importar JSON Mock
+                </button>
+              </div>
             </div>
           </motion.div>
         )}

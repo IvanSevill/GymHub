@@ -60,8 +60,8 @@ const MaxLifts = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h2 className="text-4xl font-black text-white tracking-tight">Mis Máximos</h2>
-          <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">Tus récords personales y marcas históricas</p>
+          <h2 className="text-3xl font-black text-white tracking-tight">Mis Máximos</h2>
+          <p className="text-slate-500 font-bold uppercase text-[9px] tracking-[0.3em] mt-1.5">Tus récords personales y marcas históricas</p>
         </div>
         
         <div className="relative group">
@@ -70,10 +70,10 @@ const MaxLifts = () => {
           </div>
           <input 
             type="text" 
-            placeholder="BUSCAR EJERCICIO O MÚSCULO..."
+            placeholder="BUSCAR..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-4 text-xs font-black text-white outline-none focus:border-primary/50 focus:bg-white/[0.08] transition-all min-w-[300px] uppercase tracking-widest placeholder:text-slate-600"
+            className="bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 py-3.5 text-xs font-black text-white outline-none focus:border-primary/50 focus:bg-white/[0.08] transition-all min-w-[250px] uppercase tracking-widest placeholder:text-slate-600"
           />
         </div>
       </div>
@@ -106,13 +106,13 @@ const MaxLifts = () => {
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5 4xl:grid-cols-6 gap-5">
                 {lifts.map((lift) => (
                   <motion.div 
                     key={lift.exercise_id}
                     whileHover={{ scale: 1.02, translateY: -5 }}
                     onClick={() => fetchHistory(lift.exercise_id, lift.exercise_name)}
-                    className="glass-card p-6 cursor-pointer group hover:border-primary/30 transition-all border-white/5 bg-white/[0.02]"
+                    className="glass-card !p-5 cursor-pointer group hover:border-primary/30 transition-all border-white/5 bg-white/[0.02]"
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all">
@@ -123,9 +123,9 @@ const MaxLifts = () => {
                     
                     <h4 className="text-lg font-black text-white mb-1 group-hover:text-primary transition-colors">{lift.exercise_name}</h4>
                     
-                    <div className="flex items-baseline gap-2 mt-4">
-                      <span className="text-4xl font-black text-white tracking-tighter">{lift.max_value}</span>
-                      <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{lift.measurement}</span>
+                    <div className="flex items-baseline gap-2 mt-3">
+                      <span className="text-3xl font-black text-white tracking-tighter">{lift.max_value}</span>
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{lift.measurement}</span>
                     </div>
 
                     <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
