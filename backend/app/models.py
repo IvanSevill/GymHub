@@ -68,6 +68,7 @@ class ExerciseSet(Base):
     exercise_id = Column(String, ForeignKey("exercises.id"))
     value = Column(String) # e.g., "45-40" or "45"
     measurement = Column(String) # e.g., "kg", "rep", "s"
+    is_completed = Column(Boolean, default=False)
 
     workout = relationship("Workout", back_populates="exercise_sets")
     exercise = relationship("Exercise", back_populates="sets")

@@ -1,15 +1,22 @@
 import React from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Dumbbell } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const LoginPage = () => {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (user) navigate('/');
+  }, [user, navigate]);
 
   const handleGoogleLogin = useGoogleLogin({
     onSuccess: async (codeResponse) => {
-      await login(codeResponse.code);
+      const success = await login(codeResponse.code);
+      if (success) navigate('/');
     },
     flow: 'auth-code',
   });
@@ -30,7 +37,7 @@ const LoginPage = () => {
         </div>
 
         <h1 className="text-4xl font-black text-white mb-2 tracking-tight">GymHub</h1>
-        <p className="text-slate-400 mb-10 font-medium">Your personal workout tracker & calendar sync</p>
+        <p className="text-slate-400 mb-10 font-medium">Tu rastreador de entrenamientos personal sincronizado con tu calendario</p>
 
         <button 
           onClick={() => handleGoogleLogin()}
@@ -41,12 +48,12 @@ const LoginPage = () => {
             alt="Google" 
             className="w-6 h-6"
           />
-          Sign in with Google
+          Iniciar sesión con Google
         </button>
 
         <div className="mt-10 pt-8 border-t border-white/5">
           <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">
-            Powered by Google Calendar & Fitbit
+            Impulsado por Google Calendar & Fitbit
           </p>
         </div>
       </motion.div>

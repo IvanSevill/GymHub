@@ -4,107 +4,177 @@ from . import models
 
 PIERNA_MUSCLES = ["gluteos", "femoral", "cuadriceps", "gemelos"]
 
-def parse_calendar_description(description: str, muscle_map: Dict[str, str]) -> List[Dict]:
+def parse_calendar_description(description: str, muscle_map: Dict[str, str]) -> Dict:
     """
-    Parses the Google Calendar event description and returns a list of exercise sets.
-    muscle_map: maps lowercase muscle names to their IDs.
+    Parses the Google Calendar event description and returns sets and fitbit data.
     """
-    if not description or "[GymHub]" not in description:
-        return []
+    if not description:
+        return {"sets": [], "fitbit": None}
 
     lines = description.split("\n")
     exercise_sets = []
+    fitbit_data = None
     
-    # Remove metadata blocks for parsing exercises
+    # Check for Fitbit Metrics
     if "[Fitbit Metrics]" in description:
-        lines = description.split("[Fitbit Metrics]")[0].split("\n")
+        try:
+            fitbit_part = description.split("[Fitbit Metrics]")[1]
+            fitbit_data = {}
+            
+            cal_match = re.search(r"Calorias:\s*(\d+)", fitbit_part, re.I)
+            if cal_match: fitbit_data["calories"] = int(cal_match.group(1))
+            
+            hr_match = re.search(r"FC Media:\s*(\d+)", fitbit_part, re.I)
+            if hr_match: fitbit_data["heart_rate_avg"] = int(hr_match.group(1))
+            
+            dur_match = re.search(r"Duracion:\s*(\d+)", fitbit_part, re.I)
+            if dur_match: fitbit_data["duration_ms"] = int(dur_match.group(1)) * 60000
+            
+            act_match = re.search(r"Actividad:\s*([^\n]+)", fitbit_part, re.I)
+            if act_match: fitbit_data["activity_name"] = act_match.group(1).strip()
+
+            azm_fat_match = re.search(r"AZM Fat Burn:\s*(\d+)", fitbit_part, re.I)
+            if azm_fat_match: fitbit_data["azm_fat_burn"] = int(azm_fat_match.group(1))
+
+            azm_cardio_match = re.search(r"AZM Cardio:\s*(\d+)", fitbit_part, re.I)
+            if azm_cardio_match: fitbit_data["azm_cardio"] = int(azm_cardio_match.group(1))
+
+            azm_peak_match = re.search(r"AZM Peak:\s*(\d+)", fitbit_part, re.I)
+            if azm_peak_match: fitbit_data["azm_peak"] = int(azm_peak_match.group(1))
+            
+            # Remove fitbit part for exercise parsing
+            lines = description.split("[Fitbit Metrics]")[0].split("\n")
+        except:
+            pass
 
     for line in lines:
         line = line.strip()
-        if not line or line == "[GymHub]":
+        if not line or "[GymHub]" in line:
             continue
         
-        is_completed = line.startswith("✅")
-        if is_completed:
-            line = line[1:].strip()
-        else:
-            # According to spec, only ✅ lines are saved in ExerciseSets
+        # Detect completion status if checkmark is present
+        is_completed = "✅" in line
+        # Strip any leading bullets or emojis if present
+        line = re.sub(r"^[✅•\-\*\s]+", "", line).strip()
+        
+        # Split by " - " to separate muscle and exercise
+        if " - " not in line:
             continue
-
-        # Pattern: Muscle - Exercise Name ValueUNIT (e.g., Biceps - Curl 45kg or 20-15kg)
-        match = re.match(r"^(.*?) - (.*?) ([\d\-\.]+)([a-zA-Z]*)$", line)
-        if match:
-            muscle_name = match.group(1).strip().lower()
-            exercise_name = match.group(2).strip()
-            values_str = match.group(3).strip()
-            unit = match.group(4).strip()
-
-            muscles_to_process = [muscle_name]
-            if muscle_name == "pierna":
-                muscles_to_process = PIERNA_MUSCLES
             
-            # Split values like 20-15
-            values = values_str.split("-")
-            
-            for m_name in muscles_to_process:
-                # We need to find the exercise ID. This function assumes the caller handles DB lookups or provides a map.
-                # For now, we return the names and the caller will resolve IDs.
-                for val in values:
-                    exercise_sets.append({
-                        "muscle_name": m_name,
-                        "exercise_name": exercise_name,
-                        "value": val,
-                        "measurement": unit
-                    })
+        parts = line.split(" - ", 1)
+        muscle_name = parts[0].strip().lower()
+        rest = parts[1].strip()
+        
+        # Try to extract weight/value from the end of the rest string
+        # Match pattern like "Exercise Name 50-55kg" or just "Exercise Name"
+        # We look for a pattern of numbers followed by optional units at the end
+        weight_match = re.search(r"\s+([\d\-\.\,']+)\s*([a-zA-Z]*)$", rest)
+        
+        if weight_match:
+            exercise_name = rest[:weight_match.start()].strip()
+            values_str = weight_match.group(1).strip()
+            unit = weight_match.group(2).strip() or "kg"
+        else:
+            exercise_name = rest
+            values_str = "0"
+            unit = "kg"
+
+        muscles_to_process = [muscle_name]
+        if muscle_name == "pierna":
+            muscles_to_process = PIERNA_MUSCLES
+        
+        # Split values like "50-55" into multiple sets
+        values = values_str.split("-")
+        
+        for m_name in muscles_to_process:
+            for val in values:
+                if not val: continue
+                exercise_sets.append({
+                    "muscle_name": m_name,
+                    "exercise_name": exercise_name,
+                    "value": val,
+                    "measurement": unit,
+                    "is_completed": is_completed
+                })
     
-    return exercise_sets
+    return {"sets": exercise_sets, "fitbit": fitbit_data}
 
-def generate_calendar_description(workout: models.Workout, fitbit_data: Optional[models.FitbitData] = None) -> str:
+def generate_calendar_description(workout: models.Workout, fitbit_data: Optional[models.FitbitData] = None, all_exercises_by_muscle: Dict[str, List[models.Exercise]] = None) -> str:
     """
     Generates the Google Calendar event description from a Workout object.
+    all_exercises_by_muscle: {muscle_name: [Exercise, ...]}
     """
     description = "[GymHub]\n"
     
-    # Group sets by muscle
-    sets_by_muscle = {}
+    # Group sets by muscle for easy lookup
+    session_sets_by_muscle = {}
     for es in workout.exercise_sets:
+        # Safety check: ensure exercise and muscle are loaded
+        if not es.exercise or not es.exercise.muscle:
+            continue
+            
         m_name = es.exercise.muscle.name
-        if m_name not in sets_by_muscle:
-            sets_by_muscle[m_name] = []
-        sets_by_muscle[m_name].append(es)
+        if m_name not in session_sets_by_muscle:
+            session_sets_by_muscle[m_name] = {}
+        
+        e_name = es.exercise.name
+        if e_name not in session_sets_by_muscle[m_name]:
+            session_sets_by_muscle[m_name][e_name] = []
+        session_sets_by_muscle[m_name][e_name].append(es)
     
-    # Sort muscles alphabetically
-    sorted_muscles = sorted(sets_by_muscle.keys())
+    # Sort muscles (only those involved in the workout)
+    sorted_muscles = sorted(session_sets_by_muscle.keys())
     
     for m_name in sorted_muscles:
-        # Group exercises within muscle
-        exercises_in_muscle = {}
-        for es in sets_by_muscle[m_name]:
-            e_name = es.exercise.name
-            if e_name not in exercises_in_muscle:
-                exercises_in_muscle[e_name] = {}
+        # Get all catalog exercises for this muscle
+        catalog_exercises = all_exercises_by_muscle.get(m_name.lower(), []) if all_exercises_by_muscle else []
+        
+        # We need to list ALL exercises from the catalog for this muscle
+        # Sort catalog exercises alphabetically
+        sorted_catalog_names = sorted([ex.name for ex in catalog_exercises])
+        
+        # If catalog is empty for some reason, fallback to session exercises
+        if not sorted_catalog_names:
+            sorted_catalog_names = sorted(session_sets_by_muscle[m_name].keys())
+
+        for e_name in sorted_catalog_names:
+            session_sets = session_sets_by_muscle[m_name].get(e_name, [])
+            is_completed = any(s.is_completed for s in session_sets)
             
-            # Group different weights/measurements for the same exercise
-            key = (es.measurement)
-            if key not in exercises_in_muscle[e_name]:
-                exercises_in_muscle[e_name][key] = []
-            exercises_in_muscle[e_name][key].append(es.value)
-        
-        # Sort exercises alphabetically
-        sorted_exercises = sorted(exercises_in_muscle.keys())
-        
-        for e_name in sorted_exercises:
-            for measurement, values in exercises_in_muscle[e_name].items():
-                values_str = "-".join(values)
-                description += f"✅{m_name.capitalize()} - {e_name} {values_str}{measurement}\n"
+            line_text = f"{m_name.capitalize()} - {e_name}"
+            
+            if session_sets:
+                # Group values by measurement
+                by_measure = {}
+                for s in session_sets:
+                    if s.measurement not in by_measure: by_measure[s.measurement] = []
+                    by_measure[s.measurement].append(s.value)
+                
+                # Append weights if any
+                weights_parts = []
+                for meas, vals in by_measure.items():
+                    vals_str = "-".join(v for v in vals if v)
+                    if vals_str:
+                        weights_parts.append(f"{vals_str}{meas}")
+                
+                if weights_parts:
+                    line_text += f" {' '.join(weights_parts)}"
+
+            if is_completed:
+                description += f"✅ {line_text}\n"
+            else:
+                description += f"{line_text}\n"
         
         description += "\n" # Blank line between muscle groups
 
     if fitbit_data:
-        description += "\n[Fitbit Metrics]\n"
+        description += "\n\n[Fitbit Metrics]\n"
         description += f"Calorias: {fitbit_data.calories} kcal\n"
         description += f"FC Media: {fitbit_data.heart_rate_avg} bpm\n"
         description += f"Duracion: {fitbit_data.duration_ms // 60000} min\n"
-        description += f"Actividad: {fitbit_data.activity_name}\n"
+        description += f"Actividad: {fitbit_data.activity_name or 'Weights'}\n"
+        description += f"AZM Fat Burn: {fitbit_data.azm_fat_burn or 0} min\n"
+        description += f"AZM Cardio: {fitbit_data.azm_cardio or 0} min\n"
+        description += f"AZM Peak: {fitbit_data.azm_peak or 0} min\n"
 
     return description.strip()

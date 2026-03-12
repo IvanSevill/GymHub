@@ -35,6 +35,7 @@ class ExerciseSetBase(BaseModel):
     exercise_id: str
     value: str
     measurement: str
+    is_completed: bool = False
 
 class ExerciseSetCreate(ExerciseSetBase):
     pass
@@ -48,15 +49,15 @@ class ExerciseSet(ExerciseSetBase):
 
 # FitbitData Schemas
 class FitbitDataBase(BaseModel):
-    calories: int
-    heart_rate_avg: int
-    duration_ms: int
-    distance_km: float
-    elevation_gain_m: float
-    activity_name: str
-    azm_fat_burn: int
-    azm_cardio: int
-    azm_peak: int
+    calories: Optional[int] = 0
+    heart_rate_avg: Optional[int] = 0
+    duration_ms: Optional[int] = 0
+    distance_km: Optional[float] = 0.0
+    elevation_gain_m: Optional[float] = 0.0
+    activity_name: Optional[str] = "Unknown"
+    azm_fat_burn: Optional[int] = 0
+    azm_cardio: Optional[int] = 0
+    azm_peak: Optional[int] = 0
 
 class FitbitData(FitbitDataBase):
     id: str
@@ -96,6 +97,8 @@ class UserBase(BaseModel):
 class User(UserBase):
     id: str
     is_root: int
+    has_calendar: bool = False
+    fitbit_connected: bool = False
 
     class Config:
         from_attributes = True
@@ -104,6 +107,7 @@ class User(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    user: Optional[User] = None
 
 class GoogleAuthRequest(BaseModel):
     code: str

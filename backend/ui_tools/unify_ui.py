@@ -9,9 +9,11 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
 from collections import defaultdict
-from sqlalchemy.orm import Session
-from models import SessionLocal, User
-from services.google_calendar import GoogleCalendarService
+from app.database import SessionLocal
+from app.models import User, UserTokens
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+import requests
 
 class UnifyExercisesApp:
     def __init__(self, root):
@@ -28,8 +30,15 @@ class UnifyExercisesApp:
             messagebox.showerror("Error", "No se encontró ningún usuario.")
             sys.exit(1)
             
-        self.cal_service = GoogleCalendarService(user, self.db)
-        self.calendar_id = user.selected_calendar_id or 'primary'
+        user_tokens = self.db.query(UserTokens).filter(UserTokens.user_id == user.id).first()
+        if not user_tokens or not user_tokens.google_access_token:
+            messagebox.showerror("Error", "El usuario no tiene Google conectado.")
+            sys.exit(1)
+            
+        creds = Credentials(token=user_tokens.google_access_token)
+        self.service = build('calendar', 'v3', credentials=creds)
+        self.calendar_id = user_tokens.selected_calendar_id or 'primary'
+        self.user_email = user.email
         
         self.events = []
         self.unique_exercises = defaultdict(set)
@@ -100,7 +109,7 @@ class UnifyExercisesApp:
             self.events = []
             page_token = None
             while True:
-                events_result = self.cal_service.service.events().list(
+                events_result = self.service.events().list(
                     calendarId=self.calendar_id, timeMin=time_min, timeMax=time_max,
                     singleEvents=True, orderBy='startTime', maxResults=2500, pageToken=page_token
                 ).execute()
@@ -176,7 +185,11 @@ class UnifyExercisesApp:
             
             if changed:
                 try:
-                    self.cal_service.update_event(item['id'], item.get('summary', ''), '\n'.join(new_lines), self.calendar_id)
+                    self.service.events().patch(
+                        calendarId=self.calendar_id,
+                        eventId=item['id'],
+                        body={'description': '\n'.join(new_lines)}
+                    ).execute()
                     events_updated_count += 1
                 except: pass
 
@@ -186,8 +199,7 @@ class UnifyExercisesApp:
 
         # Sync backend (localhost)
         try:
-            import requests
-            requests.post("http://localhost:8000/sync/manual?user_email=ivansevillano2005@gmail.com", timeout=5)
+            requests.post(f"http://localhost:8000/workouts/sync-all?user_email={self.user_email}", timeout=5)
         except: pass
 
 if __name__ == "__main__":

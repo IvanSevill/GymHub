@@ -24,6 +24,7 @@ gymhubApi.interceptors.response.use(
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
+      return Promise.reject(error);
     }
     const message = error.response?.data?.detail || 'An unexpected error occurred';
     toast.error(message);
@@ -45,6 +46,7 @@ export const workoutApi = {
   syncFitbit: (id) => gymhubApi.post(`/workouts/${id}/sync-fitbit`),
   syncAll: () => gymhubApi.get('/workouts/sync-all'),
   getCalendars: () => gymhubApi.get('/workouts/calendars'),
+  setCalendar: (id) => gymhubApi.post(`/workouts/set-calendar?calendar_id=${id}`),
 };
 
 export const exerciseApi = {
@@ -57,6 +59,8 @@ export const analyticsApi = {
   getWeightProgress: (exerciseId, period) => 
     gymhubApi.get('/analytics/weight-progress', { params: { exercise_id: exerciseId, period } }),
   getFrequency: (params) => gymhubApi.get('/analytics/frequency', { params }),
+  getMaxLifts: () => gymhubApi.get('/analytics/max-lifts'),
+  getExerciseHistory: (exerciseId) => gymhubApi.get(`/analytics/exercise-history/${exerciseId}`),
 };
 
 export const adminApi = {

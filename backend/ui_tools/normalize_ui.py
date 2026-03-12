@@ -91,9 +91,25 @@ class CalendarNormalizerApp:
             nfkd_form = unicodedata.normalize('NFKD', input_str)
             return u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-        lines = text.split('\n')
+        # Eliminar etiqueta [GymHub] para procesar el contenido limpio
+        clean_text = text.replace("[GymHub]", "").strip()
+        lines = clean_text.split('\n')
         new_lines = []
-        muscles = ['Pecho', 'Espalda', 'Hombros', 'Hombro', 'Biceps', 'Triceps', 'Piernas', 'Pierna', 'Cuadriceps', 'Gluteo', 'Femoral', 'Gemelos', 'Abdomen', 'Abdominales', 'Sentadillas', 'Sentadilla']
+        
+        # Mapeo de músculos para unificación (Normalizado - Músculo base)
+        muscle_synonyms = {
+            'pecho': 'Pecho',
+            'espalda': 'Espalda',
+            'hombro': 'Hombro', 'hombros': 'Hombro',
+            'biceps': 'Biceps',
+            'triceps': 'Triceps',
+            'pierna': 'Pierna', 'piernas': 'Pierna',
+            'cuadriceps': 'Cuadriceps', 'cuadiceps': 'Cuadriceps',
+            'gluteo': 'Gluteo', 'gluteos': 'Gluteo',
+            'femoral': 'Femoral',
+            'gemelo': 'Gemelo', 'gemelos': 'Gemelo',
+            'abdomen': 'Abdominales', 'abdominales': 'Abdominales'
+        }
         
         for line in lines:
             line = line.strip()
@@ -101,47 +117,49 @@ class CalendarNormalizerApp:
                 new_lines.append("")
                 continue
                 
-            has_check = "✅" in line
-            line = line.replace("✅", "").strip()
+            # Limpiar línea (sin checkmarks ni emojis de GymHub antiguos)
+            line = re.sub(r"^[✅•\-\*\s]+", "", line).strip()
             line = line.replace("(", "").replace(")", "")
             
-            # Quitar tildes para la comparación
-            line_no_accents = remove_accents(line)
-            
+            # Buscar coincidencia de músculo
+            line_no_accents = remove_accents(line).lower()
             matched_muscle = None
-            for m in muscles:
-                m_no_accents = remove_accents(m)
-                if m_no_accents.lower() in line_no_accents.lower():
-                    matched_muscle = m
-                    # Estándar sin tildes
-                    if m.lower() in ['hombros']: matched_muscle = 'Hombro'
-                    elif m.lower() in ['biceps']: matched_muscle = 'Biceps'
-                    elif m.lower() in ['triceps']: matched_muscle = 'Triceps'
-                    elif m.lower() in ['abdomen', 'abdominales']: matched_muscle = 'Abdominales'
-                    elif m.lower() in ['cuadriceps', 'cuadiceps']: matched_muscle = 'Cuadriceps'
-                    elif m.lower() in ['gluteo']: matched_muscle = 'Gluteo'
-                    elif m.lower() in ['piernas']: matched_muscle = 'Pierna'
-                    elif m.lower() in ['sentadillas', 'sentadilla']: matched_muscle = 'Cuadriceps'
+            
+            # Separar por guiones si ya vienen con formato semi-válido
+            parts = [p.strip() for p in line.split('-')] if '-' in line else [line]
+            
+            for syn, base in muscle_synonyms.items():
+                if syn in line_no_accents:
+                    matched_muscle = base
                     break
-                    
+            
             if matched_muscle:
-                # Quitar el músculo del principio por si estaba repetido (para no poner Hombro - Hombro...)
-                pattern = re.compile(r'^\s*' + re.escape(matched_muscle) + r'\s*[-–/:]?\s*', re.IGNORECASE)
-                if pattern.search(line_no_accents):
-                    # Aplicarlo a la línea original sin tildes
-                    line = pattern.sub('', line_no_accents)
-                else:
-                    # Aplicarlo igual por si caso estaba al principio de alguna manera
-                    line = line_no_accents
-                    
-                line = f"{matched_muscle} - {line.strip()}"
+                # Extraer ejercicio y valor si existe
+                # Pattern: Intenta separar "Músculo - Ejercicio 50kg" o similares
+                content = line
+                if '-' in content:
+                    # Si ya tiene guion, confiamos en que lo que hay después es el ejercicio
+                    content = content.split('-', 1)[1].strip()
                 
-            if has_check:
-                line = f"✅{line}"
+                # Quitar el nombre del músculo del nombre del ejercicio si está presente
+                content_no_accents = remove_accents(content).lower()
+                clean_muscle_name = remove_accents(matched_muscle).lower()
+                if content_no_accents.startswith(clean_muscle_name):
+                    content = content[len(matched_muscle):].strip()
+                    # Quitar guiones o puntos iniciales residuales
+                    content = re.sub(r"^[\-\.\:\s]+", "", content)
+
+                # Limpieza de valores 0kg (GymHub standar)
+                # Si la línea termina en un número 0 o 0kg/0lb
+                if re.search(r"\s+0\s*[a-zA-Z]*$", content) or content.endswith(" 0"):
+                    content = re.sub(r"\s+0\s*[a-zA-Z]*$", "", content).strip()
+
+                line = f"{matched_muscle} - {content}"
                 
             new_lines.append(line.strip())
             
-        return '\n'.join(new_lines)
+        final_desc = "[GymHub]\n" + "\n".join([l for l in new_lines if l])
+        return final_desc.strip()
 
     def load_event(self):
         if self.current_index >= len(self.events):

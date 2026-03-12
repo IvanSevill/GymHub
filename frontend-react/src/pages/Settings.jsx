@@ -12,15 +12,15 @@ const NewExerciseModal = ({ isOpen, onClose, muscles, onCreated }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !muscleId) return toast.error("Please fill all fields");
+    if (!name || !muscleId) return toast.error("Por favor rellena todos los campos");
     setSubmitting(true);
     try {
       await exerciseApi.createExercise({ name, muscle_id: muscleId });
-      toast.success("Exercise created!");
+      toast.success("¡Ejercicio creado!");
       onCreated();
       onClose();
     } catch (err) {
-      toast.error("Failed to create exercise");
+      toast.error("Error al crear el ejercicio");
     } finally {
       setSubmitting(false);
     }
@@ -33,30 +33,30 @@ const NewExerciseModal = ({ isOpen, onClose, muscles, onCreated }) => {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
       <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-card w-full max-w-md p-8 z-10">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-black text-white">Add Exercise</h3>
+          <h3 className="text-xl font-black text-white">Añadir Ejercicio</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={20}/></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Exercise Name</label>
+            <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Nombre del Ejercicio</label>
             <input 
               value={name} onChange={e => setName(e.target.value)}
-              className="input-field w-full" placeholder="e.g. Incline Bench Press"
+              className="input-field w-full" placeholder="ej. Press de Banca Inclinado"
             />
           </div>
           <div>
-            <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Target Muscle</label>
+            <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Grupo Muscular</label>
             <select 
               value={muscleId} onChange={e => setMuscleId(e.target.value)}
               className="input-field w-full appearance-none bg-surface"
             >
-              <option value="">Select Muscle Group</option>
+              <option value="">Seleccionar Músculo</option>
               {muscles.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <button type="submit" disabled={submitting} className="btn-primary w-full py-4 flex justify-center items-center gap-2">
             <Check size={18} strokeWidth={3} />
-            {submitting ? 'Creating...' : 'Create Exercise'}
+            {submitting ? 'Creando...' : 'Crear Ejercicio'}
           </button>
         </form>
       </motion.div>
@@ -82,21 +82,21 @@ const Settings = () => {
       const res = await authApi.getFitbitAuthUrl();
       window.location.href = res.data.url || res.data.auth_url;
     } catch (err) {
-      toast.error("Couldn't start Fitbit connection");
+      toast.error("No se pudo iniciar la conexión con Fitbit");
     } finally {
       setLoadingFitbit(false);
     }
   };
 
   const handleFitbitDisconnect = async () => {
-    if (!window.confirm("Are you sure you want to disconnect Fitbit? Your metrics will stop syncing.")) return;
-    const tid = toast.loading("Disconnecting Fitbit...");
+    if (!window.confirm("¿Estás seguro de desconectar Fitbit? Tus métricas dejarán de sincronizarse.")) return;
+    const tid = toast.loading("Desconectando Fitbit...");
     try {
       await authApi.disconnectFitbit();
       updateFitbitStatus(false);
-      toast.success("Fitbit disconnected", { id: tid });
+      toast.success("Fitbit desconectado", { id: tid });
     } catch (err) {
-      toast.error("Failed to disconnect", { id: tid });
+      toast.error("Error al desconectar", { id: tid });
     }
   };
 
@@ -104,8 +104,8 @@ const Settings = () => {
     <div className="max-w-4xl mx-auto space-y-10 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-4xl font-black text-white tracking-tight">System Controls</h2>
-          <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">Manage your identity and integrations</p>
+          <h2 className="text-4xl font-black text-white tracking-tight">Ajustes del Sistema</h2>
+          <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">Gestiona tu identidad e integraciones</p>
         </div>
       </div>
 
@@ -148,7 +148,7 @@ const Settings = () => {
               <div className="mt-8 flex flex-wrap justify-center md:justify-start gap-4">
                 <button onClick={logout} className="px-8 py-3 bg-white/5 hover:bg-danger/10 text-slate-400 hover:text-danger rounded-2xl transition-all border border-white/5 active:scale-95 flex items-center gap-2 font-black uppercase text-[10px] tracking-widest">
                   <LogOut size={16} />
-                  Sign Out
+                  Cerrar Sesión
                 </button>
               </div>
             </div>
@@ -162,26 +162,26 @@ const Settings = () => {
               <Activity size={24} />
             </div>
             <div>
-              <h3 className="font-black text-white text-lg tracking-tight">Fitbit Connection</h3>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Activity & Pulse Sync</p>
+              <h3 className="font-black text-white text-lg tracking-tight">Conexión con Fitbit</h3>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sincronización de Actividad y Pulso</p>
             </div>
           </div>
           
           <p className="text-slate-400 text-sm mb-10 leading-relaxed font-medium">
-            Link your health device to stream heart rate, duration, and caloric output directly into your workout logs.
+            Vincula tu dispositivo de salud para volcar frecuencia cardíaca, duración y gasto calórico directamente en tus entrenamientos.
           </p>
 
           {isFitbitConnected ? (
             <div className="space-y-4">
               <div className="flex items-center gap-4 p-5 bg-accent/5 border border-accent/10 rounded-2xl">
                 <div className="w-3 h-3 bg-accent rounded-full animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.8)]" />
-                <span className="text-accent font-black text-[10px] uppercase tracking-[0.2em]">Synchronized & Verified</span>
+                <span className="text-accent font-black text-[10px] uppercase tracking-[0.2em]">Sincronizado y Verificado</span>
               </div>
               <button 
                 onClick={handleFitbitDisconnect}
-                className="w-full py-4 text-danger font-black uppercase text-[10px] tracking-widest hover:bg-danger/5 rounded-2xl transition-all border border-transparent hover:border-danger/10"
+                className="w-full py-4 text-danger font-black uppercase text-[10px] tracking-widest hover:bg-danger/10 rounded-2xl transition-all border border-danger/20"
               >
-                Terminate Connection
+                Cerrar sesión de Fitbit
               </button>
             </div>
           ) : (
@@ -191,7 +191,7 @@ const Settings = () => {
               className="w-full btn-primary bg-accent hover:bg-accent/90 shadow-2xl shadow-accent/20 flex items-center justify-center gap-3 py-5 rounded-[1.25rem]"
             >
               <Activity size={20} strokeWidth={3} />
-              {loadingFitbit ? 'Requesting...' : 'Link Fitbit Device'}
+              {loadingFitbit ? 'Solicitando...' : 'Vincular Dispositivo Fitbit'}
             </button>
           )}
         </motion.div>
@@ -204,8 +204,8 @@ const Settings = () => {
                 <Shield size={24} />
               </div>
               <div>
-                <h3 className="font-black text-white text-lg tracking-tight">Admin Console</h3>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">System Administration</p>
+                <h3 className="font-black text-white text-lg tracking-tight">Consola de Admin</h3>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Administración del Sistema</p>
               </div>
             </div>
             
@@ -217,13 +217,13 @@ const Settings = () => {
                   const url = window.URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = "gymhub_catalog.json";
+                  a.download = "gymhub_catalogo.json";
                   a.click();
                 }}
                 className="btn-secondary py-5 flex flex-col items-center justify-center gap-3 border-white/5 hover:border-secondary/30 transition-all rounded-3xl group"
               >
                 <Download size={24} className="group-hover:text-secondary group-hover:-translate-y-1 transition-all" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Export Data</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">Exportar Datos</span>
               </button>
               
               <button 
@@ -231,7 +231,7 @@ const Settings = () => {
                 className="btn-primary bg-secondary hover:bg-secondary/90 shadow-2xl shadow-secondary/20 flex flex-col items-center justify-center gap-3 py-5 rounded-3xl"
               >
                 <Plus size={24} strokeWidth={3} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-white">New Exercise</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-white">Nuevo Ejercicio</span>
               </button>
             </div>
 
@@ -246,13 +246,13 @@ const Settings = () => {
                    if (!file) return;
                    const reader = new FileReader();
                    reader.onload = async (event) => {
-                     const tid = toast.loading("Importing catalog...");
+                     const tid = toast.loading("Importando catálogo...");
                      try {
                         const data = JSON.parse(event.target.result);
                         await adminApi.importMock(data);
-                        toast.success("Catalog imported successfully", { id: tid });
+                        toast.success("Catálogo importado con éxito", { id: tid });
                      } catch (err) {
-                        toast.error("Invalid JSON or import failed", { id: tid });
+                        toast.error("JSON inválido o error en la importación", { id: tid });
                      }
                    };
                    reader.readAsText(file);
@@ -263,7 +263,7 @@ const Settings = () => {
                 className="w-full p-4 bg-white/5 border border-white/5 rounded-2xl text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-white/10 transition-colors"
                >
                  <Upload size={16} />
-                 Import JSON Mock
+                 Importar JSON Mock
                </button>
             </div>
           </motion.div>

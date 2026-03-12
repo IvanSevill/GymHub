@@ -67,14 +67,22 @@ def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(database.g
     db.commit()
     
     access_token = auth.create_access_token(data={"sub": user.email})
+    
+    has_calendar = False
+    if user_tokens and user_tokens.selected_calendar_id:
+        has_calendar = True
+
     return {
         "access_token": access_token, 
         "token_type": "bearer",
         "user": {
+            "id": user.id,
             "email": user.email,
             "name": user.name,
             "picture_url": user.picture_url,
-            "is_root": user.is_root
+            "is_root": user.is_root,
+            "has_calendar": has_calendar,
+            "fitbit_connected": bool(user_tokens and user_tokens.fitbit_id)
         }
     }
 
@@ -82,7 +90,8 @@ def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(database.g
 def fitbit_auth_init(current_user: models.User = Depends(auth.get_current_user)):
     # Return the Fitbit authorization URL with user_id as state
     scope = "activity heartrate profile sleep weight"
-    redirect_uri = f"{BACKEND_HOST}/auth/fitbit/callback"
+    # Essential to use the exact URI registered in Fitbit dev portal (usually localhost)
+    redirect_uri = "http://localhost:8000/auth/fitbit/callback"
     state = str(current_user.id)
     url = f"https://www.fitbit.com/oauth2/authorize?response_type=code&client_id={FITBIT_CLIENT_ID}&redirect_uri={redirect_uri}&scope={scope}&state={state}"
     return {"url": url}
@@ -90,7 +99,7 @@ def fitbit_auth_init(current_user: models.User = Depends(auth.get_current_user))
 @router.get("/fitbit/callback")
 def fitbit_callback(code: str, state: str, db: Session = Depends(database.get_db)):
     # Fitbit redirect provides the 'state' which is our user_id
-    user_id = int(state)
+    user_id = state
     
     token_url = "https://api.fitbit.com/oauth2/token"
     auth_header = base64.b64encode(f"{FITBIT_CLIENT_ID}:{FITBIT_CLIENT_SECRET}".encode()).decode()
@@ -99,9 +108,10 @@ def fitbit_callback(code: str, state: str, db: Session = Depends(database.get_db
         "Content-Type": "application/x-www-form-urlencoded"
     }
     data = {
+        "client_id": FITBIT_CLIENT_ID,
         "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": f"{BACKEND_HOST}/auth/fitbit/callback"
+        "redirect_uri": "http://localhost:8000/auth/fitbit/callback",
+        "code": code
     }
     
     response = requests.post(token_url, headers=headers, data=data)

@@ -40,27 +40,50 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens):
         # Handle error or log
         return None
 
-def get_fitbit_activity(access_token: str, start_time: datetime, end_time: datetime):
+def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time: datetime, end_time: datetime):
     """
-    Finds a Fitbit activity within a time range.
+    Finds a Fitbit activity within a time range, handles token refresh.
     """
-    # Fitbit API uses date strings. We might need to fetch activities for the day.
-    date_str = start_time.strftime("%Y-%m-%d")
-    url = f"https://api.fitbit.com/1/user/-/activities/list.json?beforeDate={date_str}&offset=0&limit=20&sort=desc"
-    headers = {"Authorization": f"Bearer {access_token}"}
+    access_token = user_tokens.fitbit_access_token
+    if not access_token:
+        return None
+
+    def make_request(token):
+        # Use v1.1 for better Active Zone Minutes support
+        date_str = (start_time + timedelta(days=1)).strftime("%Y-%m-%d")
+        url = f"https://api.fitbit.com/1.1/user/-/activities/list.json?beforeDate={date_str}&offset=0&limit=20&sort=desc"
+        headers = {"Authorization": f"Bearer {token}"}
+        return requests.get(url, headers=headers)
+
+    response = make_request(access_token)
     
-    response = requests.get(url, headers=headers)
+    if response.status_code == 401:
+        # Token expired, try refresh
+        access_token = refresh_fitbit_token(db, user_tokens)
+        if access_token:
+            response = make_request(access_token)
+    
     if response.status_code == 200:
         activities = response.json().get("activities", [])
         for activity in activities:
-            # Check if activity overlaps with workout
             # Fitbit 'startTime' is ISO format: 2023-10-27T10:00:00.000+02:00
-            # We compare with a margin of error (e.g., 5 minutes)
-            act_start = datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
-            act_duration = timedelta(milliseconds=activity["duration"])
-            act_end = act_start + act_duration
+            try:
+                raw_start = activity["startTime"].replace("Z", "+00:00")
+                act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+                act_duration = timedelta(milliseconds=activity["duration"])
+                act_end = act_start + act_duration
+            except:
+                continue
             
-            # Simple overlap check
-            if abs((act_start - start_time).total_seconds()) < 600: # 10 min margin
+            # Check for overlap: Activity starts within 15 mins of workout OR covers the same time
+            # Using a more robust overlap check
+            start_diff = abs((act_start - start_time).total_seconds())
+            if start_diff < 900: # 15 min margin
                 return activity
+                
+            # Or if the activity covers the middle of our workout
+            mid_workout = start_time + (end_time - start_time) / 2
+            if act_start <= mid_workout <= act_end:
+                return activity
+                
     return None
