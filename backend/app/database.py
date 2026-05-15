@@ -11,7 +11,10 @@ load_dotenv()
 Base = declarative_base()
 
 # Database URL from environment variable, default to SQLite
+# Render exposes postgres:// but SQLAlchemy 2.x requires postgresql://
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Create the SQLAlchemy engine
 # For SQLite, check_same_thread is needed for concurrent requests

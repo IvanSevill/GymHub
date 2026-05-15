@@ -16,13 +16,15 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="GymHub Backend v2")
 
-# CORS configuration - to be loaded from environment variables
+# CORS configuration
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    # Add other origins as needed for production deployment
-]
+origins = list(
+    {
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        FRONTEND_URL,
+    }
+)
 
 app.add_middleware(
     CORSMiddleware,
