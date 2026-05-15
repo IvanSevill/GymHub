@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment variables (secrets)
+.env
+.env.*
+!.env.example
+
+# Databases
+*.db
+*.sqlite3
+
+# Pytest / Ruff caches
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Logs
+*.log
+backend_log.txt
+backend_err.txt
+
+# OS / Editor
+.DS_Store
+*.suo
+*.sw?
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Misc
+*.png
+*.jpg
+*.jpeg
+SESSION_SUMMARY.md

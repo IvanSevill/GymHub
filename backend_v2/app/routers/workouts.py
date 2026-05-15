@@ -1,0 +1,681 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional
+from datetime import datetime, timedelta
+import os
+
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request as GoogleAuthRequest  # Alias to avoid conflict with FastAPI Request
+
+from .. import models, schemas, database, auth, fitbit_utils, calendar_utils # Relative imports
+
+# FastAPI router for workout-related endpoints
+router = APIRouter(prefix="/workouts", tags=["workouts"])
+
+def get_google_credentials(user_tokens: models.UserTokens, db: Session) -> Optional[Credentials]:
+    """
+    Helper function to get and refresh Google API credentials.
+    """
+    if not user_tokens or not user_tokens.google_access_token:
+        return None
+    
+    creds = Credentials(
+        token=user_tokens.google_access_token,
+        refresh_token=user_tokens.google_refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET")
+    )
+    
+    if not creds.valid and creds.refresh_token:
+        try:
+            creds.refresh(GoogleAuthRequest())
+            user_tokens.google_access_token = creds.token
+            db.commit()
+        except Exception as e:
+            print(f"Failed to refresh Google token: {e}")
+            return None
+    elif not creds.valid and not creds.refresh_token:
+        print("Google token is invalid and no refresh token available.")
+        return None
+        
+    return creds
+
+def update_google_calendar_event(db: Session, user_tokens: models.UserTokens, workout: models.Workout, fitbit_data: Optional[models.FitbitData] = None):
+    """
+    Creates or updates a Google Calendar event for a given workout.
+    """
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        print("No valid Google credentials for calendar sync.")
+        return None
+
+    service = build('calendar', 'v3', credentials=creds)
+    
+    # Fetch involved muscles and their full exercise catalog for description generation
+    active_exercise_ids = [es.exercise_id for es in workout.exercise_sets if es.exercise_id]
+    
+    exercises_by_muscle = {}
+    if active_exercise_ids:
+        exercises_info = db.query(models.Exercise).options(joinedload(models.Exercise.muscle)).filter(models.Exercise.id.in_(active_exercise_ids)).all()
+        ex_map = {e.id: e for e in exercises_info}
+        
+        for es in workout.exercise_sets:
+            if es.exercise_id in ex_map:
+                es.exercise = ex_map[es.exercise_id]
+
+        active_muscle_ids = list(set(e.muscle_id for e in exercises_info))
+        all_exercises = db.query(models.Exercise).options(joinedload(models.Exercise.muscle)).filter(models.Exercise.muscle_id.in_(active_muscle_ids)).all()
+        
+        for ex in all_exercises:
+            m_name = ex.muscle.name.lower()
+            if m_name not in exercises_by_muscle:
+                exercises_by_muscle[m_name] = []
+            exercises_by_muscle[m_name].append(ex)
+
+    description = calendar_utils.generate_calendar_description(workout, fitbit_data, exercises_by_muscle)
+    
+    # Google Calendar requires timezone information. Assuming UTC then converting to local.
+    # For simplicity, using +01:00 offset as in original for now, but should be dynamic or UTC.
+    event_body = {
+        'summary': workout.title,
+        'description': description,
+        'start': {'dateTime': workout.start_time.isoformat() + "+01:00"},
+        'end': {'dateTime': workout.end_time.isoformat() + "+01:00"},
+    }
+    
+    calendar_id = user_tokens.selected_calendar_id or 'primary'
+    
+    try:
+        if workout.google_event_id:
+            event = service.events().update(calendarId=calendar_id, eventId=workout.google_event_id, body=event_body).execute()
+        else:
+            event = service.events().insert(calendarId=calendar_id, body=event_body).execute() # This line may fail if calendar_id is not found
+            workout.google_event_id = event['id']
+        return event['id']
+    except Exception as e:
+        print(f"Calendar Sync Error: {e}")
+        # Depending on the error, might want to raise HTTPException or just log.
+        return None # Indicate failure to sync
+
+
+@router.get("/calendars", response_model=List[dict])
+async def list_calendars(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Lists the Google Calendars available to the current user.
+    Requires Google Calendar to be connected.
+    """
+    print(f"DEBUG: Listing calendars for user {current_user.email}")
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens:
+        print("DEBUG: No user tokens found in DB")
+        raise HTTPException(status_code=400, detail="Google Calendar not connected (no tokens)")
+        
+    if not user_tokens.google_access_token:
+        print("DEBUG: User has no google_access_token")
+        raise HTTPException(status_code=400, detail="Google Calendar not connected (no access token)")
+    
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        print("DEBUG: Failed to get/refresh google credentials")
+        raise HTTPException(status_code=400, detail="Could not refresh Google credentials.")
+
+    service = build('calendar', 'v3', credentials=creds)
+    
+    try:
+        calendar_list = service.calendarList().list().execute()
+        calendars = calendar_list.get('items', [])
+        print(f"DEBUG: Found {len(calendars)} calendars")
+        return [
+            {
+                "id": c["id"], 
+                "summary": c["summary"], 
+                "primary": c.get("primary", False),
+                "selected": c["id"] == (user_tokens.selected_calendar_id if user_tokens else None)
+            }
+            for c in calendars
+        ]
+    except Exception as e:
+        print(f"DEBUG: Error fetching calendars from Google API: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch calendars: {str(e)}")
+
+@router.post("/set-calendar", response_model=dict)
+async def set_calendar(
+    calendar_id: str = Query(...),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Sets the primary Google Calendar for syncing workouts for the current user.
+    """
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens:
+        user_tokens = models.UserTokens(user_id=current_user.id)
+        db.add(user_tokens)
+    
+    user_tokens.selected_calendar_id = calendar_id
+    db.commit()
+    db.refresh(user_tokens)
+    return {"message": "Calendar updated", "selected_calendar_id": user_tokens.selected_calendar_id}
+
+@router.get("", response_model=List[schemas.Workout])
+async def list_workouts(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Lists workouts for the current user, optionally filtered by date range.
+    Includes related exercise sets, exercises, muscles, and Fitbit data.
+    """
+    query = db.query(models.Workout).options(
+        joinedload(models.Workout.exercise_sets)
+        .joinedload(models.ExerciseSet.exercise)
+        .joinedload(models.Exercise.muscle),
+        joinedload(models.Workout.fitbit_data)
+    ).filter(models.Workout.user_id == current_user.id)
+    if start_date:
+        query = query.filter(models.Workout.start_time >= start_date)
+    if end_date:
+        query = query.filter(models.Workout.end_time <= end_date)
+    return query.order_by(models.Workout.start_time.desc()).all()
+
+@router.post("", response_model=schemas.Workout)
+async def create_workout(
+    workout: schemas.WorkoutCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Creates a new workout for the current user.
+    Automatically syncs the new workout to Google Calendar if connected.
+    """
+    db_workout = models.Workout(
+        user_id=current_user.id,
+        start_time=workout.start_time,
+        end_time=workout.end_time,
+        title=workout.title
+    )
+    db.add(db_workout)
+    db.flush() # Flush to get workout.id for exercise_sets
+    
+    # Add exercise sets
+    for es in workout.exercise_sets:
+        db_set = models.ExerciseSet(
+            workout_id=db_workout.id,
+            exercise_id=es.exercise_id,
+            value=es.value,
+            measurement=es.measurement,
+            is_completed=es.is_completed
+        )
+        db.add(db_set)
+    
+    db.commit()
+    db.refresh(db_workout)
+    
+    # Sync to Google Calendar
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if user_tokens and user_tokens.selected_calendar_id:
+        update_google_calendar_event(db, user_tokens, db_workout)
+        db.commit() # Commit again to save google_event_id if created
+    
+    # Refresh the workout to include google_event_id if it was updated
+    db.refresh(db_workout)
+    return db_workout
+
+@router.put("/{workout_id}", response_model=schemas.Workout)
+async def update_workout(
+    workout_id: str,
+    workout_update: schemas.WorkoutUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Updates an existing workout for the current user.
+    Handles updates to exercise sets, auto-syncs Fitbit data if connected,
+    and updates the corresponding Google Calendar event.
+    """
+    db_workout = db.query(models.Workout).filter(models.Workout.id == workout_id, models.Workout.user_id == current_user.id).first()
+    if not db_workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    
+    db_workout.start_time = workout_update.start_time
+    db_workout.end_time = workout_update.end_time
+    db_workout.title = workout_update.title
+    
+    # Refresh sets: drop and recreate (as per original logic)
+    db.query(models.ExerciseSet).filter(models.ExerciseSet.workout_id == workout_id).delete(synchronize_session=False)
+    db.flush() # Ensure deletions are processed before adding new ones
+    
+    for es in workout_update.exercise_sets:
+        db_set = models.ExerciseSet(
+            workout_id=db_workout.id,
+            exercise_id=es.exercise_id,
+            value=es.value,
+            measurement=es.measurement,
+            is_completed=es.is_completed
+        )
+        db.add(db_set)
+    
+    # Auto-sync Fitbit if connected and update FitbitData
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if user_tokens and user_tokens.fitbit_access_token:
+        try:
+            activity = fitbit_utils.get_fitbit_activity(db, user_tokens, db_workout.start_time, db_workout.end_time)
+            if activity:
+                fitbit_data = db.query(models.FitbitData).filter(models.FitbitData.workout_id == workout_id).first()
+                if not fitbit_data:
+                    fitbit_data = models.FitbitData(workout_id=db_workout.id)
+                    db.add(fitbit_data)
+                
+                fitbit_data.fitbit_log_id = str(activity.get("logId"))
+                fitbit_data.calories = activity.get("calories", 0)
+                fitbit_data.heart_rate_avg = activity.get("averageHeartRate", 0)
+                fitbit_data.duration_ms = activity.get("duration", 0)
+                fitbit_data.distance_km = activity.get("distance", 0.0)
+                fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
+                fitbit_data.activity_name = activity.get("activityName", "Unknown")
+                
+                azm_data = fitbit_utils.extract_azm(activity)
+                fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)
+                fitbit_data.azm_cardio = azm_data.get("cardioMinutes", 0)
+                fitbit_data.azm_peak = azm_data.get("peakMinutes", 0)
+                
+                db.flush() # Flush to get fitbit_data.id if new
+                db_workout.fitbit_data = fitbit_data
+
+                # Cardio Logic: If activity is not Weights or Walk, add a 'cardio' exercise set
+                act_name_lower = fitbit_data.activity_name.lower()
+                if "weights" not in act_name_lower and "walk" not in act_name_lower:
+                    # Ensure 'cardio' exercise exists, create if not (only if current_user is root)
+                    cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
+                    if not cardio_ex:
+                        muscle_for_cardio = db.query(models.Muscle).filter(models.Muscle.name == "abdominales").first() # Arbitrary muscle
+                        if muscle_for_cardio and current_user.is_root == 1: # Only root can create automatically
+                             cardio_ex = models.Exercise(name="cardio", muscle_id=muscle_for_cardio.id)
+                             db.add(cardio_ex)
+                             db.flush()
+
+                    if cardio_ex:
+                        # Check if cardio set already exists for this workout
+                        existing_cardio_set = db.query(models.ExerciseSet).filter(
+                            models.ExerciseSet.workout_id == workout_id,
+                            models.ExerciseSet.exercise_id == cardio_ex.id
+                        ).first()
+                        if not existing_cardio_set:
+                            db_set = models.ExerciseSet(
+                                workout_id=db_workout.id,
+                                exercise_id=cardio_ex.id,
+                                value=str(fitbit_data.duration_ms // 60000),
+                                measurement="min",
+                                is_completed=True
+                            )
+                            db.add(db_set)
+                            print(f"Added cardio set for activity: {fitbit_data.activity_name}")
+        except Exception as e:
+            print(f"Auto-sync Fitbit error: {e}")
+            pass
+
+    db.commit() # Commit all changes from update and potential Fitbit sync
+    db.refresh(db_workout) # Refresh to load relationships updated by Fitbit sync
+    
+    # Sync to Google Calendar (after all other updates)
+    if user_tokens and user_tokens.selected_calendar_id:
+        update_google_calendar_event(db, user_tokens, db_workout, db_workout.fitbit_data)
+        db.commit() # Commit again to save google_event_id if created or updated
+
+    db.refresh(db_workout) # Final refresh to ensure latest state including calendar_event_id
+    return db_workout
+
+@router.delete("/{workout_id}", response_model=dict)
+async def delete_workout(
+    workout_id: str,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Deletes a workout for the current user.
+    Also deletes the corresponding Google Calendar event if it exists.
+    """
+    db_workout = db.query(models.Workout).filter(models.Workout.id == workout_id, models.Workout.user_id == current_user.id).first()
+    if not db_workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    
+    # Delete from Google Calendar
+    if db_workout.google_event_id:
+        user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+        if user_tokens and user_tokens.selected_calendar_id:
+            creds = get_google_credentials(user_tokens, db)
+            if creds:
+                service = build('calendar', 'v3', credentials=creds)
+                try:
+                    calendar_id = user_tokens.selected_calendar_id or 'primary'
+                    service.events().delete(calendarId=calendar_id, eventId=db_workout.google_event_id).execute()
+                except Exception as e:
+                    print(f"Failed to delete Google Calendar event {db_workout.google_event_id}: {e}")
+            
+    db.delete(db_workout)
+    db.commit()
+    return {"message": "Workout deleted"}
+
+@router.post("/{workout_id}/sync-fitbit", response_model=schemas.FitbitData)
+async def sync_fitbit_to_workout(
+    workout_id: str,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Manually syncs Fitbit activity data to a specific workout.
+    Fetches activity from Fitbit within the workout's time range and associates it.
+    """
+    db_workout = db.query(models.Workout).filter(models.Workout.id == workout_id, models.Workout.user_id == current_user.id).first()
+    if not db_workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.fitbit_access_token:
+        raise HTTPException(status_code=400, detail="Fitbit not connected or token invalid")
+    
+    activity = fitbit_utils.get_fitbit_activity(db, user_tokens, db_workout.start_time, db_workout.end_time)
+    if not activity:
+        raise HTTPException(status_code=404, detail="No matching Fitbit activity found for this workout time")
+    
+    # Idempotent check: update existing FitbitData or create new
+    fitbit_data = db.query(models.FitbitData).filter(models.FitbitData.workout_id == workout_id).first()
+    if not fitbit_data:
+        fitbit_data = models.FitbitData(workout_id=workout_id)
+        db.add(fitbit_data)
+    
+    fitbit_data.fitbit_log_id = str(activity.get("logId"))
+    fitbit_data.calories = activity.get("calories", 0)
+    fitbit_data.heart_rate_avg = activity.get("averageHeartRate", 0)
+    fitbit_data.duration_ms = activity.get("duration", 0)
+    fitbit_data.distance_km = activity.get("distance", 0.0)
+    fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
+    fitbit_data.activity_name = activity.get("activityName", "Unknown")
+    
+    azm_data = fitbit_utils.extract_azm(activity)
+    fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)
+    fitbit_data.azm_cardio = azm_data.get("cardioMinutes", 0)
+    fitbit_data.azm_peak = azm_data.get("peakMinutes", 0)
+    
+    db.commit()
+    db.refresh(fitbit_data)
+
+    # Cardio Logic: If activity is not Weights or Walk, add a 'cardio' exercise set
+    act_name_lower = fitbit_data.activity_name.lower()
+    if "weights" not in act_name_lower and "walk" not in act_name_lower:
+        cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
+        if not cardio_ex:
+            muscle_for_cardio = db.query(models.Muscle).filter(models.Muscle.name == "abdominales").first() # Arbitrary muscle
+            if muscle_for_cardio and current_user.is_root == 1: # Only root can create automatically
+                cardio_ex = models.Exercise(name="cardio", muscle_id=muscle_for_cardio.id)
+                db.add(cardio_ex)
+                db.flush()
+
+        if cardio_ex:
+            existing_cardio_set = db.query(models.ExerciseSet).filter(
+                models.ExerciseSet.workout_id == workout_id,
+                models.ExerciseSet.exercise_id == cardio_ex.id
+            ).first()
+            if not existing_cardio_set:
+                db_set = models.ExerciseSet(
+                    workout_id=workout_id,
+                    exercise_id=cardio_ex.id,
+                    value=str(fitbit_data.duration_ms // 60000),
+                    measurement="min",
+                    is_completed=True
+                )
+                db.add(db_set)
+                db.commit() # Commit the new cardio set
+    
+    # Update Calendar event with new metrics
+    if user_tokens and user_tokens.selected_calendar_id:
+        db_workout = db.query(models.Workout).options(joinedload(models.Workout.fitbit_data)).filter(models.Workout.id == workout_id).first()
+        update_google_calendar_event(db, user_tokens, db_workout, db_workout.fitbit_data)
+        db.commit()
+
+    return fitbit_data
+
+@router.get("/test-parse", response_model=List[dict])
+async def test_parse_calendar_events(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Temporary endpoint to fetch raw calendar events and return their parsed results
+    for debugging the parser.
+    """
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=400, detail="Google Calendar not connected.")
+    
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        raise HTTPException(status_code=400, detail="Could not refresh Google credentials.")
+
+    service = build('calendar', 'v3', credentials=creds)
+    calendar_id = user_tokens.selected_calendar_id or 'primary'
+    
+    # Fetch recent events (e.g., last 90 days)
+    time_min_dt = datetime.utcnow() - timedelta(days=90)
+    time_min = time_min_dt.isoformat() + "Z"
+    
+    try:
+        events_result = service.events().list(
+            calendarId=calendar_id, timeMin=time_min,
+            singleEvents=True, orderBy='startTime',
+            maxResults=100
+        ).execute()
+        events = events_result.get('items', [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {str(e)}")
+
+    muscle_map = {m.name.lower(): m.id for m in db.query(models.Muscle).all()}
+    
+    results = []
+    for event in events:
+        desc = event.get('description', '')
+        summary = event.get('summary', 'Workout')
+        
+        is_gymhub_tagged = "[GymHub]" in desc or "[gymhub]" in desc.lower()
+        has_workout_format = " - " in desc and any(m in desc.lower() for m in muscle_map.keys())
+        is_leg_day = "pierna" in summary.lower()
+        
+        if not (is_gymhub_tagged or has_workout_format or is_leg_day):
+            continue
+            
+        sync_result = calendar_utils.parse_calendar_description(desc, muscle_map, title=summary)
+        
+        results.append({
+            "id": event.get('id'),
+            "start": event.get('start', {}).get('dateTime', event.get('start', {}).get('date')),
+            "summary": summary,
+            "raw_description": desc,
+            "parsed_sets": sync_result["sets"],
+            "parsed_fitbit": sync_result["fitbit"],
+        })
+        
+    return results
+
+@router.get("/sync-all", response_model=dict)
+async def sync_all_from_calendar(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Synchronizes all relevant workouts from Google Calendar for the current user.
+    Parses event descriptions to create/update local workouts, including Fitbit data,
+    and handles deletion of orphaned local workouts.
+    """
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens:
+        print("DEBUG: No user tokens found for user.")
+        raise HTTPException(status_code=400, detail="Google Calendar not connected: No user tokens found.")
+        
+    if not user_tokens.google_access_token:
+        print("DEBUG: User has no google_access_token.")
+        raise HTTPException(status_code=400, detail="Google Calendar not connected: Missing access token.")
+    
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        print("DEBUG: Failed to get or refresh Google credentials.")
+        raise HTTPException(status_code=400, detail="Could not refresh Google credentials. Please reconnect your Google account.")
+
+    service = build('calendar', 'v3', credentials=creds)
+    
+    calendar_id = user_tokens.selected_calendar_id or 'primary'
+    
+    # Fetch events from the last 2 years (730 days) as in original GymHub
+    sync_days = 730
+    time_min_dt = datetime.utcnow() - timedelta(days=sync_days)
+    time_min = time_min_dt.isoformat() + "Z"
+    
+    all_events = []
+    page_token = None
+    try:
+        while True:
+            events_result = service.events().list(
+                calendarId=calendar_id, timeMin=time_min,
+                singleEvents=True, orderBy='startTime',
+                pageToken=page_token
+            ).execute()
+            all_events.extend(events_result.get('items', []))
+            page_token = events_result.get('nextPageToken')
+            if not page_token:
+                break
+        events = all_events
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {str(e)}")
+
+    processed_count = 0
+    calendar_event_ids = set()
+    
+    # Pre-fetch all muscles and exercises for efficient lookup
+    muscle_map = {m.name.lower(): m for m in db.query(models.Muscle).all()}
+    exercise_map = {e.name.lower(): e for e in db.query(models.Exercise).all()}
+
+    for event in events:
+        desc = event.get('description', '')
+        event_id = event.get('id')
+        calendar_event_ids.add(event_id)
+        
+        # Determine if this is a GymHub event based on tags or format
+        is_gymhub_tagged = "[GymHub]" in desc or "[gymhub]" in desc.lower()
+        has_workout_format = " - " in desc and any(m in desc.lower() for m in muscle_map.keys())
+        
+        if not is_gymhub_tagged and not has_workout_format:
+            continue
+        
+        start = event['start'].get('dateTime', event['start'].get('date'))
+        end = event['end'].get('dateTime', event['end'].get('date'))
+        if not start or not end:
+            continue
+            
+        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")).replace(tzinfo=None)
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None)
+        
+        workout = db.query(models.Workout).filter(models.Workout.google_event_id == event_id, models.Workout.user_id == current_user.id).first()
+        if not workout:
+            workout = models.Workout(
+                user_id=current_user.id,
+                google_event_id=event_id,
+                start_time=start_dt,
+                end_time=end_dt,
+                title=event.get('summary', 'Workout')
+            )
+            db.add(workout)
+            db.flush() # Get workout id before adding sets
+        else:
+            workout.start_time = start_dt
+            workout.end_time = end_dt
+            workout.title = event.get('summary', 'Workout')
+            # Delete existing exercise sets and fitbit data to re-create
+            db.query(models.ExerciseSet).filter(models.ExerciseSet.workout_id == workout.id).delete(synchronize_session=False)
+            db.query(models.FitbitData).filter(models.FitbitData.workout_id == workout.id).delete(synchronize_session=False)
+            db.flush()
+
+        # Parse exercises and fitbit from description using calendar_utils
+        summary_title = event.get('summary', 'Workout')
+        sync_result = calendar_utils.parse_calendar_description(desc, {name.lower(): m.id for name, m in muscle_map.items()}, title=summary_title)
+        parsed_sets = sync_result["sets"]
+        parsed_fitbit_data = sync_result["fitbit"]
+        
+        # Handle "Pierna" alias in title if no sets were parsed (Planning mode)
+        # We don't necessarily add empty sets, but the frontend will know via the title.
+        # But if we want the "points" in calendar to show all muscles, we might need a way.
+        # For now, title-based logic in frontend is easier.
+        
+        sets_added_to_workout = 0
+        for ps in parsed_sets:
+            muscle_obj = muscle_map.get(ps["muscle_name"])
+            if not muscle_obj: # Skip if muscle not found
+                continue
+
+            exercise_obj = exercise_map.get(ps["exercise_name"].lower())
+            
+            if not exercise_obj:
+                # Auto-create exercise if root user, otherwise skip
+                if current_user.is_root == 1:
+                    new_ex = models.Exercise(name=ps["exercise_name"].strip(), muscle_id=muscle_obj.id)
+                    db.add(new_ex)
+                    db.flush() # Get ID for the new exercise
+                    exercise_obj = new_ex
+                    exercise_map[new_ex.name.lower()] = new_ex # Add to map for subsequent uses
+                    print(f"Sync (Root): Created missing exercise '{new_ex.name}' for muscle '{muscle_obj.name}'")
+                else:
+                    print(f"Sync (User): Found new exercise '{ps['exercise_name']}' but not created (not root)")
+                    continue 
+            
+            db_set = models.ExerciseSet(
+                workout_id=workout.id,
+                exercise_id=exercise_obj.id,
+                value=ps["value"],
+                measurement=ps["measurement"],
+                is_completed=ps.get("is_completed", False)
+            )
+            db.add(db_set)
+            sets_added_to_workout += 1
+        
+        # Save parsed Fitbit data
+        if parsed_fitbit_data:
+            db_fitbit = models.FitbitData(
+                workout_id=workout.id,
+                calories=parsed_fitbit_data.get("calories", 0),
+                heart_rate_avg=parsed_fitbit_data.get("heart_rate_avg", 0),
+                duration_ms=parsed_fitbit_data.get("duration_ms", 0),
+                distance_km=parsed_fitbit_data.get("distance_km", 0.0),
+                elevation_gain_m=parsed_fitbit_data.get("elevation_gain_m", 0.0),
+                activity_name=parsed_fitbit_data.get("activity_name", "Unknown"),
+                azm_fat_burn=parsed_fitbit_data.get("azm_fat_burn", 0),
+                azm_cardio=parsed_fitbit_data.get("azm_cardio", 0),
+                azm_peak=parsed_fitbit_data.get("azm_peak", 0),
+            )
+            db.add(db_fitbit)
+        
+        if sets_added_to_workout > 0 or parsed_fitbit_data:
+            processed_count += 1
+            
+    # Cleanup: Delete local workouts that were deleted from Google Calendar
+    local_workouts = db.query(models.Workout).filter(
+        models.Workout.user_id == current_user.id,
+        models.Workout.google_event_id is not None,
+        models.Workout.start_time >= time_min_dt # Only consider workouts within the sync period
+    ).all()
+    
+    deleted_count = 0
+    for lw in local_workouts:
+        if lw.google_event_id not in calendar_event_ids:
+            db.delete(lw)
+            deleted_count += 1
+    
+    db.commit()
+    msg = f"Successfully synced {processed_count} workouts from Google Calendar"
+    if deleted_count > 0:
+        msg += f" (deleted {deleted_count} orphaned workouts)"
+    return {"message": msg}

@@ -1,0 +1,1951 @@
+Available calendars:
+  - Familia (Google One) (family06699560729215899700@group.calendar.google.com)
+  - GGDays (qo960j36g8vc3bhgsvcgjaab4g@group.calendar.google.com)
+  - Citas (11b5e8e234da85264f8b45662cece1e3973f371640ddd9edab0b032880d7713b@group.calendar.google.com)
+  - ivansevillano2005@gmail.com (ivansevillano2005@gmail.com)
+  - Fechas Importantes de Cercanos  (99a604379bb5e992ed91a5fd8e921ba41c2101cdc84b23d1444de73f44b33ac1@group.calendar.google.com)
+  - Fiestas (2c4782b159579c2e1f08e93e4aec81725d1fe1c75e7ec7cfce1691b2c7c8f95f@group.calendar.google.com)
+  - Gimnasio (104e2e1b399210574423d6661cd2404accb70bec599a738e5f4e09b58389d6f8@group.calendar.google.com)
+  - Rutina (b701ff15d272c41a3869bc9767ad4547938d795fc004983ff882f8788e2af17f@group.calendar.google.com)
+  - Universidad (classroom114528530150023963276@group.calendar.google.com)
+  - Travel (573955fd5665f7c2faa53b3fbed029c5a546127c18c5ded3a9542019eda8475d@group.calendar.google.com)
+
+Using calendar: Gimnasio (104e2e1b399210574423d6661cd2404accb70bec599a738e5f4e09b58389d6f8@group.calendar.google.com)
+
+Fetching events since 2021-05-16...
+Total events fetched: 117
+
+Muscles in DB: ['abdominales', 'biceps', 'cuadriceps', 'espalda', 'femoral', 'gemelos', 'gluteos', 'hombro', 'pecho', 'triceps']
+
+======================================================================
+SUMMARY STATS
+======================================================================
+  Total events          : 117
+  [GymHub] tagged       : 19
+  Fitbit auto-sync      : 1
+  Empty description     : 5
+  Non-Fitbit / 0 sets   : 7
+
+======================================================================
+POTENTIAL FILTER ISSUES
+======================================================================
+
+[1] Fitbit-auto events that produced exercise sets (should be 0):
+  2026-02-28 | Natación | 1 sets
+      swim - pool : 0kg
+
+[2] Events with no description caught by current filter:
+  2025-02-06 | Pierna
+
+[3] Non-Fitbit events that produced 0 sets:
+  2026-03-08 | Natación
+    desc: [GymHub] |  |  | [Fitbit Metrics] | Calorias: 253 kcal | FC Media: 123 bpm | Duracion: 56 min | Actividad: Swim - Pool | AZM Fat Burn: 0
+  2026-03-15 | Natación
+    desc: [GymHub] |  |  | [Fitbit Metrics] | Calorias: 253 kcal | FC Media: 123 bpm | Duracion: 56 min | Actividad: Swim - Pool | AZM Fat Burn: 0
+
+[4] Sets with muscle names NOT in DB (unrecognised muscle tokens):
+  muscle='abdomen'  exercise='abdominales en la maquina'  (from: Pecho - Abdominales 2025-02-13)
+  muscle='sentadilla'  exercise='s'  (from: Pierna 2025-04-01)
+  muscle='gluteo'  exercise='bulgaras'  (from: Pierna 2025-11-05)
+  muscle='swim'  exercise='pool'  (from: Natación 2026-02-28)
+  muscle='buceps'  exercise='mancuerna'  (from: Espalda - Biceps 2026-03-27)
+  muscle='gemelo'  exercise='sentado'  (from: Pierna - Abdominales 2026-04-25)
+
+[5] Sets with potentially malformed values (non-numeric / set-count prefix):
+
+[6] Events containing '~' (currently skipped silently):
+  2025-02-15 | Triceps - Hombro
+    '✅Triceps - Polea 17~kg'
+  2025-03-24 | Triceps - Hombro
+    '✅Triceps - Polea 15~kg'
+  2025-03-31 | Triceps - Hombro
+    '✅Triceps - Polea 15~kg'
+  2025-04-22 | Triceps - Hombro
+    '✅Triceps - Polea 15~kg'
+  2025-05-16 | Triceps - Hombro
+    '✅Triceps - Polea 15-17.5~kg'
+  2025-05-22 | Triceps - Hombro
+    '✅Triceps - Polea 17.5-15~kg'
+  2025-07-26 | Triceps - Hombro
+    '✅Triceps - Polea 29-35~kg'
+  2025-07-31 | Triceps - Hombro
+    '✅Triceps - Polea 29-35~kg'
+  2026-03-06 | Hombro - Triceps
+    'Triceps - Polea 15-17.5~kg'
+    'Triceps - Polea 15~kg'
+    'Triceps - Polea 17.5-15~kg'
+    'Triceps - Polea 17~kg'
+    'Triceps - Polea 29-35~kg'
+
+[7] Events where the same exercise appears as both completed and not:
+  2025-11-14 | Espalda - Biceps
+    espalda - remo agarre largo
+  2025-11-17 | Espalda - Biceps
+    espalda - remo agarre largo
+
+======================================================================
+FULL PARSED OUTPUT PER EVENT
+======================================================================
+
+2025-02-04 | [raw] Triceps - Hombro | 0 sets | fitbit=no
+  (no sets parsed)
+
+2025-02-06 | [raw] Pierna | 0 sets | fitbit=no
+  (no sets parsed)
+
+2025-02-10 | [raw] Espalda - Biceps | 12 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 47kg
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ biceps - mancuernas : 10kg
+  ✅ biceps - mancuernas : 12'5kg
+  ✅ biceps - curl banco scott : 45kg
+  ✅ espalda - remo agarre largo : 47kg
+  ✅ espalda - remo agarre largo : 53kg
+  ✅ biceps - martillo : 23kg
+  ✅ biceps - martillo : 29kg
+     pecho - espalda jalon al pecho agarre largo : 41kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+
+2025-02-13 | [raw] Pecho - Abdominales | 9 sets | fitbit=no
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ pecho - pecho alto : 50kg
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - pecho plano : 41kg
+  ✅ pecho - pecho plano : 47kg
+     abdomen - abdominales en la maquina : 5kg
+     abdomen - abdominales cruzados x4 : 12rep
+     pecho - bajo doble polea : 17kg
+
+2025-02-15 | [raw] Triceps - Hombro | 9 sets | fitbit=no
+  ✅ hombro - press militar maquina : 35kg
+  ✅ triceps - trofeo : 8kg
+  ✅ triceps - trofeo : 12kg
+  ✅ hombro - rueda : 5kg
+  ✅ triceps - polea barra : 15kg
+  ✅ hombro - press militar : 10kg
+     hombro - s elevaciones con mancuernas : 5kg
+     hombro - s elevaciones con mancuernas : 7'5kg
+     triceps - por encima de la cabeza en maquina : 23kg
+
+2025-02-17 | [raw] Pierna | 12 sets | fitbit=no
+  ✅ cuadriceps - prensa : 160kg
+  ✅ cuadriceps - sentadilla libre : 80kg
+  ✅ femoral - curl de femoral : 41kg
+     gemelos - en multi-power : 91kg
+     gemelos - en maquina : 40kg
+     gemelos - en maquina : 50kg
+     cuadriceps - en maquina : 69kg
+     cuadriceps - en maquina : 77kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-02-24 | [raw] Espalda - Biceps | 13 sets | fitbit=no
+  ✅ biceps - mancuernas : 10kg
+  ✅ espalda - jalon agarre largo : 41kg
+  ✅ espalda - jalon agarre largo : 47kg
+  ✅ biceps - curl banco scott : 20kg
+  ✅ espalda - remo discos agarre corto : 20kg
+  ✅ espalda - remo discos agarre corto : 25kg
+  ✅ espalda - lumbares : 5kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     biceps - curl : 45kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     biceps - mancuernas martillo : 23kg
+     biceps - mancuernas martillo : 29kg
+
+2025-03-04 | [raw] Pecho - Triceps - Hombro | 20 sets | fitbit=no
+  ✅ pecho - press de banca : 50kg
+  ✅ pecho - press de banca : 60kg
+  ✅ triceps - polea : 15kg
+  ✅ triceps - polea : 17'5kg
+  ✅ hombro - press militar : 10kg
+  ✅ pecho - pecho plano : 20kg
+  ✅ pecho - pecho plano : 15kg
+  ✅ triceps - polea barra : 12'5kg
+  ✅ triceps - polea barra : 15kg
+  ✅ hombro - rueda : 5kg
+     hombro - maquina arriba : 40kg
+     hombro - maquina arriba : 45kg
+     pecho - bajo doble polea : 17kg
+     hombro - elevaciones laterales : 5kg
+     hombro - elevaciones laterales : 7'5kg
+     pecho - alto : 50kg
+     triceps - trofeo detras de la cabeza : 12'5kg
+     triceps - trofeo detras de la cabeza : 15kg
+     hombro - s elevaciones con mancuernas : 5kg
+     hombro - s elevaciones con mancuernas : 7'5kg
+
+2025-03-24 | [raw] Triceps - Hombro | 9 sets | fitbit=no
+  ✅ hombro - press militar : 10kg
+  ✅ hombro - press militar maquina : 35kg
+  ✅ triceps - trofeo : 8kg
+  ✅ triceps - trofeo : 12kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     triceps - en maquina barra fija : 15kg
+     hombro - s elevaciones con mancuernas : 5kg
+     hombro - s elevaciones con mancuernas : 7'5kg
+
+2025-03-25 | [raw] Pierna | 14 sets | fitbit=no
+  ✅ cuadriceps - prensa : 180kg
+  ✅ cuadriceps - prensa : 200kg
+  ✅ femoral - curl de femoral : 41kg
+  ✅ cuadriceps - sentadilla libre : 80kg
+  ✅ cuadriceps - sentadilla libre : 100kg
+     gemelos - en multi-power : 91kg
+     gemelos - en maquina : 40kg
+     gemelos - en maquina : 50kg
+     cuadriceps - en maquina : 69kg
+     cuadriceps - en maquina : 77kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-03-26 | [raw] Espalda - Biceps | 13 sets | fitbit=no
+  ✅ biceps - mancuernas : 10kg
+  ✅ espalda - jalon agarre largo : 41kg
+  ✅ espalda - jalon agarre largo : 47kg
+  ✅ biceps - martillo : 23kg
+  ✅ biceps - martillo : 29kg
+  ✅ espalda - remo discos agarre corto : 20kg
+  ✅ espalda - remo discos agarre corto : 25kg
+  ✅ biceps - curl banco scott : 45kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     biceps - curl maquina : 20kg
+     espalda - baja : 5kg
+
+2025-03-29 | [raw] Pecho - Abdominales | 9 sets | fitbit=no
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ pecho - pecho plano : 25kg
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - pecho bajo unilateral en polea : 7.5kg
+     pecho - bajo doble polea : 17kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-03-31 | [raw] Triceps - Hombro | 8 sets | fitbit=no
+  ✅ hombro - press militar : 12kg
+  ✅ triceps - trofeo : 12kg
+  ✅ hombro - press militar maquina : 35kg
+  ✅ triceps - polea barra : 15kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - s elevaciones laterales con mancuernas : 5kg
+     hombro - s elevaciones laterales con mancuernas : 7kg
+
+2025-04-01 | [raw] Pierna | 21 sets | fitbit=no
+  ✅ cuadriceps - extension de cuadriceps : 70kg
+  ✅ cuadriceps - hacka : 110kg
+  ✅ cuadriceps - hacka : 120kg
+  ✅ femoral - curl de femoral : 40kg
+  ✅ femoral - curl de femoral : 45kg
+  ✅ gemelos - gemelos en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - prensa : 180kg
+     gluteos - prensa : 200kg
+     femoral - prensa : 180kg
+     femoral - prensa : 200kg
+     cuadriceps - prensa : 180kg
+     cuadriceps - prensa : 200kg
+     gemelos - prensa : 180kg
+     gemelos - prensa : 200kg
+     gemelos - en multi-power : 91kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-04-03 | [raw] Espalda - Biceps | 16 sets | fitbit=no
+  ✅ biceps - mancuernas : 12kg
+  ✅ espalda - jalon agarre corto : 50kg
+  ✅ espalda - jalon agarre corto : 55kg
+  ✅ biceps - barra z : 10kg
+  ✅ espalda - remo agarre corto : 45kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - martillo : 12kg
+     pecho - espalda jalon al pecho agarre largo : 41kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl : 45kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     biceps - curl maquina : 20kg
+     espalda - baja : 5kg
+
+2025-04-07 | [raw] Pecho - Abdominales | 10 sets | fitbit=no
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ pecho - pecho plano : 25kg
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - pecho bajo unilateral en polea : 7.5kg
+  ✅ abdominales - plancha : 40s
+     pecho - bajo doble polea : 17kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-04-08 | [raw] Triceps - Hombro | 10 sets | fitbit=no
+  ✅ triceps - polea barra : 15kg
+  ✅ triceps - polea barra : 15'5kg
+  ✅ hombro - press militar : 12kg
+  ✅ triceps - trofeo : 12kg
+  ✅ hombro - elevaciones laterales con mancuernas : 5kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ triceps - polea : 15kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina arriba : 35kg
+
+2025-04-09 | [raw] Pierna | 21 sets | fitbit=no
+  ✅ cuadriceps - extension de cuadriceps : 70kg
+  ✅ cuadriceps - hacka : 110kg
+  ✅ cuadriceps - hacka : 120kg
+  ✅ femoral - curl de femoral : 40kg
+  ✅ femoral - curl de femoral : 45kg
+  ✅ gemelos - gemelos en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - prensa : 180kg
+     gluteos - prensa : 200kg
+     femoral - prensa : 180kg
+     femoral - prensa : 200kg
+     cuadriceps - prensa : 180kg
+     cuadriceps - prensa : 200kg
+     gemelos - prensa : 180kg
+     gemelos - prensa : 200kg
+     gemelos - en multi-power : 91kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-04-10 | [raw] Espalda - Biceps | 18 sets | fitbit=no
+  ✅ biceps - martillo : 12kg
+  ✅ biceps - martillo : 14kg
+  ✅ espalda - jalon agarre largo : 45kg
+  ✅ espalda - jalon agarre largo : 50kg
+  ✅ biceps - polea cuerdas : 12'5kg
+  ✅ biceps - polea cuerdas : 15kg
+  ✅ espalda - remo agarre corto : 40kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - barra z : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     biceps - mancuerna : 12kg
+     pecho - espalda jalon al pecho agarre corto : 50kg
+     pecho - espalda jalon al pecho agarre corto : 55kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+     espalda - baja : 5kg
+
+2025-04-21 | [raw] Pecho - Abdominales | 10 sets | fitbit=no
+  ✅ pecho - pecho plano : 25kg
+  ✅ abdominales - abdominales : 20rep
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ pecho - pecho bajo unilateral en polea : 7.5kg
+     pecho - bajo doble polea : 17kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-04-22 | [raw] Triceps - Hombro | 10 sets | fitbit=no
+  ✅ hombro - press militar : 14kg
+  ✅ triceps - trofeo : 12kg
+  ✅ hombro - maquina agarre paralelo : 20kg
+  ✅ triceps - polea barra : 15kg
+  ✅ triceps - polea barra : 15'5kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - s elevaciones laterales con mancuernas : 5kg
+     hombro - s elevaciones laterales con mancuernas : 7kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+     hombro - maquina arriba : 35kg
+
+2025-04-23 | [raw] Espalda - Biceps | 18 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 40kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - martillo : 12kg
+  ✅ biceps - martillo : 14kg
+  ✅ espalda - jalon agarre largo : 40kg
+  ✅ espalda - jalon agarre largo : 50kg
+     biceps - polea : 12'5kg
+     biceps - polea : 15kg
+     biceps - curl libre : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     biceps - mancuerna : 12kg
+     pecho - espalda jalon al pecho agarre corto : 50kg
+     pecho - espalda jalon al pecho agarre corto : 55kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+     espalda - baja : 5kg
+
+2025-04-24 | [raw] Pierna | 21 sets | fitbit=no
+  ✅ cuadriceps - extension de cuadriceps : 70kg
+  ✅ cuadriceps - hacka : 110kg
+  ✅ cuadriceps - hacka : 120kg
+  ✅ femoral - curl de femoral : 40kg
+  ✅ femoral - curl de femoral : 45kg
+  ✅ gemelos - gemelos en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - prensa : 180kg
+     gluteos - prensa : 200kg
+     femoral - prensa : 180kg
+     femoral - prensa : 200kg
+     cuadriceps - prensa : 180kg
+     cuadriceps - prensa : 200kg
+     gemelos - prensa : 180kg
+     gemelos - prensa : 200kg
+     gemelos - en multi-power : 91kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-04-29 | [raw] Pecho - Abdominales | 10 sets | fitbit=no
+  ✅ pecho - pecho plano : 25kg
+  ✅ abdominales - abdominales : 20rep
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ pecho - pecho bajo unilateral en polea : 7.5kg
+     pecho - bajo doble polea : 17kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-04-30 | [raw] Triceps - Hombro | 11 sets | fitbit=no
+  ✅ triceps - polea : 15kg
+  ✅ hombro - press militar : 14kg
+  ✅ triceps - trofeo : 12kg
+  ✅ hombro - maquina agarre paralelo : 20kg
+  ✅ triceps - polea : 15kg
+     triceps - trofeo detras de la cabeza : 12kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - s elevaciones laterales con mancuernas : 5kg
+     hombro - s elevaciones laterales con mancuernas : 7kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+     hombro - maquina arriba : 35kg
+
+2025-05-03 | [raw] Espalda - Biceps | 19 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 40kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - mancuernas : 12kg
+  ✅ biceps - mancuernas : 10kg
+  ✅ espalda - jalon agarre largo : 45kg
+  ✅ espalda - jalon agarre largo : 50kg
+  ✅ espalda - jalon agarre largo : 55kg
+  ✅ espalda - lumbares : 5kg
+  ✅ espalda - lumbares : 10kg
+  ✅ biceps - barra z : 15kg
+     biceps - polea : 12'5kg
+     biceps - polea : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre corto : 50kg
+     pecho - espalda jalon al pecho agarre corto : 55kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-05-13 | [raw] Espalda - Biceps | 19 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 40kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - mancuernas : 12kg
+  ✅ biceps - mancuernas : 10kg
+  ✅ espalda - jalon agarre corto : 45kg
+  ✅ espalda - jalon agarre corto : 50kg
+  ✅ espalda - jalon agarre corto : 55kg
+  ✅ espalda - lumbares : 5kg
+  ✅ espalda - lumbares : 10kg
+  ✅ biceps - curl banco scott : 15kg
+     biceps - polea : 12'5kg
+     biceps - polea : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre corto : 50kg
+     pecho - espalda jalon al pecho agarre corto : 55kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-05-16 | [raw] Triceps - Hombro | 11 sets | fitbit=no
+  ✅ hombro - press militar : 14kg
+  ✅ hombro - press militar : 16kg
+  ✅ triceps - polea barra : 15kg
+  ✅ hombro - elevaciones laterales con mancuernas : 5kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ triceps - trofeo : 12kg
+     hombro - maquina agarre paralelo : 20kg
+     triceps - trofeo detras de la cabeza : 12kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+     hombro - maquina arriba : 35kg
+
+2025-05-17 | [raw] Pecho - Abdominales | 10 sets | fitbit=no
+  ✅ pecho - pecho plano : 25kg
+  ✅ abdominales - abdominales : 20rep
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ pecho - pecho bajo unilateral en polea : 7.5kg
+     pecho - bajo doble polea : 17kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-05-19 | [raw] Pierna | 28 sets | fitbit=no
+  ✅ cuadriceps - sentadilla libre : 80kg
+  ✅ cuadriceps - sentadilla libre : 100kg
+  ✅ femoral - curl de femoral sentado : 55kg
+  ✅ cuadriceps - extension de cuadriceps : 70kg
+  ✅ gemelos - gemelos en maquina : 20kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     femoral - curls de femoral : 40kg
+     femoral - curls de femoral : 45kg
+     gluteos - prensa : 180kg
+     gluteos - prensa : 200kg
+     femoral - prensa : 180kg
+     femoral - prensa : 200kg
+     cuadriceps - prensa : 180kg
+     cuadriceps - prensa : 200kg
+     gemelos - prensa : 180kg
+     gemelos - prensa : 200kg
+     gemelos - en multi-power : 91kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-05-20 | [raw] Espalda - Biceps | 21 sets | fitbit=no
+  ✅ espalda - jalon agarre corto : 50kg
+  ✅ espalda - jalon agarre corto : 55kg
+  ✅ biceps - martillo : 12kg
+  ✅ biceps - martillo : 10kg
+  ✅ espalda - remo agarre corto : 40kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - polea cuerdas : 12'5kg
+  ✅ biceps - polea cuerdas : 15kg
+     biceps - mancuernas : 12kg
+     biceps - mancuernas : 10kg
+     pecho - espalda jalon al pecho agarre corto : 45kg
+     pecho - espalda jalon al pecho agarre corto : 50kg
+     pecho - espalda jalon al pecho agarre corto : 55kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     biceps - curl libre : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-05-21 | [raw] Pecho - Abdominales | 9 sets | fitbit=no
+  ✅ pecho - pecho plano : 25kg
+  ✅ abdominales - abdominales : 0kg
+  ✅ pecho - pecho bajo unilateral en polea : 7.5kg
+  ✅ abdominales - abdominales rusos : 8kg
+     pecho - press de banca 50kg pr : 75kg
+     pecho - bajo doble polea : 17kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-05-22 | [raw] Triceps - Hombro | 12 sets | fitbit=no
+  ✅ hombro - press militar : 14kg
+  ✅ hombro - press militar : 16kg
+  ✅ triceps - trofeo : 12kg
+  ✅ triceps - trofeo : 14kg
+  ✅ hombro - elevaciones laterales con mancuernas : 5kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ triceps - press frances : 10kg
+  ✅ hombro - rueda : 5kg
+     triceps - en maquina barra fija : 15kg
+     hombro - maquina agarre paralelo : 20kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina arriba : 35kg
+
+2025-07-21 | [raw] Triceps - Hombro | 13 sets | fitbit=no
+  ✅ triceps - polea : 29kg
+  ✅ triceps - polea : 35kg
+  ✅ hombro - press militar maquina : 40kg
+  ✅ hombro - press militar maquina : 45kg
+  ✅ triceps - trofeo : 12kg
+  ✅ hombro - elevaciones laterales con mancuernas : 5kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ triceps - polea barra : 35kg
+     triceps - trofeo detras de la cabeza : 12kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - press militar : 14kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-07-22 | [raw] Pierna | 28 sets | fitbit=no
+  ✅ cuadriceps - extension de cuadriceps : 77kg
+  ✅ cuadriceps - multipower : 40kg
+  ✅ femoral - curl de femoral : 35kg
+  ✅ femoral - curl de femoral : 41kg
+  ✅ gemelos - gemelos en multipower : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - prensa : 180kg
+     gluteos - prensa : 200kg
+     femoral - prensa : 180kg
+     femoral - prensa : 200kg
+     cuadriceps - prensa : 180kg
+     cuadriceps - prensa : 200kg
+     gemelos - prensa : 180kg
+     gemelos - prensa : 200kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-07-23 | [raw] Pecho - Abdominales | 10 sets | fitbit=no
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales : 20rep
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - pecho bajo doble polea : 17kg
+  ✅ abdominales - abdominales rusos : 8kg
+     pecho - plano : 25kg
+     pecho - bajo unilateral polea : 7.5kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-07-24 | [raw] Espalda - Biceps | 16 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ espalda - remo agarre corto : 59kg
+  ✅ biceps - mancuernas : 10kg
+  ✅ espalda - jalon agarre largo : 47kg
+  ✅ biceps - polea cuerdas : 15kg
+  ✅ biceps - polea cuerdas : 17kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     biceps - curl libre : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre corto : 50kg
+     pecho - espalda jalon al pecho agarre corto : 55kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-07-26 | [raw] Triceps - Hombro | 12 sets | fitbit=no
+  ✅ hombro - press militar : 15kg
+  ✅ hombro - press militar : 17'5kg
+  ✅ triceps - trofeo en polea : 23kg
+  ✅ hombro - elevaciones laterales con mancuernas : 5kg
+  ✅ triceps - press frances : 5kg
+     triceps - trofeo detras de la cabeza : 12kg
+     triceps - en maquina barra fija : 35kg
+     triceps - trofeo detras de la cabeza : 12kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-07-27 | [raw] Pierna | 28 sets | fitbit=no
+  ✅ cuadriceps - sentadilla libre : 80kg
+  ✅ cuadriceps - sentadilla libre : 100kg
+     cuadriceps - en maquina : 77kg
+     sentadilla - columpio : 40kg
+     femoral - curls de femoral : 35kg
+     femoral - curls de femoral : 41kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     gluteos - prensa : 180kg
+     gluteos - prensa : 200kg
+     femoral - prensa : 180kg
+     femoral - prensa : 200kg
+     cuadriceps - prensa : 180kg
+     cuadriceps - prensa : 200kg
+     gemelos - prensa : 180kg
+     gemelos - prensa : 200kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-07-28 | [raw] Pecho - Abdominales | 13 sets | fitbit=no
+  ✅ pecho - press maquina : 55kg
+  ✅ pecho - press maquina : 60kg
+  ✅ pecho - pecho plano : 47kg
+  ✅ pecho - pecho plano : 53kg
+  ✅ pecho - pecho bajo unilateral en polea : 11kg
+  ✅ abdominales - abdominales : 20rep
+  ✅ abdominales - abdominales : 12rep
+  ✅ abdominales - crunch : 5kg
+     pecho - press de banca 50kg pr : 75kg
+     abdomen - abdominales rusos x4 20rep + : 8kg
+     pecho - bajo doble polea : 17kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-07-30 | [raw] Espalda - Biceps | 19 sets | fitbit=no
+  ✅ espalda - jalon agarre corto : 47kg
+  ✅ espalda - jalon agarre corto : 51kg
+  ✅ biceps - mancuernas : 12kg
+  ✅ biceps - mancuernas : 10kg
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ espalda - remo agarre corto : 47kg
+     pecho - espalda jalon al pecho agarre largo : 45kg
+     pecho - espalda jalon al pecho agarre largo : 50kg
+     pecho - espalda jalon al pecho agarre largo : 55kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     biceps - curl libre : 15kg
+     biceps - polea : 12kg
+     biceps - polea : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-07-31 | [raw] Triceps - Hombro | 11 sets | fitbit=no
+  ✅ hombro - press militar : 15kg
+  ✅ hombro - press militar : 20kg
+  ✅ triceps - polea barra : 35kg
+  ✅ hombro - elevaciones laterales con mancuernas : 5kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7'5kg
+  ✅ triceps - trofeo en polea : 23kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     triceps - trofeo detras de la cabeza : 12kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-08-01 | [raw] Pecho - Abdominales | 10 sets | fitbit=no
+  ✅ pecho - pecho plano : 25kg
+  ✅ abdominales - abdominales : 20rep
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - press de banca : 50kg
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ pecho - pecho bajo unilateral en polea : 7.5kg
+     pecho - bajo doble polea : 17kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-08-03 | [raw] Espalda - Biceps | 20 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ espalda - remo agarre corto : 59kg
+  ✅ biceps - martillo : 12'5kg
+  ✅ biceps - martillo : 10kg
+  ✅ espalda - jalon agarre largo : 53kg
+  ✅ espalda - jalon agarre largo : 47kg
+  ✅ biceps - polea cuerdas : 23kg
+  ✅ espalda - lumbares : 5kg
+     biceps - mancuernas : 12kg
+     biceps - mancuernas : 10kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     biceps - curl libre : 15kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre corto : 50kg
+     pecho - espalda jalon al pecho agarre corto : 55kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-08-04 | [raw] Triceps - Hombro | 13 sets | fitbit=no
+  ✅ triceps - polea : 35kg
+  ✅ triceps - polea : 29kg
+  ✅ hombro - press militar : 17'5kg
+  ✅ hombro - press militar : 20kg
+  ✅ triceps - trofeo en polea : 23kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7'5kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     triceps - trofeo detras de la cabeza : 12kg
+     triceps - en maquina barra fija : 35kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-08-05 | [raw] Pecho - Abdominales | 10 sets | fitbit=no
+  ✅ pecho - pecho plano : 53kg
+  ✅ abdominales - abdominales : 20rep
+  ✅ abdominales - abdominales : 12rep
+  ✅ pecho - pecho bajo unilateral en polea : 11kg
+     abdomen - abdominales en la maquina : 5kg
+     pecho - press de banca 50kg pr : 75kg
+     abdomen - abdominales rusos x4 20rep + : 8kg
+     pecho - bajo doble polea : 17kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-08-08 | [raw] Espalda - Biceps | 19 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ espalda - remo agarre corto : 59kg
+  ✅ biceps - mancuernas : 12'5kg
+  ✅ biceps - mancuernas : 10kg
+  ✅ espalda - jalon agarre corto : 47kg
+  ✅ biceps - curl banco scott : 10kg
+     biceps - martillo : 12'5kg
+     biceps - martillo : 10kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     biceps - polea baja : 23kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo agarre largo : 47kg
+     espalda - remo agarre largo : 53kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-08-11 | [raw] Extra | 13 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ espalda - remo agarre corto : 59kg
+  ✅ biceps - mancuernas : 12'5kg
+  ✅ triceps - polea : 35kg
+  ✅ triceps - polea : 29kg
+  ✅ hombro - press militar : 17'5kg
+  ✅ hombro - press militar : 20kg
+  ✅ pecho - pecho plano : 53kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     biceps - martillo : 12'5kg
+     biceps - martillo : 10kg
+     triceps - trofeo en maquina : 23kg
+
+2025-09-30 | [raw] Extra | 10 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 45kg
+  ✅ espalda - remo agarre corto : 40kg
+  ✅ pecho - pecho alto maquina discos : 15kg
+  ✅ pecho - press banca : 50kg
+  ✅ pecho - press banca : 40kg
+  ✅ pecho - press banca : 30kg
+  ✅ hombro - press militar : 12kg
+  ✅ biceps - martillo : 12kg
+  ✅ triceps - trofeo : 15kg
+  ✅ triceps - trofeo : 13kg
+
+2025-10-03 | [raw] Extra | 6 sets | fitbit=no
+  ✅ espalda - jalon agarre largo : 45kg
+  ✅ espalda - jalon agarre largo : 40kg
+  ✅ pecho - pecho bajo polea : 15kg
+  ✅ triceps - polea 15kg-13kg : 0kg
+  ✅ hombro - disco : 5kg
+  ✅ biceps - mancuernas : 12kg
+
+2025-10-07 | [raw] Extra | 5 sets | fitbit=no
+  ✅ espalda - jalon agarre largo : 45kg
+  ✅ espalda - jalon agarre largo : 40kg
+  ✅ pecho - pecho bajo polea : 15kg
+  ✅ triceps - polea 15kg-13kg : 0kg
+  ✅ biceps - mancuernas : 12kg
+
+2025-10-14 | [raw] Espalda - Biceps | 19 sets | fitbit=no
+  ✅ biceps - mancuernas : 13kg
+  ✅ espalda - remo agarre corto : 45kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - curl banco scott : 20kg
+  ✅ biceps - curl banco scott : 15kg
+  ✅ espalda - remo agarre largo : 45kg
+  ✅ espalda - remo agarre largo : 40kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     biceps - martillo : 12'5kg
+     biceps - martillo : 10kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     biceps - polea baja : 23kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-10-20 | [raw] Pierna | 21 sets | fitbit=no
+  ✅ cuadriceps - prensa : 120kg
+  ✅ cuadriceps - prensa : 140kg
+  ✅ cuadriceps - extension de cuadriceps : 50kg
+  ✅ femoral - curl de femoral : 25kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-10-21 | [raw] Triceps - Hombro | 14 sets | fitbit=no
+  ✅ hombro - press militar : 15kg
+  ✅ hombro - press militar : 17kg
+  ✅ triceps - polea : 25kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ triceps - trofeo : 12kg
+     triceps - trofeo en maquina : 23kg
+     triceps - martillo maquina : 35kg
+     triceps - martillo maquina : 29kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     triceps - en maquina barra fija : 35kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-10-22 | [raw] Pecho - Abdominales | 12 sets | fitbit=no
+  ✅ pecho - press de banca : 40kg
+  ✅ abdominales - crunch : 0kg
+  ✅ pecho - pecho plano : 50kg
+  ✅ pecho - pecho plano : 45kg
+     abdomen - abdominales x4 : 20rep
+     abdomen - abdominales x4 : 12rep
+     pecho - bajo unilateral polea : 11kg
+     abdomen - abdominales en la maquina : 5kg
+     abdomen - abdominales rusos x4 20rep + : 8kg
+     pecho - bajo doble polea : 17kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-10-27 | [raw] Espalda - Biceps | 19 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 45kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - mancuernas : 13kg
+  ✅ espalda - unilateral maquina con discos : 10kg
+  ✅ biceps - martillo : 13kg
+     biceps - curl banco scott polea : 20kg
+     biceps - curl banco scott polea : 15kg
+     espalda - remo agarre largo : 45kg
+     espalda - remo agarre largo : 40kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     biceps - polea baja : 23kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-10-28 | [raw] Triceps - Hombro | 15 sets | fitbit=no
+  ✅ hombro - press militar : 16kg
+  ✅ hombro - press militar : 18kg
+  ✅ triceps - polea : 25kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ hombro - elevaciones laterales con mancuernas : 8kg
+     triceps - trofeo detras de la cabeza : 12kg
+     triceps - trofeo en maquina : 23kg
+     triceps - martillo maquina : 35kg
+     triceps - martillo maquina : 29kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     triceps - en maquina barra fija : 35kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-10-29 | [raw] Pecho - Abdominales | 15 sets | fitbit=no
+  ✅ pecho - pecho plano : 50kg
+  ✅ pecho - pecho plano : 60kg
+     pecho - press de banca 40kg pr : 75kg
+     gluteos - abdominales balanceo piernas : 0kg
+     femoral - abdominales balanceo piernas : 0kg
+     cuadriceps - abdominales balanceo piernas : 0kg
+     gemelos - abdominales balanceo piernas : 0kg
+     abdomen - abdominales x4 : 20rep
+     abdomen - abdominales x4 : 12rep
+     pecho - bajo unilateral polea : 11kg
+     abdomen - abdominales en la maquina : 5kg
+     abdomen - abdominales rusos x4 20rep + : 8kg
+     pecho - bajo doble polea : 17kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-11-04 | [raw] Triceps - Hombro | 19 sets | fitbit=no
+  ✅ hombro - press militar : 17kg
+  ✅ hombro - press militar : 19kg
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 25kg
+  ✅ pecho - pecho plano : 50kg
+  ✅ pecho - pecho plano : 60kg
+  ✅ abdominales - crunch : 0kg
+     hombro - s elevaciones laterales con mancuernas : 7kg
+     hombro - s elevaciones laterales con mancuernas : 8kg
+     triceps - trofeo detras de la cabeza : 12kg
+     triceps - trofeo en maquina : 23kg
+     triceps - martillo maquina : 35kg
+     triceps - martillo maquina : 29kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     triceps - en maquina barra fija : 35kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-11-05 | [raw] Pierna | 23 sets | fitbit=no
+  ✅ cuadriceps - prensa : 140kg
+  ✅ gemelos - mancuernas : 15kg
+  ✅ femoral - curl de femoral : 25kg
+  ✅ femoral - curl de femoral : 20kg
+  ✅ gluteo - bulgaras : 8kg
+     cuadriceps - en maquina : 50kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-11-06 | [raw] Espalda - Biceps | 21 sets | fitbit=no
+  ✅ espalda - remo agarre corto : 45kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ biceps - mancuernas : 12kg
+  ✅ espalda - peso muerto : 18kg
+  ✅ espalda - peso muerto : 16kg
+     espalda - unilateral maquina con discos : 10kg
+     biceps - martillo : 13kg
+     biceps - curl banco scott polea : 20kg
+     biceps - curl banco scott polea : 15kg
+     espalda - remo agarre largo : 45kg
+     espalda - remo agarre largo : 40kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     biceps - polea baja : 23kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-11-10 | [raw] Triceps - Hombro | 14 sets | fitbit=no
+  ✅ hombro - press militar : 18kg
+  ✅ hombro - press militar : 20kg
+  ✅ triceps - polea : 30kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ hombro - elevaciones laterales con mancuernas : 8kg
+     triceps - trofeo en maquina : 23kg
+     triceps - martillo maquina : 35kg
+     triceps - martillo maquina : 29kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     triceps - en maquina barra fija : 35kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-11-11 | [raw] Pierna | 25 sets | fitbit=no
+  ✅ femoral - curl de femoral : 30kg
+  ✅ femoral - curl de femoral : 25kg
+  ✅ cuadriceps - prensa : 140kg
+  ✅ cuadriceps - prensa : 160kg
+  ✅ cuadriceps - prensa : 180kg
+  ✅ gluteo - bulgaras : 10kg
+     gemelos - mancuernas : 15'kg
+     cuadriceps - en maquina : 50kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-11-12 | [raw] Pecho - Abdominales | 15 sets | fitbit=no
+  ✅ pecho - pecho plano : 55kg
+  ✅ pecho - pecho plano : 60kg
+     pecho - press de banca 40kg pr : 75kg
+     gluteos - abdominales balanceo piernas : 0kg
+     femoral - abdominales balanceo piernas : 0kg
+     cuadriceps - abdominales balanceo piernas : 0kg
+     gemelos - abdominales balanceo piernas : 0kg
+     abdomen - abdominales x4 : 20rep
+     abdomen - abdominales x4 : 12rep
+     pecho - bajo unilateral polea : 11kg
+     abdomen - abdominales en la maquina : 5kg
+     abdomen - abdominales rusos x4 20rep + : 8kg
+     pecho - bajo doble polea : 17kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-11-14 | [raw] Espalda - Biceps | 20 sets | fitbit=no
+  ✅ espalda - remo agarre largo : 45kg
+  ✅ espalda - remo agarre largo : 40kg
+  ✅ biceps - polea cuerdas : 30kg
+  ✅ biceps - polea cuerdas : 35kg
+     biceps - mancuernas : 12kg
+     espalda - unilateral maquina con discos : 10kg
+     biceps - martillo : 13kg
+     biceps - curl banco scott polea : 20kg
+     biceps - curl banco scott polea : 15kg
+     espalda - remo agarre largo : 45kg
+     espalda - remo agarre largo : 40kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-11-15 | [raw] Pierna | 33 sets | fitbit=no
+  ✅ cuadriceps - rdl : 18kg
+  ✅ gluteo - hiptrust : 80kg
+  ✅ gluteo - hiptrust : 70kg
+  ✅ cuadriceps - zancadas : 20kg
+  ✅ femoral - curl de femoral : 30kg
+  ✅ femoral - curl de femoral : 25kg
+  ✅ gemelos - gemelos en maquina : 35kg
+     gluteos - prensa : 140kg
+     femoral - prensa : 140kg
+     cuadriceps - prensa : 140kg
+     gemelos - prensa : 140kg
+     gemelos - mancuernas : 15'kg
+     gluteos - búlgaras : 8kg
+     femoral - búlgaras : 8kg
+     cuadriceps - búlgaras : 8kg
+     gemelos - búlgaras : 8kg
+     cuadriceps - en maquina : 50kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-11-17 | [raw] Espalda - Biceps | 20 sets | fitbit=no
+  ✅ espalda - remo agarre largo : 50kg
+  ✅ espalda - remo agarre largo : 55kg
+  ✅ biceps - martillo : 13kg
+  ✅ espalda - jalon agarre largo : 53kg
+  ✅ espalda - jalon agarre largo : 47kg
+     biceps - polea baja : 30kg
+     biceps - polea baja : 35kg
+     biceps - mancuernas : 12kg
+     espalda - unilateral maquina con discos : 10kg
+     biceps - curl banco scott polea : 20kg
+     biceps - curl banco scott polea : 15kg
+     espalda - remo agarre largo : 45kg
+     espalda - remo agarre largo : 40kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-11-18 | [raw] Pierna | 24 sets | fitbit=no
+  ✅ cuadriceps - prensa : 140kg
+  ✅ cuadriceps - prensa : 160kg
+  ✅ cuadriceps - prensa : 180kg
+  ✅ cuadriceps - extension de cuadriceps : 60kg
+  ✅ gluteo - bulgaras : 10kg
+     femoral - curls de femoral30-25kg : 0kg
+     gemelos - mancuernas : 15'kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-11-19 | [raw] Pecho - Hombro - Abdominales | 18 sets | fitbit=no
+  ✅ pecho - pecho plano : 55kg
+  ✅ pecho - pecho plano : 60kg
+  ✅ triceps - trofeo : 14kg
+  ✅ hombro - press militar : 19kg
+  ✅ hombro - press militar : 21kg
+  ✅ pecho - press de banca : 50kg
+     gluteos - abdominales balanceo piernas : 0kg
+     femoral - abdominales balanceo piernas : 0kg
+     cuadriceps - abdominales balanceo piernas : 0kg
+     gemelos - abdominales balanceo piernas : 0kg
+     abdomen - abdominales x4 : 20rep
+     abdomen - abdominales x4 : 12rep
+     pecho - bajo unilateral polea : 11kg
+     abdomen - abdominales en la maquina : 5kg
+     abdomen - abdominales rusos x4 20rep + : 8kg
+     pecho - bajo doble polea : 17kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-11-24 | [raw] Espalda - Biceps | 18 sets | fitbit=no
+  ✅ espalda - remo agarre neutro : 50kg
+  ✅ biceps - mancuernas : 12kg
+  ✅ espalda - remo agarre largo : 50kg
+  ✅ biceps - martillo : 14kg
+     biceps - polea baja : 30kg
+     biceps - polea baja : 35kg
+     espalda - unilateral maquina con discos : 10kg
+     biceps - curl banco scott polea : 20kg
+     biceps - curl banco scott polea : 15kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2025-11-25 | [raw] Pierna | 31 sets | fitbit=no
+  ✅ cuadriceps - sentadilla libre : 20kg
+  ✅ cuadriceps - sentadilla libre : 60kg
+  ✅ cuadriceps - prensa : 100kg
+  ✅ cuadriceps - prensa : 120kg
+  ✅ gluteo - bulgaras : 12kg
+     cuadriceps - extension de cuadriceps : 60kg
+     cuadriceps - extensiones de cuadriceps leg extension : 0kg
+     sentadilla - bulgara bulgarian split squat : 0kg
+     gluteos - elevación de talones de pie standing calf raise : 0kg
+     femoral - elevación de talones de pie standing calf raise : 0kg
+     cuadriceps - elevación de talones de pie standing calf raise : 0kg
+     gemelos - elevación de talones de pie standing calf raise : 0kg
+     femoral - curls de femoral30-25kg : 0kg
+     gemelos - mancuernas : 15'kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-11-26 | [raw] Triceps - Hombro | 16 sets | fitbit=no
+  ✅ triceps - trofeo : 13kg
+  ✅ hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ hombro - elevaciones laterales con mancuernas : 8kg
+  ✅ triceps - polea : 35kg
+  ✅ triceps - polea : 30kg
+     hombro - press militar : 18kg
+     hombro - press militar : 20kg
+     triceps - trofeo en maquina : 23kg
+     triceps - martillo maquina : 35kg
+     triceps - martillo maquina : 29kg
+     hombro - press maquina : 40kg
+     hombro - press maquina : 45kg
+     triceps - en maquina barra fija : 35kg
+     triceps - por encima de la cabeza en maquina : 23kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - pesa circular con los dos brazos adelante : 5kg
+
+2025-11-27 | [raw] Pierna | 39 sets | fitbit=no
+  ✅ espalda - rdl : 15kg
+  ✅ cuadriceps - zancadas : 20kg
+  ✅ femoral - curl de femoral : 30kg
+  ✅ femoral - curl de femoral : 25kg
+     gemelos - en maquina : 20kg
+     gluteos - prensa : 140kg
+     gluteos - prensa : 160kg
+     gluteos - prensa : 180kg
+     femoral - prensa : 140kg
+     femoral - prensa : 160kg
+     femoral - prensa : 180kg
+     cuadriceps - prensa : 140kg
+     cuadriceps - prensa : 160kg
+     cuadriceps - prensa : 180kg
+     gemelos - prensa : 140kg
+     gemelos - prensa : 160kg
+     gemelos - prensa : 180kg
+     cuadriceps - extension de cuadriceps : 60kg
+     gluteos - búlgaras : 10kg
+     femoral - búlgaras : 10kg
+     cuadriceps - búlgaras : 10kg
+     gemelos - búlgaras : 10kg
+     gemelos - mancuernas : 15'kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-11-29 | [raw] Pecho - Abdominales | 14 sets | fitbit=no
+  ✅ pecho - press banca mancuernas : 20kg
+  ✅ pecho - press banca mancuernas : 18kg
+  ✅ abdominales - crunch : 0kg
+  ✅ pecho - pecho plano : 55kg
+  ✅ pecho - pecho plano : 60kg
+     pecho - press de banca 40kg pr : 75kg
+     abdomen - abdominales x4 : 20rep
+     abdomen - abdominales x4 : 12rep
+     pecho - bajo unilateral polea : 11kg
+     abdomen - abdominales en la maquina : 5kg
+     abdomen - abdominales rusos x4 20rep + : 8kg
+     pecho - bajo doble polea : 17kg
+     pecho - alto : 50kg
+     abdomen - abdominales cruzados x4 : 12rep
+
+2025-12-01 | [raw] Pierna | 31 sets | fitbit=no
+  ✅ cuadriceps - prensa : 100kg
+  ✅ cuadriceps - prensa : 120kg
+  ✅ cuadriceps - extension de cuadriceps : 60kg
+  ✅ gluteo - bulgaras : 14kg
+  ✅ gemelos - mancuernas : 20kg
+     sentadilla - con barra barbell squat : 20kg
+     sentadilla - con barra barbell squat : 60kg
+     cuadriceps - extensiones de cuadriceps leg extension : 0kg
+     sentadilla - bulgara bulgarian split squat : 0kg
+     gluteos - elevación de talones de pie standing calf raise : 0kg
+     femoral - elevación de talones de pie standing calf raise : 0kg
+     cuadriceps - elevación de talones de pie standing calf raise : 0kg
+     gemelos - elevación de talones de pie standing calf raise : 0kg
+     femoral - curls de femoral30-25kg : 0kg
+     sentadilla - columpio : 40kg
+     gemelos - en multi-power : 80kg
+     gluteos - hacka : 110kg
+     gluteos - hacka : 120kg
+     femoral - hacka : 110kg
+     femoral - hacka : 120kg
+     cuadriceps - hacka : 110kg
+     cuadriceps - hacka : 120kg
+     gemelos - hacka : 110kg
+     gemelos - hacka : 120kg
+     gemelos - en maquina : 20kg
+     sentadilla - s : 80kg
+     sentadilla - s : 100kg
+     gluteos - correr : 20min
+     femoral - correr : 20min
+     cuadriceps - correr : 20min
+     gemelos - correr : 20min
+
+2025-12-03 | [raw] Espalda - Biceps | 18 sets | fitbit=no
+  ✅ espalda - remo agarre neutro : 50kg
+  ✅ biceps - mancuernas : 14kg
+  ✅ espalda - remo agarre neutro : 50kg
+  ✅ biceps - martillo : 14kg
+     biceps - polea baja : 30kg
+     biceps - polea baja : 35kg
+     espalda - unilateral maquina con discos : 10kg
+     biceps - curl banco scott polea : 20kg
+     biceps - curl banco scott polea : 15kg
+     pecho - espalda jalon al pecho agarre corto : 47kg
+     pecho - espalda jalon al pecho agarre largo : 53kg
+     pecho - espalda jalon al pecho agarre largo : 47kg
+     espalda - lumbares +5kg : 0kg
+     espalda - baja : 5kg
+     espalda - baja : 10kg
+     espalda - remo discos agarre corto : 20kg
+     espalda - remo discos agarre corto : 25kg
+     biceps - curl maquina : 20kg
+
+2026-01-08 | [raw] Extra | 7 sets | fitbit=no
+  ✅ hombro - press militar : 15kg
+  ✅ pecho - pecho plano : 47kg
+  ✅ triceps - polea : 29kg
+  ✅ espalda - jalón agarre neutro : 53kg
+  ✅ espalda - jalón agarre neutro : 47kg
+  ✅ espalda - jalón agarre neutro : 41kg
+  ✅ biceps - martillo : 12'5kg
+
+2026-01-16 | [raw] Extra | 7 sets | fitbit=yes
+  ✅ espalda - jalón agarre neutro : 47kg
+  ✅ espalda - jalón agarre neutro : 41kg
+  ✅ hombro - press militar : 15kg
+  ✅ pecho - pecho plano : 47kg
+  ✅ biceps - martillo : 10kg
+  ✅ biceps - martillo : 12'5kg
+  ✅ triceps - polea : 29kg
+
+2026-01-17 | [raw] Extra | 4 sets | fitbit=yes
+  ✅ triceps - polea : 29kg
+  ✅ espalda - remo unilateral : 23kg
+  ✅ espalda - remo unilateral : 17kg
+  ✅ pecho - pecho inclinado con mancuernas : 15kg
+
+2026-01-19 | [raw] Espalda - Biceps | 6 sets | fitbit=yes
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ espalda - remo agarre corto : 47kg
+  ✅ biceps - martillo : 12'5kg
+  ✅ espalda - remo agarre neutro : 53kg
+  ✅ espalda - remo agarre neutro : 47kg
+  ✅ biceps - barra z : 12kg
+
+2026-01-20 | [raw] Pierna | 2 sets | fitbit=yes
+  ✅ cuadriceps - extension de cuadriceps : 101kg
+  ✅ femoral - curl de femoral : 41kg
+
+2026-01-21 | [raw] Pecho - Hombro - Triceps | 1 sets | fitbit=yes
+  ✅ pecho - pecho plano : 53kg
+
+2026-01-31 | [raw] Espalda - Biceps | 6 sets | fitbit=yes
+  ✅ espalda - remo agarre corto : 53kg
+  ✅ espalda - remo agarre corto : 47kg
+  ✅ biceps - martillo : 12'5kg
+  ✅ espalda - remo agarre neutro : 53kg
+  ✅ espalda - remo agarre neutro : 47kg
+  ✅ biceps - barra z : 12kg
+
+2026-02-16 | [raw] Pecho - Hombro - Abdominales | 8 sets | fitbit=yes
+  ✅ pecho - pecho plano : 50kg
+  ✅ pecho - pecho plano : 55kg
+  ✅ hombro - press militar : 17kg
+  ✅ triceps - trofeo : 12kg
+  ✅ pecho - press banca mancuernas : 18kg
+  ✅ hombro - rueda : 6kg
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 25kg
+
+2026-02-17 | [raw] Pierna | 6 sets | fitbit=yes
+  ✅ cuadriceps - zancadas : 6kg
+  ✅ gemelos - gemelos sentado : 40kg
+  ✅ gemelos - gemelos sentado : 55kg
+  ✅ femoral - curl de femoral : 35kg
+  ✅ femoral - curl de femoral : 30kg
+  ✅ cuadriceps - extension de cuadriceps : 60kg
+
+2026-02-18 | [raw] Espalda - Biceps | 7 sets | fitbit=yes
+  ✅ biceps - mancuernas : 14kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ espalda - remo agarre corto : 55kg
+  ✅ biceps - low cable unilateral : 15kg
+  ✅ espalda - lumbares : 5kg
+  ✅ biceps - barra z : 15kg
+  ✅ espalda - jalon agarre corto : 50kg
+
+2026-02-23 | [raw] Pecho - Hombro - Abdominales | 10 sets | fitbit=yes
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 25kg
+  ✅ hombro - press militar : 18kg
+  ✅ hombro - press militar : 19kg
+  ✅ pecho - pecho plano : 50kg
+  ✅ pecho - pecho plano : 45kg
+  ✅ triceps - trofeo en polea : 20kg
+  ✅ hombro - rueda : 7kg
+  ✅ hombro - rueda : 6kg
+  ✅ pecho - press banca mancuernas : 18kg
+
+2026-02-24 | [raw] Espalda - Biceps | 7 sets | fitbit=yes
+  ✅ biceps - mancuernas : 14kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ espalda - remo agarre corto : 55kg
+  ✅ biceps - low cable unilateral : 15kg
+  ✅ espalda - lumbares : 5kg
+  ✅ biceps - barra z : 15kg
+  ✅ espalda - jalon agarre corto : 50kg
+
+2026-02-25 | [raw] Extra | 2 sets | fitbit=yes
+  ✅ pecho - pecho bajo unilateral en polea : 15kg
+  ✅ abdominales - crunch : 0kg
+
+2026-02-28 | [FITBIT] Natación | 1 sets | fitbit=yes
+     swim - pool : 0kg
+
+2026-03-03 | [raw] Espalda - Biceps | 7 sets | fitbit=yes
+  ✅ biceps - mancuernas : 14kg
+  ✅ espalda - remo agarre corto : 50kg
+  ✅ espalda - remo agarre corto : 55kg
+  ✅ biceps - low cable unilateral : 15kg
+  ✅ espalda - lumbares : 5kg
+  ✅ biceps - barra z : 15kg
+  ✅ espalda - jalon agarre corto : 50kg
+
+2026-03-04 | [GymHub] Abdominales - Pecho | 24 sets | fitbit=yes
+     abdominales - abdominales : 0kg
+     abdominales - abdominales rusos : 0kg
+  ✅ abdominales - crunch : 0kg
+     abdominales - plancha : 0kg
+     pecho - espalda jalon al pecho agarre corto : 0kg
+     pecho - espalda jalon al pecho agarre largo : 0kg
+     pecho - pecho alto : 0kg
+     pecho - pecho alto maquina discos : 0kg
+     pecho - pecho bajo doble polea : 0kg
+     pecho - pecho bajo polea : 0kg
+     pecho - pecho bajo unilateral en polea : 0kg
+     pecho - pecho inclinado con mancuernas : 0kg
+  ✅ pecho - pecho plano : 50kg
+     pecho - press maquina : 55kg
+     pecho - press banca : 0kg
+     pecho - press banca mancuernas : 0kg
+     pecho - press de banca : 0kg
+     pecho - press de banca 40kg pr : 0kg
+     pecho - press de banca 50kg pr : 0kg
+  ✅ pecho - press inclinado : 40kg
+     pecho - alto : 0kg
+     pecho - bajo doble polea : 0kg
+     pecho - bajo unilateral polea : 0kg
+     pecho - plano : 0kg
+
+2026-03-05 | [GymHub] Pierna | 18 sets | fitbit=yes
+     gluteos - ejercicio desconocido : 0kg
+     femoral - ejercicio desconocido : 0kg
+     cuadriceps - ejercicio desconocido : 0kg
+     gemelos - ejercicio desconocido : 0kg
+     cuadriceps - extension de cuadriceps : 0kg
+     cuadriceps - extensiones de cuadriceps leg extension : 0kg
+     cuadriceps - hacka : 0kg
+     cuadriceps - multipower : 0kg
+     cuadriceps - prensa : 0kg
+     cuadriceps - rdl : 0kg
+     cuadriceps - sentadilla libre : 0kg
+  ✅ cuadriceps - zancadas : 10kg
+  ✅ cuadriceps - zancadas : 20kg
+  ✅ femoral - curl de femoral : 35kg
+     femoral - curl de femoral sentado : 0kg
+     femoral - curls de femoral : 0kg
+     femoral - curls de femoral30-25kg : 0kg
+  ✅ gluteo - bulgaras : 10kg
+
+2026-03-06 | [GymHub] Hombro - Triceps | 27 sets | fitbit=yes
+     hombro - disco : 0kg
+     hombro - elevaciones laterales con mancuernas : 7kg
+  ✅ hombro - elevaciones laterales : 6kg
+     hombro - elevaciones laterales con mancuernas : 0kg
+     hombro - maquina agarre paralelo : 0kg
+     hombro - press militar maquina : 40kg
+  ✅ hombro - press militar : 18kg
+  ✅ hombro - press militar : 19kg
+     hombro - press militar maquina : 0kg
+     hombro - rueda : 0kg
+     hombro - maquina arriba : 0kg
+     hombro - pesa circular con los dos brazos adelante : 0kg
+     hombro - press maquina : 0kg
+     hombro - s elevaciones con mancuernas : 0kg
+     hombro - s elevaciones laterales con mancuernas : 0kg
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 35kg
+     triceps - polea 15kg-13kg : 0kg
+     triceps - polea barra : 0kg
+     triceps - press frances : 0kg
+     triceps - trofeo : 0kg
+  ✅ triceps - trofeo en polea : 25kg
+     triceps - en maquina barra fija : 0kg
+     triceps - martillo maquina : 0kg
+     triceps - por encima de la cabeza en maquina : 0kg
+     triceps - trofeo detras de la cabeza : 0kg
+     triceps - trofeo en maquina : 0kg
+
+2026-03-08 | [GymHub] Natación | 0 sets | fitbit=yes
+  (no sets parsed)
+
+2026-03-09 | [GymHub] Hombro - Pecho - Triceps | 31 sets | fitbit=yes
+  ✅ hombro - disco : 5kg
+     hombro - elevaciones laterales con mancuernas 7 : 8kg
+     hombro - elevaciones laterales : 6kg
+     hombro - elevaciones laterales con mancuernas : 0kg
+     hombro - maquina agarre paralelo : 20kg
+     hombro - press militar maquina 40 : 45kg
+  ✅ hombro - press militar : 19kg
+  ✅ hombro - press militar : 18kg
+     hombro - press militar maquina : 0kg
+     hombro - rueda : 7kg
+     hombro - maquina arriba : 0kg
+     pecho - pecho alto : 50kg
+     pecho - pecho alto maquina discos : 15kg
+     pecho - pecho bajo doble polea : 17kg
+     pecho - pecho bajo polea : 15kg
+     pecho - pecho bajo unilateral en polea : 15kg
+     pecho - pecho inclinado con mancuernas : 15kg
+  ✅ pecho - pecho plano : 55kg
+  ✅ pecho - pecho plano : 50kg
+     pecho - press maquina 55 : 60kg
+  ✅ pecho - press banca : 50kg
+  ✅ pecho - press banca : 40kg
+     pecho - press banca mancuernas : 18kg
+     pecho - press inclinado : 40kg
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 35kg
+     triceps - polea barra : 35kg
+     triceps - press frances : 5kg
+  ✅ triceps - trofeo : 13kg
+  ✅ triceps - trofeo : 14kg
+     triceps - trofeo en polea : 25kg
+
+2026-03-10 | [GymHub] Abdominales - Pierna | 21 sets | fitbit=yes
+     gluteos - ejercicio desconocido : 0kg
+     femoral - ejercicio desconocido : 0kg
+     cuadriceps - ejercicio desconocido : 0kg
+     gemelos - ejercicio desconocido : 0kg
+     abdominales - abdominales : 0kg
+     abdominales - abdominales rusos : 0kg
+  ✅ abdominales - crunch : 0kg
+     abdominales - plancha : 0kg
+     cuadriceps - extension de cuadriceps : 0kg
+     cuadriceps - extensiones de cuadriceps leg extension : 0kg
+     cuadriceps - hacka : 0kg
+     cuadriceps - multipower : 0kg
+     cuadriceps - prensa : 0kg
+     cuadriceps - rdl : 0kg
+     cuadriceps - sentadilla libre : 0kg
+  ✅ cuadriceps - zancadas : 20kg
+  ✅ cuadriceps - zancadas : 10kg
+  ✅ femoral - curl de femoral : 35kg
+     femoral - curl de femoral sentado : 0kg
+     femoral - curls de femoral : 0kg
+     femoral - curls de femoral30-25kg : 0kg
+
+2026-03-12 | [GymHub] Espalda - Biceps | 7 sets | fitbit=no
+  ✅ biceps - martillo : 14kg
+  ✅ biceps - barra z : 15kg
+     biceps - low cable unilateral : 15kg
+     espalda - lumbares : 5kg
+  ✅ espalda - jalon agarre neutro : 50kg
+  ✅ espalda - jalon agarre neutro : 55kg
+  ✅ espalda - remo agarre corto : 50kg
+
+2026-03-15 | [GymHub] Natación | 0 sets | fitbit=yes
+  (no sets parsed)
+
+2026-03-16 | [GymHub] Espalda - Biceps | 9 sets | fitbit=no
+  ✅ biceps - martillo : 14kg
+  ✅ biceps - martillo : 15kg
+  ✅ biceps - barra z : 15kg
+  ✅ biceps - low cable unilateral : 15kg
+  ✅ espalda - lumbares : 10kg
+     espalda - jalon agarre neutro : 50kg
+     espalda - jalon agarre neutro : 55kg
+  ✅ espalda - remo agarre corto : 55kg
+  ✅ espalda - remo agarre corto : 60kg
+
+2026-03-19 | [raw] Pecho - Hombro - Triceps | 10 sets | fitbit=yes
+  ✅ pecho - pecho plano : 50kg
+  ✅ pecho - pecho plano : 55kg
+  ✅ hombro - press militar : 18kg
+  ✅ hombro - press militar : 19kg
+  ✅ triceps - polea : 30kg
+  ✅ pecho - press inclinado : 50kg
+  ✅ hombro - rueda : 7kg
+  ✅ triceps - trofeo en polea : 20kg
+  ✅ triceps - trofeo en polea : 25kg
+     pecho - press banca mancuernas : 18kg
+
+2026-03-24 | [raw] Natación | 0 sets | fitbit=no
+  (no sets parsed)
+
+2026-03-25 | [raw] Pecho - Hombro - Triceps | 12 sets | fitbit=no
+  ✅ pecho - press banca : 50kg
+  ✅ pecho - press banca : 60kg
+  ✅ triceps - trofeo : 14kg
+  ✅ hombro - elevaciones laterales : 9kg
+  ✅ pecho - pecho plano : 60kg
+  ✅ hombro - press militar : 18kg
+     triceps - polea : 30kg
+     hombro - rueda : 7kg
+     pecho - press inclinado : 50kg
+     triceps - trofeo en polea : 20kg
+     triceps - trofeo en polea : 25kg
+     pecho - press banca mancuernas : 18kg
+
+2026-03-27 | [GymHub] Espalda - Biceps | 9 sets | fitbit=no
+  ✅ biceps - martillo : 15kg
+  ✅ biceps - martillo : 16kg
+  ✅ biceps - barra z : 15kg
+     buceps - mancuerna : 15kg
+     biceps - low cable unilateral : 15kg
+     espalda - lumbares : 10kg
+  ✅ espalda - jalon agarre neutro : 50kg
+  ✅ espalda - jalon agarre neutro : 55kg
+  ✅ espalda - remo agarre corto : 60kg
+
+2026-04-08 | [raw] Pecho - Hombro - Triceps | 13 sets | fitbit=no
+  ✅ hombro - press militar : 18kg
+  ✅ pecho - press inclinado : 10kg
+  ✅ triceps - polea barra z : 30kg
+  ✅ hombro - elevaciones laterales : 9kg
+  ✅ hombro - elevaciones laterales : 8kg
+  ✅ triceps - trofeo : 13kg
+  ✅ pecho - pecho plano : 60kg
+     pecho - press banca : 50kg
+     pecho - press banca : 60kg
+     hombro - rueda : 7kg
+     triceps - trofeo en polea : 20kg
+     triceps - trofeo en polea : 25kg
+     pecho - press banca mancuernas : 18kg
+
+2026-04-21 | [raw] Pecho - Hombro - Triceps | 17 sets | fitbit=no
+  ✅ pecho - pecho plano : 60kg
+  ✅ hombro - press militar : 18kg
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 25kg
+  ✅ pecho - press inclinado maquina discos : 20kg
+  ✅ pecho - press inclinado maquina discos : 15kg
+  ✅ hombro - rueda : 7kg
+  ✅ triceps - trofeo : 13kg
+     pecho - press banca mancuernas : 18kg
+     pecho - press inclinado : 10kg
+     pecho - press banca : 50kg
+     pecho - press banca : 60kg
+     hombro - elevaciones laterales : 9kg
+     hombro - elevaciones laterales : 8kg
+     triceps - polea barra z : 30kg
+     triceps - trofeo en polea : 20kg
+     triceps - trofeo en polea : 25kg
+
+2026-04-24 | [GymHub] Espalda - Biceps | 9 sets | fitbit=no
+  ✅ biceps - martillo : 15kg
+  ✅ biceps - martillo : 14kg
+  ✅ biceps - barra z : 15kg
+     buceps - mancuerna : 15kg
+     biceps - low cable unilateral : 15kg
+     espalda - lumbares : 10kg
+  ✅ espalda - jalon agarre neutro : 50kg
+  ✅ espalda - jalon agarre neutro : 55kg
+  ✅ espalda - remo agarre corto : 60kg
+
+2026-04-25 | [GymHub] Pierna - Abdominales | 21 sets | fitbit=no
+     gluteos - ejercicio desconocido : 0kg
+     femoral - ejercicio desconocido : 0kg
+     cuadriceps - ejercicio desconocido : 0kg
+     gemelos - ejercicio desconocido : 0kg
+  ✅ cuadriceps - extension de cuadriceps : 65kg
+  ✅ cuadriceps - extension de cuadriceps : 70kg
+     cuadriceps - hacka : 0kg
+     cuadriceps - multipower : 0kg
+     cuadriceps - prensa : 0kg
+     cuadriceps - rdl : 0kg
+     cuadriceps - sentadilla libre : 0kg
+     cuadriceps - zancadas : 10kg
+     cuadriceps - zancadas : 20kg
+     femoral - curl de femoral : 35kg
+     femoral - curl de femoral sentado : 0kg
+     femoral - curls de femoral : 0kg
+     femoral - curls de femoral : 30kg
+     femoral - curls de femoral : 25kg
+     gemelo - sentado : 40kg
+  ✅ gluteo - bulgaras : 10kg
+  ✅ abdominales - crunch : 0kg
+
+2026-04-26 | [raw] Natación | 0 sets | fitbit=no
+  (no sets parsed)
+
+2026-04-29 | [GymHub] Espalda - Biceps | 11 sets | fitbit=no
+  ✅ biceps - martillo : 15kg
+  ✅ biceps - martillo : 14kg
+  ✅ biceps - barra z : 20kg
+  ✅ biceps - barra z : 15kg
+     buceps - mancuerna : 15kg
+     biceps - low cable unilateral : 15kg
+     espalda - lumbares : 10kg
+  ✅ espalda - jalon agarre neutro : 55kg
+  ✅ espalda - jalon agarre neutro : 50kg
+  ✅ espalda - remo agarre corto : 60kg
+  ✅ espalda - remo agarre corto : 55kg
+
+2026-04-30 | [GymHub] Abdominales - Pecho | 23 sets | fitbit=no
+  ✅ abdominales - abdominales : 20reps
+     abdominales - abdominales rusos : 0kg
+  ✅ abdominales - crunch : 0kg
+     abdominales - plancha : 0kg
+     pecho - espalda jalon al pecho agarre corto : 0kg
+     pecho - espalda jalon al pecho agarre largo : 0kg
+     pecho - pecho alto : 0kg
+     pecho - pecho alto maquina discos : 0kg
+     pecho - pecho bajo doble polea : 0kg
+  ✅ pecho - pecho bajo unilateral en polea : 15kg
+     pecho - pecho inclinado con mancuernas : 0kg
+  ✅ pecho - pecho plano : 60kg
+     pecho - press maquina : 55kg
+     pecho - press banca : 0kg
+     pecho - press banca mancuernas : 0kg
+     pecho - press de banca : 0kg
+     pecho - press de banca 40kg pr : 0kg
+     pecho - press de banca 50kg pr : 0kg
+     pecho - press inclinado : 40kg
+     pecho - alto : 0kg
+     pecho - bajo doble polea : 0kg
+     pecho - bajo unilateral polea : 0kg
+     pecho - plano : 0kg
+
+2026-05-02 | [GymHub] Hombro - Triceps | 19 sets | fitbit=no
+  ✅ hombro - elevaciones laterales : 7kg
+  ✅ hombro - elevaciones laterales : 8kg
+     hombro - maquina agarre paralelo : 0kg
+     hombro - press militar maquina : 40kg
+  ✅ hombro - press militar : 18kg
+  ✅ hombro - press militar : 19kg
+     hombro - press militar maquina : 0kg
+     hombro - rueda : 0kg
+     hombro - maquina arriba : 0kg
+     hombro - press maquina : 0kg
+     hombro - elevaciones con mancuernas : 0kg
+     hombro - elevaciones laterales con mancuernas : 0kg
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 25kg
+     triceps - polea barra : 0kg
+     triceps - press frances : 0kg
+  ✅ triceps - trofeo : 13kg
+     triceps - trofeo en polea : 25kg
+     triceps - en maquina barra fija : 0kg
+
+2026-05-05 | [GymHub] Espalda - Biceps | 10 sets | fitbit=no
+     biceps - martillo : 15kg
+     biceps - martillo : 14kg
+  ✅ biceps - barra z : 20kg
+  ✅ biceps - mancuerna : 15kg
+  ✅ biceps - mancuerna : 14kg
+     biceps - low cable unilateral : 15kg
+  ✅ espalda - lumbares : 10kg
+     espalda - jalon agarre neutro : 55kg
+     espalda - jalon agarre neutro : 50kg
+  ✅ espalda - remo agarre corto : 60kg
+
+2026-05-06 | [GymHub] Abdominales - Pecho | 19 sets | fitbit=no
+     abdominales - abdominales : 20reps
+  ✅ abdominales - abdominales rusos : 8kg
+  ✅ abdominales - crunch : 0kg
+     abdominales - plancha : 0kg
+     pecho - espalda jalon al pecho agarre corto : 0kg
+     pecho - espalda jalon al pecho agarre largo : 0kg
+  ✅ pecho - pecho alto maquina discos : 20kg
+     pecho - pecho bajo doble polea : 0kg
+     pecho - pecho bajo unilateral en polea : 15kg
+     pecho - pecho inclinado con mancuernas : 0kg
+  ✅ pecho - pecho plano : 60kg
+     pecho - press maquina : 55kg
+     pecho - press banca : 0kg
+     pecho - press banca mancuernas : 0kg
+     pecho - press de banca 40kg pr : 0kg
+     pecho - press de banca 50kg pr : 0kg
+     pecho - press inclinado : 40kg
+     pecho - bajo doble polea : 0kg
+     pecho - bajo unilateral polea : 0kg
+
+2026-05-11 | [GymHub] Espalda - Biceps | 9 sets | fitbit=no
+  ✅ biceps - martillo : 14kg
+     biceps - barra z : 20kg
+     biceps - barra z : 15kg
+     buceps - mancuerna : 15kg
+     biceps - low cable unilateral : 15kg
+  ✅ espalda - lumbares : 5kg
+     espalda - jalon agarre neutro : 55kg
+     espalda - jalon agarre neutro : 50kg
+  ✅ espalda - remo agarre corto : 60kg
+
+2026-05-14 | [raw] Pecho - Hombro - Triceps | 19 sets | fitbit=no
+  ✅ pecho - press inclinado : 10kg
+  ✅ pecho - press inclinado : 12'5kg
+  ✅ pecho - pecho plano : 60kg
+     pecho - press inclinado maquina discos : 20kg
+     pecho - press inclinado maquina discos : 15kg
+     pecho - press banca mancuernas : 18kg
+     pecho - press banca : 50kg
+     pecho - press banca : 60kg
+     hombro - press militar : 18kg
+     hombro - press militar maquina : 18kg
+     hombro - rueda : 7kg
+  ✅ hombro - elevaciones laterales : 9kg
+  ✅ hombro - elevaciones laterales : 8kg
+  ✅ triceps - polea : 30kg
+  ✅ triceps - polea : 25kg
+     triceps - trofeo : 13kg
+     triceps - polea barra z : 30kg
+     triceps - trofeo en polea : 20kg
+     triceps - trofeo en polea : 25kg
+
+2032-03-11 | [raw] Vacation to rome sevval erasmus | 0 sets | fitbit=no
+  (no sets parsed)

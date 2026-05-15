@@ -1,0 +1,330 @@
+[
+  {
+    "event_summary": "Natación",
+    "raw_description": "[GymHub]\nActividad sincronizada automáticamente desde Fitbit:\nSwim - Pool\n\n[Fitbit Metrics]\nOwner: ivansevillano2005@gmail.com\nCalorias: 24 kcal\nFC Media: 90 bpm\nDuracion: 18 min\nActividad: Swim - Pool",
+    "parsed_exercises": [
+      "⏳ Swim - pool : 0kg"
+    ],
+    "user_comment": "this is a fitbit event, do not have metrics so you don't need to save the \"exercises\" itself",
+    "timestamp": "2026-05-15T10:56:38.354634"
+  },
+  {
+    "event_id": "coo66cj4c4pmcb9k74om2b9k6li62bb275h34b9p64qj8dhp65hjecpmc4",
+    "event_summary": "Pecho - Hombro - Abdominales",
+    "raw_description": "✅Pecho - Pecho plano 50-55kg\n✅Hombro - Press militar 17kg\n✅ Triceps - Trofeo 12kg\n✅Pecho - Press banca mancuernas 18kg\n✅Hombro - Rueda 6kg\n✅ Triceps - Polea 30-25kg\n\nPecho Press de banca (50kg) (pr 75kg)\nAbdominales balanceo piernas\nAbdominales (x4 20-12rep)\nPecho bajo unilateral polea (11kg)\nAbdominales en la máquina (5kg)\nAbdominales rusos (x4 20rep) + (8kg)\nPlancha (40s x4)\nPecho bajo doble polea (17kg)\nPecho alto (50kg)\nAbdominales cruzados (x4 12rep)\n[Fitbit Metrics]\nCalorias: 378 kcal\nFC Media: 105 bpm\nPasos: 443\nDuracion: 73 min\nActividad: Weights",
+    "parsed_exercises": [
+      "✅ Pecho - pecho plano : 50-55kg",
+      "✅ Hombro - press militar : 17kg",
+      "✅ Triceps - trofeo : 12kg",
+      "✅ Pecho - press banca mancuernas : 18kg",
+      "✅ Hombro - rueda : 6kg",
+      "✅ Triceps - polea : 30-25kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:04:44.003850"
+  },
+  {
+    "event_id": "33i6kfu8l3o6pdv37mhuapc02a",
+    "event_summary": "Pierna",
+    "raw_description": "",
+    "parsed_exercises": [],
+    "user_comment": "Este no tiene ejercicios, no deberia salir directamente",
+    "timestamp": "2026-05-15T11:45:04.167725"
+  },
+  {
+    "event_id": "00pc9r1q4oao39jpciohf8u4bv",
+    "event_summary": "Espalda - Biceps",
+    "raw_description": "✅Espalda - Remo agarre corto 47-53kg\n✅Biceps - Mancuernas 10-12'5kg\n✅Biceps - Curl Banco Scott 45kg\n✅Espalda - Remo agarre largo 47-53kg\n✅Biceps - Martillo 23-29kg\n\nPecho - Espalda jalon al pecho agarre largo 41-47kg\nPecho - Espalda jalon al pecho agarre corto 47kg",
+    "parsed_exercises": [
+      "✅ Espalda - remo agarre corto : 47-53kg",
+      "✅ Biceps - mancuernas : 10-12'5kg",
+      "✅ Biceps - curl banco scott : 45kg",
+      "✅ Espalda - remo agarre largo : 47-53kg",
+      "✅ Biceps - martillo : 23-29kg",
+      "   Pecho - espalda jalon al pecho agarre largo : 41-47kg",
+      "   Pecho - espalda jalon al pecho agarre corto : 47kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:45:26.730002"
+  },
+  {
+    "event_id": "1alls3j6cnesqfipm2au7vu0tl",
+    "event_summary": "Pecho - Abdominales",
+    "raw_description": "✅Pecho - Press de Banca 50kg\n✅Abdominales - Abdominales rusos 8kg\n✅Pecho - Pecho alto 50kg\n✅Abdominales - Abdominales 12rep\n✅Pecho - Pecho plano 41-47kg\n\nAbdomen - Abdominales en la maquina 5kg\nAbdomen - Abdominales cruzados x4 12rep\nPecho - bajo doble polea 17kg",
+    "parsed_exercises": [
+      "✅ Pecho - press de banca : 50kg",
+      "✅ Abdominales - abdominales rusos : 8kg",
+      "✅ Pecho - pecho alto : 50kg",
+      "✅ Abdominales - abdominales : 12rep",
+      "✅ Pecho - pecho plano : 41-47kg",
+      "   Abdomen - abdominales en la maquina : 5kg",
+      "   Abdomen - abdominales cruzados x4 : 12rep",
+      "   Pecho - bajo doble polea : 17kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:45:31.196412"
+  },
+  {
+    "event_id": "5cr5tnpoar347145djh3u9t8va",
+    "event_summary": "Triceps - Hombro",
+    "raw_description": "✅Triceps - Polea 17~kg\n✅Hombro - Press militar Maquina 35kg\n✅Triceps - Trofeo 8-12kg\n✅Hombro - Rueda 5kg\n✅Triceps - Polea barra 15kg\n✅Hombro - Press militar 10kg\n\nHombro - s elevaciones con mancuernas 5-7'5kg\nTriceps - por encima de la cabeza en maquina 23kg",
+    "parsed_exercises": [
+      "✅ Hombro - press militar maquina : 35kg",
+      "✅ Triceps - trofeo : 8-12kg",
+      "✅ Hombro - rueda : 5kg",
+      "✅ Triceps - polea barra : 15kg",
+      "✅ Hombro - press militar : 10kg",
+      "   Hombro - s elevaciones con mancuernas : 5-7'5kg",
+      "   Triceps - por encima de la cabeza en maquina : 23kg"
+    ],
+    "user_comment": "Este esta mal, hombro se corta y deberia ser Hombros elevaciones con mancuerna. Ademas triceps es \"Triceps - Triceps por encima de la cabeza en maquina\", cuando mira el ejercicio no deberia borrar las apariciones del nombre",
+    "timestamp": "2026-05-15T11:46:46.853629"
+  },
+  {
+    "event_id": "71h62d9oc9j3ab9l75i30b9k6pi68bb26gr62bb16sr3gd1j6pi32cr270",
+    "event_summary": "Pierna",
+    "raw_description": "✅Cuadriceps - Prensa 160kg\n✅Cuadriceps - Sentadilla Libre 80kg\n✅Femoral - Curl de femoral 41kg\n\nGemelos - en multi-power 91kg\nGemelos - en maquina 40-50kg\nCuadriceps - en maquina 69-77kg\nCorrer 20min",
+    "parsed_exercises": [
+      "✅ Cuadriceps - prensa : 160kg",
+      "✅ Cuadriceps - sentadilla libre : 80kg",
+      "✅ Femoral - curl de femoral : 41kg",
+      "   Gemelos - en multi-power : 91kg",
+      "   Gemelos - en maquina : 40-50kg",
+      "   Cuadriceps - en maquina : 69-77kg",
+      "   Gluteos - correr : 20min",
+      "   Femoral - correr : 20min",
+      "   Cuadriceps - correr : 20min",
+      "   Gemelos - correr : 20min"
+    ],
+    "user_comment": "correr esta mal, es simplemente correr pero prefiero qeu si no tiene musculo delante que lo ignore directamene, asi te evitas errores",
+    "timestamp": "2026-05-15T11:47:16.202348"
+  },
+  {
+    "event_id": "6goj2p9ocoom4b9oc8p34b9k68q68b9ocpij6bb26crjgcpn6cp66cph70",
+    "event_summary": "Espalda - Biceps",
+    "raw_description": "✅Biceps - Mancuernas 10kg\n✅Espalda - Jalon agarre largo 41-47kg\n✅Biceps - Curl Banco Scott 20kg\n✅Espalda - Remo discos agarre corto 20-25kg\n✅Espalda - Lumbares 5kg\n\nPecho - Espalda jalon al pecho agarre corto 47kg\nBiceps - curl 45kg\nEspalda - remo agarre largo 47-53kg\nBiceps - mancuernas martillo 23-29kg",
+    "parsed_exercises": [
+      "✅ Biceps - mancuernas : 10kg",
+      "✅ Espalda - jalon agarre largo : 41-47kg",
+      "✅ Biceps - curl banco scott : 20kg",
+      "✅ Espalda - remo discos agarre corto : 20-25kg",
+      "✅ Espalda - lumbares : 5kg",
+      "   Pecho - espalda jalon al pecho agarre corto : 47kg",
+      "   Biceps - curl : 45kg",
+      "   Espalda - remo agarre largo : 47-53kg",
+      "   Biceps - mancuernas martillo : 23-29kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:47:28.047343"
+  },
+  {
+    "event_id": "ckpm2e9p74s6ab9m70s3ab9k74q6cbb16co66bb46cpmcd1j6gojadb6c8",
+    "event_summary": "Pecho - Triceps - Hombro",
+    "raw_description": "✅Pecho - Press de Banca 50-60kg\n✅Triceps - Polea 15-17'5kg\n✅Hombro - Press militar 10kg\n✅Pecho - Pecho plano 20-15kg\n✅Triceps - Polea barra 12'5-15kg\n✅Hombro - Rueda 5kg\n\nHombro - maquina arriba 40-45kg\nPecho - bajo doble polea 17kg\nHombro - elevaciones laterales 5-7'5kg\nPecho - alto 50kg\nTriceps - trofeo detras de la cabeza 12'5-15kg\nHombro - s elevaciones con mancuernas 5-7'5kg",
+    "parsed_exercises": [
+      "✅ Pecho - press de banca : 50-60kg",
+      "✅ Triceps - polea : 15-17'5kg",
+      "✅ Hombro - press militar : 10kg",
+      "✅ Pecho - pecho plano : 20-15kg",
+      "✅ Triceps - polea barra : 12'5-15kg",
+      "✅ Hombro - rueda : 5kg",
+      "   Hombro - maquina arriba : 40-45kg",
+      "   Pecho - bajo doble polea : 17kg",
+      "   Hombro - elevaciones laterales : 5-7'5kg",
+      "   Pecho - alto : 50kg",
+      "   Triceps - trofeo detras de la cabeza : 12'5-15kg",
+      "   Hombro - s elevaciones con mancuernas : 5-7'5kg"
+    ],
+    "user_comment": "Hombro falta la palabra en el ejercicio de nuevo, en pecho pasa igual siendo pecho alto, pecho plano etc",
+    "timestamp": "2026-05-15T11:48:03.101524"
+  },
+  {
+    "event_id": "ccq6aoj66kp3eb9o6hi6ab9k60p68b9o64pm4bb361j66eb575i34c366s",
+    "event_summary": "Triceps - Hombro",
+    "raw_description": "✅Triceps - Polea 15~kg\n✅Hombro - Press militar 10kg\n✅Hombro - Press militar Maquina 35kg\n✅Triceps - Trofeo 8-12kg\n\nHombro - pesa circular con los dos brazos adelante 5kg\nTriceps - por encima de la cabeza en maquina 23kg\nTriceps - en maquina barra fija 15kg\nHombro - s elevaciones con mancuernas 5-7'5kg",
+    "parsed_exercises": [
+      "✅ Hombro - press militar : 10kg",
+      "✅ Hombro - press militar maquina : 35kg",
+      "✅ Triceps - trofeo : 8-12kg",
+      "   Hombro - pesa circular con los dos brazos adelante : 5kg",
+      "   Triceps - por encima de la cabeza en maquina : 23kg",
+      "   Triceps - en maquina barra fija : 15kg",
+      "   Hombro - s elevaciones con mancuernas : 5-7'5kg"
+    ],
+    "user_comment": "Hombro esta mal de nuevo. Voy a dejar de repetir los errores anteriores para que no me repita y gastes menos tokens",
+    "timestamp": "2026-05-15T11:48:37.147419"
+  },
+  {
+    "event_id": "71h68c1m6com6b9gckpmcb9kcosj2bb2cgo3gbb665i3ieb4ccqm6cpn6g",
+    "event_summary": "Pierna",
+    "raw_description": "✅Cuadriceps - Prensa 180-200kg\n✅Femoral - Curl de femoral 41kg\n✅Cuadriceps - Sentadilla Libre 80-100kg\n\nGemelos - en multi-power 91kg\nGemelos - en maquina 40-50kg\nCuadriceps - en maquina 69-77kg\nCorrer 20min",
+    "parsed_exercises": [
+      "✅ Cuadriceps - prensa : 180-200kg",
+      "✅ Femoral - curl de femoral : 41kg",
+      "✅ Cuadriceps - sentadilla libre : 80-100kg",
+      "   Gemelos - en multi-power : 91kg",
+      "   Gemelos - en maquina : 40-50kg",
+      "   Cuadriceps - en maquina : 69-77kg",
+      "   Gluteos - correr : 20min",
+      "   Femoral - correr : 20min",
+      "   Cuadriceps - correr : 20min",
+      "   Gemelos - correr : 20min"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:48:44.625046"
+  },
+  {
+    "event_id": "6krmcoj36cqj0b9ncksj0b9kcoqjebb2c9gj8bb3cko32d1kcorj4o9l6o",
+    "event_summary": "Espalda - Biceps",
+    "raw_description": "✅Biceps - Mancuernas 10kg\n✅Espalda - Jalon agarre largo 41-47kg\n✅Biceps - Martillo 23-29kg\n✅Espalda - Remo discos agarre corto 20-25kg\n✅Biceps - Curl Banco Scott 45kg\n\nPecho - Espalda jalon al pecho agarre corto 47kg\nEspalda - remo agarre largo 47-53kg\nBiceps - curl maquina 20kg\nEspalda - baja 5kg",
+    "parsed_exercises": [
+      "✅ Biceps - mancuernas : 10kg",
+      "✅ Espalda - jalon agarre largo : 41-47kg",
+      "✅ Biceps - martillo : 23-29kg",
+      "✅ Espalda - remo discos agarre corto : 20-25kg",
+      "✅ Biceps - curl banco scott : 45kg",
+      "   Pecho - espalda jalon al pecho agarre corto : 47kg",
+      "   Espalda - remo agarre largo : 47-53kg",
+      "   Biceps - curl maquina : 20kg",
+      "   Espalda - baja : 5kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:48:46.736881"
+  },
+  {
+    "event_id": "ccs68e9gc9i32b9o6or3cb9kcdgm2bb1cgqj8bb66ks62chn65h3io9nck",
+    "event_summary": "Pecho - Abdominales",
+    "raw_description": "✅Pecho - Press de Banca 50kg\n✅Abdominales - Abdominales rusos 8kg\n✅Pecho - Pecho plano 25kg\n✅Abdominales - Abdominales 12rep\n✅Pecho - Pecho bajo unilateral en polea 7.5kg\n\nPecho - bajo doble polea 17kg\nAbdomen - Abdominales en la maquina 5kg\nPecho - alto 50kg\nAbdomen - Abdominales cruzados x4 12rep",
+    "parsed_exercises": [
+      "✅ Pecho - press de banca : 50kg",
+      "✅ Abdominales - abdominales rusos : 8kg",
+      "✅ Pecho - pecho plano : 25kg",
+      "✅ Abdominales - abdominales : 12rep",
+      "✅ Pecho - pecho bajo unilateral en polea : 7.5kg",
+      "   Pecho - bajo doble polea : 17kg",
+      "   Abdomen - abdominales en la maquina : 5kg",
+      "   Pecho - alto : 50kg",
+      "   Abdomen - abdominales cruzados x4 : 12rep"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:48:52.015497"
+  },
+  {
+    "event_id": "58te77l7bahpeuhvaga2h03laa",
+    "event_summary": "Triceps - Hombro",
+    "raw_description": "✅Triceps - Polea 15~kg\n✅Hombro - Press militar 12kg\n✅Triceps - Trofeo 12kg\n✅Hombro - Press militar Maquina 35kg\n✅Triceps - Polea barra 15kg\n\nHombro - pesa circular con los dos brazos adelante 5kg\nTriceps - por encima de la cabeza en maquina 23kg\nHombro - s elevaciones laterales con mancuernas 5-7kg",
+    "parsed_exercises": [
+      "✅ Hombro - press militar : 12kg",
+      "✅ Triceps - trofeo : 12kg",
+      "✅ Hombro - press militar maquina : 35kg",
+      "✅ Triceps - polea barra : 15kg",
+      "   Hombro - pesa circular con los dos brazos adelante : 5kg",
+      "   Triceps - por encima de la cabeza en maquina : 23kg",
+      "   Hombro - s elevaciones laterales con mancuernas : 5-7kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:48:55.532175"
+  },
+  {
+    "event_id": "0kmipetv9a26hkl15lq2g62710",
+    "event_summary": "Pierna",
+    "raw_description": "✅Cuadriceps - Extension de cuadriceps 70kg\n✅Cuadriceps - Hacka 110-120kg\n✅Femoral - Curl de femoral 40-45-kg\n✅Gemelos - Gemelos en maquina 20kg\n\nSentadilla - s  80-100kg\nPrensa 180-200kg\nGemelos - en multi-power 91kg\nCorrer 20min",
+    "parsed_exercises": [
+      "✅ Cuadriceps - extension de cuadriceps : 70kg",
+      "✅ Cuadriceps - hacka : 110-120kg",
+      "✅ Femoral - curl de femoral : 40-45kg",
+      "✅ Gemelos - gemelos en maquina : 20kg",
+      "   Sentadilla - s : 80-100kg",
+      "   Gluteos - prensa : 180-200kg",
+      "   Femoral - prensa : 180-200kg",
+      "   Cuadriceps - prensa : 180-200kg",
+      "   Gemelos - prensa : 180-200kg",
+      "   Gemelos - en multi-power : 91kg",
+      "   Gluteos - correr : 20min",
+      "   Femoral - correr : 20min",
+      "   Cuadriceps - correr : 20min",
+      "   Gemelos - correr : 20min"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:49:02.755155"
+  },
+  {
+    "event_id": "625m5etmh37cvagcljni46h4en",
+    "event_summary": "Espalda - Biceps",
+    "raw_description": "✅Biceps - Mancuernas 12kg\n✅Espalda - Jalon agarre corto 50-55kg\n✅Biceps - Barra z 10kg\n✅Espalda - Remo agarre corto 45-50kg\n✅Biceps - Martillo 12kg\n\nPecho - Espalda jalon al pecho agarre largo 41-47kg\nEspalda - remo discos agarre corto 20-25kg\nBiceps - curl 45kg\nEspalda - remo agarre largo 47-53kg\nBiceps - curl maquina 20kg\nEspalda - baja 5kg",
+    "parsed_exercises": [
+      "✅ Biceps - mancuernas : 12kg",
+      "✅ Espalda - jalon agarre corto : 50-55kg",
+      "✅ Biceps - barra z : 10kg",
+      "✅ Espalda - remo agarre corto : 45-50kg",
+      "✅ Biceps - martillo : 12kg",
+      "   Pecho - espalda jalon al pecho agarre largo : 41-47kg",
+      "   Espalda - remo discos agarre corto : 20-25kg",
+      "   Biceps - curl : 45kg",
+      "   Espalda - remo agarre largo : 47-53kg",
+      "   Biceps - curl maquina : 20kg",
+      "   Espalda - baja : 5kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:49:16.023911"
+  },
+  {
+    "event_id": "0jovepuu1j7scln3rcaju8600l",
+    "event_summary": "Pecho - Abdominales",
+    "raw_description": "✅Pecho - Press de Banca 50kg\n✅Abdominales - Abdominales rusos 8kg\n✅Pecho - Pecho plano 25kg\n✅Abdominales - Abdominales 12rep\n✅Pecho - Pecho bajo unilateral en polea 7.5kg\n✅Abdominales - Plancha 40s\n\nPecho - bajo doble polea 17kg\nAbdomen - Abdominales en la maquina 5kg\nPecho - alto 50kg\nAbdomen - Abdominales cruzados x4 12rep",
+    "parsed_exercises": [
+      "✅ Pecho - press de banca : 50kg",
+      "✅ Abdominales - abdominales rusos : 8kg",
+      "✅ Pecho - pecho plano : 25kg",
+      "✅ Abdominales - abdominales : 12rep",
+      "✅ Pecho - pecho bajo unilateral en polea : 7.5kg",
+      "✅ Abdominales - plancha : 40s",
+      "   Pecho - bajo doble polea : 17kg",
+      "   Abdomen - abdominales en la maquina : 5kg",
+      "   Pecho - alto : 50kg",
+      "   Abdomen - abdominales cruzados x4 : 12rep"
+    ],
+    "user_comment": "abdominales cruzados esta mal, ese no deberias de mirarlo siquiera porque no sigue la estructura de Numero1-Numero2Medida. Simplemente ignora ese ejercicio",
+    "timestamp": "2026-05-15T11:50:09.161031"
+  },
+  {
+    "event_id": "cpj66oj268o3gb9p75j34b9k71hmcb9o65i32b9kccsjgoph6gsjid1k60",
+    "event_summary": "Triceps - Hombro",
+    "raw_description": "✅Triceps - Polea barra 15-15'5kg\n✅Hombro - Press militar 12kg\n✅Triceps - Trofeo 12kg\n✅Hombro - Elevaciones laterales con mancuernas 5-7kg\n✅Triceps - Polea 15kg\n\nHombro - pesa circular con los dos brazos adelante 5kg\nTriceps - por encima de la cabeza en maquina 23kg\nHombro - maquina arriba 35kg",
+    "parsed_exercises": [
+      "✅ Triceps - polea barra : 15-15'5kg",
+      "✅ Hombro - press militar : 12kg",
+      "✅ Triceps - trofeo : 12kg",
+      "✅ Hombro - elevaciones laterales con mancuernas : 5-7kg",
+      "✅ Triceps - polea : 15kg",
+      "   Hombro - pesa circular con los dos brazos adelante : 5kg",
+      "   Triceps - por encima de la cabeza en maquina : 23kg",
+      "   Hombro - maquina arriba : 35kg"
+    ],
+    "user_comment": "OK",
+    "timestamp": "2026-05-15T11:50:21.387244"
+  },
+  {
+    "event_id": "ccs68cb269hjib9oc9hj6b9k75hjab9pccq6ab9i64rm4pj5c9gm4dj4cc",
+    "event_summary": "Pierna",
+    "raw_description": "✅Cuadriceps - Extension de cuadriceps 70kg\n✅Cuadriceps - Hacka 110-120kg\n✅Femoral - Curl de femoral 40-45-kg\n✅Gemelos - Gemelos en maquina 20kg\n\nSentadilla - s  80-100kg\nPrensa 180-200kg\nGemelos - en multi-power 91kg\nCorrer 20min",
+    "parsed_exercises": [
+      "✅ Cuadriceps - extension de cuadriceps : 70kg",
+      "✅ Cuadriceps - hacka : 110-120kg",
+      "✅ Femoral - curl de femoral : 40-45kg",
+      "✅ Gemelos - gemelos en maquina : 20kg",
+      "   Sentadilla - s : 80-100kg",
+      "   Gluteos - prensa : 180-200kg",
+      "   Femoral - prensa : 180-200kg",
+      "   Cuadriceps - prensa : 180-200kg",
+      "   Gemelos - prensa : 180-200kg",
+      "   Gemelos - en multi-power : 91kg",
+      "   Gluteos - correr : 20min",
+      "   Femoral - correr : 20min",
+      "   Cuadriceps - correr : 20min",
+      "   Gemelos - correr : 20min"
+    ],
+    "user_comment": "Sentadilla no es un musculo, esta mal es Cuadriceps - Sentadilla",
+    "timestamp": "2026-05-15T11:50:51.298809"
+  }
+]
