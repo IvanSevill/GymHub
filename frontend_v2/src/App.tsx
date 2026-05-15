@@ -14,8 +14,7 @@ import Workouts from "./pages/Workouts";
 import Calendar from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
-import ParserTest from "./pages/ParserTest";
-import StandardizeExercises from "./pages/StandardizeExercises";
+
 import "./App.css";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
@@ -80,22 +79,6 @@ const AppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <Settings />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/parser-test"
-          element={
-            <ProtectedRoute>
-              <ParserTest />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/standardize"
-          element={
-            <ProtectedRoute>
-              <StandardizeExercises />
             </ProtectedRoute>
           }
         />

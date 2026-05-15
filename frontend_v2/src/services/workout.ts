@@ -1,4 +1,4 @@
-import api from './api';
+import api from "./api";
 
 export interface ExerciseSet {
   id?: string;
@@ -12,7 +12,7 @@ export interface ExerciseSet {
     muscle?: {
       id: string;
       name: string;
-    }
+    };
   };
 }
 
@@ -48,18 +48,24 @@ export interface WorkoutCreate {
 }
 
 export const workoutService = {
-  getWorkouts: async (startDate?: string, endDate?: string): Promise<Workout[]> => {
+  getWorkouts: async (
+    startDate?: string,
+    endDate?: string,
+  ): Promise<Workout[]> => {
     const params: any = {};
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
-    const response = await api.get<Workout[]>('/workouts', { params });
+    const response = await api.get<Workout[]>("/workouts", { params });
     return response.data;
   },
   createWorkout: async (workout: WorkoutCreate): Promise<Workout> => {
-    const response = await api.post<Workout>('/workouts', workout);
+    const response = await api.post<Workout>("/workouts", workout);
     return response.data;
   },
-  updateWorkout: async (id: string, workout: WorkoutCreate): Promise<Workout> => {
+  updateWorkout: async (
+    id: string,
+    workout: WorkoutCreate,
+  ): Promise<Workout> => {
     const response = await api.put<Workout>(`/workouts/${id}`, workout);
     return response.data;
   },
@@ -72,15 +78,29 @@ export const workoutService = {
     return response.data;
   },
   syncAllFromCalendar: async (): Promise<{ message: string }> => {
-    const response = await api.get<{ message: string }>('/workouts/sync-all');
+    const response = await api.get<{ message: string }>("/workouts/sync-all");
+    return response.data;
+  },
+  syncFitbitBulk: async (): Promise<{
+    synced: number;
+    not_found: number;
+    total: number;
+  }> => {
+    const response = await api.post<{
+      synced: number;
+      not_found: number;
+      total: number;
+    }>("/workouts/sync-fitbit-bulk");
     return response.data;
   },
   getCalendars: async (): Promise<any[]> => {
-    const response = await api.get<any[]>('/workouts/calendars');
+    const response = await api.get<any[]>("/workouts/calendars");
     return response.data;
   },
   setCalendar: async (calendarId: string): Promise<{ message: string }> => {
-    const response = await api.post<{ message: string }>(`/workouts/set-calendar?calendar_id=${calendarId}`);
+    const response = await api.post<{ message: string }>(
+      `/workouts/set-calendar?calendar_id=${calendarId}`,
+    );
     return response.data;
   },
 };

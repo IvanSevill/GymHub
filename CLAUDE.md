@@ -9,8 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository Structure
 
 ```
-backend_v2/    FastAPI backend
-frontend_v2/   React/Vite frontend
+backend/    FastAPI backend
+frontend-react/   React/Vite frontend
 ```
 
 ## Commands
@@ -55,7 +55,7 @@ npx prettier --write <file>
 
 ## Environment Setup
 
-Copy `backend_v2/.env.example` to `backend_v2/.env` and fill in:
+Copy `backend/.env.example` to `backend/.env` and fill in:
 - `DATABASE_URL` — SQLite default: `sqlite:///./test.db`; PostgreSQL for production
 - `SECRET_KEY` — JWT signing key
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — for Google OAuth + Calendar
@@ -63,12 +63,12 @@ Copy `backend_v2/.env.example` to `backend_v2/.env` and fill in:
 - `FRONTEND_URL` — CORS origin, default `http://localhost:5173`
 - `ROOT_EMAILS` — comma-separated list of admin email addresses
 
-Frontend requires `frontend_v2/.env` with:
+Frontend requires `frontend-react/.env` with:
 - `VITE_GOOGLE_CLIENT_ID`
 
 ## Architecture
 
-### Backend (`backend_v2/app/`)
+### Backend (`backend/app/`)
 
 - **`main.py`** — FastAPI app, CORS middleware, global exception handler, router registration.
 - **`database.py`** — SQLAlchemy engine (SQLite dev / PostgreSQL prod), `get_db` session dependency.
@@ -79,7 +79,7 @@ Frontend requires `frontend_v2/.env` with:
 - **`fitbit_utils.py`** — Fitbit OAuth token refresh and activity data fetching.
 - **`routers/`** — `auth_routes.py`, `workouts.py`, `exercises.py`, `analytics.py`.
 
-### Frontend (`frontend_v2/src/`)
+### Frontend (`frontend-react/src/`)
 
 - **`App.tsx`** — React Router setup with `ProtectedRoute` (redirects to `/login` if unauthenticated).
 - **`context/AuthContext.tsx`** — Auth state: JWT stored in `localStorage`, `useAuth()` hook.

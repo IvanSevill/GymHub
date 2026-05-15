@@ -17,8 +17,6 @@ const Sidebar: React.FC = () => {
     { to: "/calendar", icon: <CalendarIcon size={18} />, label: "Calendario" },
     { to: "/workouts", icon: <Dumbbell size={18} />, label: "Entrenamientos" },
     { to: "/analytics", icon: <BarChart2 size={18} />, label: "Análisis" },
-    { to: "/parser-test", icon: <Settings size={18} />, label: "Test Parser" },
-    { to: "/standardize", icon: <Settings size={18} />, label: "Estandarizar" },
   ];
 
   return (

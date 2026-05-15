@@ -43,19 +43,30 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
 def extract_azm(activity_data: dict) -> dict:
     """
     Extracts Active Zone Minutes from Fitbit activity data.
-    Handles both flat and nested structures.
+    API v1.1 returns activeZoneMinutes.minutesInHeartRateZones as a typed list.
     """
     azm = activity_data.get("activeZoneMinutes", {})
-    
-    # If it's a list or doesn't have the expected keys, try flat structure
-    if not isinstance(azm, dict) or not any(k in azm for k in ["fatBurnMinutes", "cardioMinutes", "peakMinutes"]):
+
+    if isinstance(azm, dict) and "minutesInHeartRateZones" in azm:
+        zones = {z["type"]: z["minutes"] for z in azm.get("minutesInHeartRateZones", [])}
         return {
-            "fatBurnMinutes": activity_data.get("fatBurnMinutes", 0),
-            "cardioMinutes": activity_data.get("cardioMinutes", 0),
-            "peakMinutes": activity_data.get("peakMinutes", 0)
+            "fatBurnMinutes": zones.get("FAT_BURN", 0),
+            "cardioMinutes": zones.get("CARDIO", 0),
+            "peakMinutes": zones.get("PEAK", 0),
         }
-    
-    return azm
+
+    if isinstance(azm, dict) and any(k in azm for k in ["fatBurnMinutes", "cardioMinutes", "peakMinutes"]):
+        return {
+            "fatBurnMinutes": azm.get("fatBurnMinutes", 0),
+            "cardioMinutes": azm.get("cardioMinutes", 0),
+            "peakMinutes": azm.get("peakMinutes", 0),
+        }
+
+    return {
+        "fatBurnMinutes": activity_data.get("fatBurnMinutes", 0),
+        "cardioMinutes": activity_data.get("cardioMinutes", 0),
+        "peakMinutes": activity_data.get("peakMinutes", 0),
+    }
 
 def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time: datetime, end_time: datetime) -> Optional[dict]:
     """
@@ -92,9 +103,9 @@ def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time:
             except Exception:
                 continue
             
-            # Check for overlap: Activity starts within 15 mins of workout OR covers the same time
+            # Match if Fitbit activity started within ±1 h of the workout start time
             start_diff = abs((act_start - start_time).total_seconds())
-            if start_diff < 900: # 15 min margin
+            if start_diff < 3600:
                 return activity
                 
             # Or if the activity covers the middle of our workout

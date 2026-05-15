@@ -1,5 +1,6 @@
 import re
-from typing import Dict, List, Optional, Tuple
+import unicodedata
+from typing import Dict, List, Optional, Set, Tuple
 from . import models
 
 PIERNA_MUSCLES = ["gluteos", "femoral", "cuadriceps", "gemelos"]
@@ -22,6 +23,41 @@ def _normalise_muscle(raw: str) -> Optional[str]:
     """Return canonical muscle name or None if not recognised."""
     s = MUSCLE_ALIASES.get(raw.strip().lower(), raw.strip().lower())
     return s if s in _VALID_MUSCLES else None
+
+
+def _strip_accents(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+
+
+def _muscles_from_title(title: str) -> Optional[Set[str]]:
+    """Return the set of canonical muscle names referenced in *title*, or None if none found.
+
+    None means no filtering should be applied (show all muscles in the event).
+    'Pierna'/'Piernas' expands to all leg subgroups.
+    """
+    if not title:
+        return None
+
+    words = re.findall(r"[a-zà-ÿ]+", title.lower())
+    muscles: Set[str] = set()
+
+    for word in words:
+        norm = _strip_accents(word)
+        if norm in ("pierna", "piernas"):
+            muscles.update(PIERNA_MUSCLES)
+            continue
+        canonical = MUSCLE_ALIASES.get(norm, norm)
+        if canonical in _VALID_MUSCLES and canonical != "pierna":
+            muscles.add(canonical)
+            continue
+        # Try singular (hombros → hombro)
+        if norm.endswith("s"):
+            singular = norm[:-1]
+            canonical = MUSCLE_ALIASES.get(singular, singular)
+            if canonical in _VALID_MUSCLES and canonical != "pierna":
+                muscles.add(canonical)
+
+    return muscles if muscles else None
 
 
 def _parse_line_weight(rest: str) -> Optional[Tuple[str, List[str], str]]:
@@ -76,11 +112,14 @@ def _parse_line_weight(rest: str) -> Optional[Tuple[str, List[str], str]]:
 
 
 def _parse_fitbit_section(description: str) -> Optional[Dict]:
-    """Parse the [Fitbit Metrics] block from a description string."""
-    if "[Fitbit Metrics]" not in description:
+    """Parse the [Fitbit] (or legacy [Fitbit Metrics]) block from a description string."""
+    if "[Fitbit]" in description:
+        part = description.split("[Fitbit]")[1]
+    elif "[Fitbit Metrics]" in description:
+        part = description.split("[Fitbit Metrics]")[1]
+    else:
         return None
     try:
-        part = description.split("[Fitbit Metrics]")[1]
         data: Dict = {}
 
         for pattern, key, cast in [
@@ -119,11 +158,12 @@ def parse_calendar_description(
 
     fitbit_data = _parse_fitbit_section(description)
 
-    exercise_block = (
-        description.split("[Fitbit Metrics]")[0]
-        if "[Fitbit Metrics]" in description
-        else description
-    )
+    if "[Fitbit]" in description:
+        exercise_block = description.split("[Fitbit]")[0]
+    elif "[Fitbit Metrics]" in description:
+        exercise_block = description.split("[Fitbit Metrics]")[0]
+    else:
+        exercise_block = description
 
     exercise_sets: List[Dict] = []
 
@@ -168,10 +208,53 @@ def parse_calendar_description(
     return {"sets": exercise_sets, "fitbit": fitbit_data}
 
 
+def get_exercise_prs_as_of(
+    db: "Session",  # type: ignore[name-defined]  # noqa: F821
+    user_id: str,
+    as_of_date: "datetime",  # type: ignore[name-defined]  # noqa: F821
+    exercise_ids: List[str],
+) -> Dict[str, Tuple[str, str]]:
+    """Return {exercise_id: (value_str, measurement)} — the historical max for each exercise up to as_of_date.
+
+    Only numeric, non-zero values are considered. Exercises with no valid history are omitted.
+    """
+    if not exercise_ids:
+        return {}
+
+    sets = (
+        db.query(models.ExerciseSet)
+        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time <= as_of_date,
+            models.ExerciseSet.exercise_id.in_(exercise_ids),
+            models.ExerciseSet.value.isnot(None),
+            models.ExerciseSet.value.notin_(["0", "0.0", ""]),
+        )
+        .all()
+    )
+
+    # exercise_id → (best_numeric, value_str, measurement)
+    best: Dict[str, Tuple[float, str, str]] = {}
+    for s in sets:
+        try:
+            num = float(s.value.replace("'", ".").strip())
+            if num <= 0:
+                continue
+        except (ValueError, AttributeError):
+            continue
+        prev = best.get(s.exercise_id)
+        if prev is None or num > prev[0]:
+            best[s.exercise_id] = (num, s.value, s.measurement or "kg")
+
+    return {ex_id: (val, meas) for ex_id, (_, val, meas) in best.items()}
+
+
 def generate_calendar_description(
     workout: "models.Workout",
     fitbit_data: Optional["models.FitbitData"] = None,
     all_exercises_by_muscle: Optional[Dict[str, List["models.Exercise"]]] = None,
+    prs: Optional[Dict[str, Tuple[str, str]]] = None,
 ) -> str:
     """Generate a Google Calendar description from a DB workout record."""
     description = "[GymHub]\n"
@@ -184,35 +267,68 @@ def generate_calendar_description(
         e_name = es.exercise.name
         session_sets_by_muscle.setdefault(m_name, {}).setdefault(e_name, []).append(es)
 
-    for m_name in sorted(session_sets_by_muscle):
-        for e_name in sorted(session_sets_by_muscle[m_name]):
-            sets = session_sets_by_muscle[m_name][e_name]
-            is_completed = any(s.is_completed for s in sets)
-            prefix = "■ " if is_completed else ""
-            line_text = f"{prefix}{m_name.capitalize()} - {e_name}"
+    # Determine which muscles to render (from title or from session)
+    title_muscles = _muscles_from_title(workout.title or "")
+    muscles_to_render = sorted(title_muscles) if title_muscles else sorted(session_sets_by_muscle.keys())
 
-            by_measure: Dict[str, List[str]] = {}
-            for s in sets:
-                by_measure.setdefault(s.measurement, []).append(s.value)
+    first_muscle = True
+    for m_name in muscles_to_render:
+        catalog_exs = sorted(
+            (all_exercises_by_muscle or {}).get(m_name, []),
+            key=lambda e: e.name,
+        )
+        # name → exercise_id mapping for PR lookups
+        name_to_id: Dict[str, str] = {e.name: e.id for e in catalog_exs}
+        for e_name, s_list in session_sets_by_muscle.get(m_name, {}).items():
+            if e_name not in name_to_id and s_list and s_list[0].exercise_id:
+                name_to_id[e_name] = s_list[0].exercise_id
 
-            parts = [
-                f"{'-'.join(v for v in vals if v not in ('0', '0.0'))}{meas}"
-                for meas, vals in by_measure.items()
-                if any(v not in ("0", "0.0") for v in vals)
-            ]
-            if parts:
-                line_text += f" {' '.join(parts)}"
+        all_ex_names = sorted(set(name_to_id) | set(session_sets_by_muscle.get(m_name, {}).keys()))
+
+        if not all_ex_names:
+            continue
+
+        if not first_muscle:
+            description += "\n"
+        first_muscle = False
+
+        for e_name in all_ex_names:
+            sets = session_sets_by_muscle.get(m_name, {}).get(e_name, [])
+            is_completed = bool(sets) and any(s.is_completed for s in sets)
+
+            if is_completed:
+                # Exercise done and marked complete: show actual session values with ✅
+                by_measure: Dict[str, List[str]] = {}
+                for s in sets:
+                    by_measure.setdefault(s.measurement, []).append(s.value)
+
+                parts = [
+                    f"{'-'.join(v for v in vals if v not in ('0', '0.0'))}{meas}"
+                    for meas, vals in by_measure.items()
+                    if any(v not in ("0", "0.0") for v in vals)
+                ]
+                line_text = f"✅ {m_name.capitalize()} - {e_name.capitalize()}"
+                if parts:
+                    line_text += f" {' '.join(parts)}"
+            else:
+                # Not completed (or no sets): show historical PR as the reference weight
+                ex_id = name_to_id.get(e_name)
+                pr = (prs or {}).get(ex_id) if ex_id else None
+                line_text = f"{m_name.capitalize()} - {e_name.capitalize()}"
+                if pr and pr[0] not in ("0", "0.0", ""):
+                    line_text += f" {pr[0]}{pr[1]}"
 
             description += f"{line_text}\n"
 
     if fitbit_data:
-        description += "\n[Fitbit Metrics]\n"
-        metrics = [
-            f"Calorias: {fitbit_data.calories} kcal",
-            f"FC Media: {fitbit_data.heart_rate_avg} bpm",
-            f"Duracion: {fitbit_data.duration_ms // 60_000} min",
-            f"Actividad: {fitbit_data.activity_name or 'Weights'}",
-        ]
-        description += " | ".join(metrics) + "\n"
+        description += "\n[Fitbit]\n"
+        description += f"Calorias: {fitbit_data.calories} kcal\n"
+        description += f"FC Media: {fitbit_data.heart_rate_avg} bpm\n"
+        description += f"Duracion: {fitbit_data.duration_ms // 60_000} min\n"
+        description += f"Actividad: {fitbit_data.activity_name or 'Weights'}\n"
+        if fitbit_data.azm_fat_burn or fitbit_data.azm_cardio or fitbit_data.azm_peak:
+            description += f"AZM Fat Burn: {fitbit_data.azm_fat_burn}\n"
+            description += f"AZM Cardio: {fitbit_data.azm_cardio}\n"
+            description += f"AZM Peak: {fitbit_data.azm_peak}\n"
 
     return description.strip()

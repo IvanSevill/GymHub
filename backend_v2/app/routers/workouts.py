@@ -52,29 +52,48 @@ def update_google_calendar_event(db: Session, user_tokens: models.UserTokens, wo
         return None
 
     service = build('calendar', 'v3', credentials=creds)
-    
-    # Fetch involved muscles and their full exercise catalog for description generation
+
+    # Ensure exercise/muscle relationships are loaded on all workout sets
     active_exercise_ids = [es.exercise_id for es in workout.exercise_sets if es.exercise_id]
-    
-    exercises_by_muscle = {}
     if active_exercise_ids:
-        exercises_info = db.query(models.Exercise).options(joinedload(models.Exercise.muscle)).filter(models.Exercise.id.in_(active_exercise_ids)).all()
-        ex_map = {e.id: e for e in exercises_info}
-        
+        ex_map = {
+            e.id: e for e in db.query(models.Exercise)
+            .options(joinedload(models.Exercise.muscle))
+            .filter(models.Exercise.id.in_(active_exercise_ids))
+            .all()
+        }
         for es in workout.exercise_sets:
             if es.exercise_id in ex_map:
                 es.exercise = ex_map[es.exercise_id]
 
-        active_muscle_ids = list(set(e.muscle_id for e in exercises_info))
-        all_exercises = db.query(models.Exercise).options(joinedload(models.Exercise.muscle)).filter(models.Exercise.muscle_id.in_(active_muscle_ids)).all()
-        
-        for ex in all_exercises:
-            m_name = ex.muscle.name.lower()
-            if m_name not in exercises_by_muscle:
-                exercises_by_muscle[m_name] = []
-            exercises_by_muscle[m_name].append(ex)
+    # Build full exercise catalog for muscles referenced in the title
+    exercises_by_muscle: dict = {}
+    title_muscles = calendar_utils._muscles_from_title(workout.title or "")
+    lookup_muscles = title_muscles if title_muscles else set()
 
-    description = calendar_utils.generate_calendar_description(workout, fitbit_data, exercises_by_muscle)
+    # Fall back to muscles active in the session if title has no keywords
+    if not lookup_muscles and active_exercise_ids:
+        lookup_muscles = {es.exercise.muscle.name for es in workout.exercise_sets if es.exercise and es.exercise.muscle}
+
+    if lookup_muscles:
+        muscle_objs = db.query(models.Muscle).filter(models.Muscle.name.in_(list(lookup_muscles))).all()
+        muscle_ids = [m.id for m in muscle_objs]
+        for ex in (
+            db.query(models.Exercise)
+            .options(joinedload(models.Exercise.muscle))
+            .filter(models.Exercise.muscle_id.in_(muscle_ids))
+            .all()
+        ):
+            exercises_by_muscle.setdefault(ex.muscle.name.lower(), []).append(ex)
+
+    all_exercise_ids = [ex.id for exs in exercises_by_muscle.values() for ex in exs]
+    prs = calendar_utils.get_exercise_prs_as_of(
+        db=db,
+        user_id=workout.user_id,
+        as_of_date=workout.start_time,
+        exercise_ids=all_exercise_ids,
+    )
+    description = calendar_utils.generate_calendar_description(workout, fitbit_data, exercises_by_muscle, prs)
     
     # Google Calendar requires timezone information. Assuming UTC then converting to local.
     # For simplicity, using +01:00 offset as in original for now, but should be dynamic or UTC.
@@ -227,6 +246,120 @@ async def create_workout(
     # Refresh the workout to include google_event_id if it was updated
     db.refresh(db_workout)
     return db_workout
+
+@router.post("/reformat-last/{n}", response_model=dict)
+async def reformat_last_n_events(
+    n: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Reformats the last N workout Google Calendar events using the current description format.
+    Only affects workouts that already have a google_event_id.
+    """
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=400, detail="Google Calendar not connected.")
+
+    workouts = (
+        db.query(models.Workout)
+        .options(
+            joinedload(models.Workout.exercise_sets)
+            .joinedload(models.ExerciseSet.exercise)
+            .joinedload(models.Exercise.muscle),
+            joinedload(models.Workout.fitbit_data),
+        )
+        .filter(models.Workout.user_id == current_user.id)
+        .filter(models.Workout.google_event_id.isnot(None))
+        .order_by(models.Workout.start_time.desc())
+        .limit(n)
+        .all()
+    )
+
+    updated, failed = [], []
+    for workout in workouts:
+        event_id = update_google_calendar_event(db, user_tokens, workout, workout.fitbit_data)
+        label = workout.title or str(workout.start_time.date())
+        if event_id:
+            updated.append(label)
+        else:
+            failed.append(label)
+
+    db.commit()
+    return {"updated": len(updated), "failed": len(failed), "updated_workouts": updated, "failed_workouts": failed}
+
+@router.post("/sync-fitbit-bulk", response_model=dict)
+async def sync_fitbit_bulk(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Syncs Fitbit data for all past workouts that are missing it.
+    Uses a ±1 hour window around the workout start time to find a matching
+    Fitbit activity. Updates Google Calendar events with the synced data.
+    """
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.fitbit_access_token:
+        raise HTTPException(status_code=400, detail="Fitbit not connected.")
+
+    now = datetime.utcnow()
+    already_synced_ids = db.query(models.FitbitData.workout_id)
+    workouts = (
+        db.query(models.Workout)
+        .options(
+            joinedload(models.Workout.exercise_sets)
+            .joinedload(models.ExerciseSet.exercise)
+            .joinedload(models.Exercise.muscle),
+            joinedload(models.Workout.fitbit_data),
+        )
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.start_time < now,
+            ~models.Workout.id.in_(already_synced_ids),
+        )
+        .order_by(models.Workout.start_time.desc())
+        .all()
+    )
+
+    synced, not_found = 0, 0
+    for workout in workouts:
+        try:
+            activity = fitbit_utils.get_fitbit_activity(
+                db, user_tokens, workout.start_time, workout.end_time
+            )
+            if not activity:
+                not_found += 1
+                continue
+
+            fitbit_data = models.FitbitData(
+                workout_id=workout.id,
+                fitbit_log_id=str(activity.get("logId")),
+                calories=activity.get("calories", 0),
+                heart_rate_avg=activity.get("averageHeartRate", 0),
+                duration_ms=activity.get("duration", 0),
+                distance_km=activity.get("distance", 0.0),
+                elevation_gain_m=activity.get("elevationGain", 0.0),
+                activity_name=activity.get("activityName", "Unknown"),
+            )
+            azm = fitbit_utils.extract_azm(activity)
+            fitbit_data.azm_fat_burn = azm.get("fatBurnMinutes", 0)
+            fitbit_data.azm_cardio = azm.get("cardioMinutes", 0)
+            fitbit_data.azm_peak = azm.get("peakMinutes", 0)
+            db.add(fitbit_data)
+            db.flush()
+            workout.fitbit_data = fitbit_data
+
+            if user_tokens.selected_calendar_id and workout.google_event_id:
+                update_google_calendar_event(db, user_tokens, workout, fitbit_data)
+
+            synced += 1
+        except Exception as e:
+            print(f"Fitbit bulk sync error for workout {workout.id}: {e}")
+            not_found += 1
+
+    db.commit()
+    return {"synced": synced, "not_found": not_found, "total": len(workouts)}
+
 
 @router.put("/{workout_id}", response_model=schemas.Workout)
 async def update_workout(

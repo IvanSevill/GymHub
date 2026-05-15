@@ -43,8 +43,12 @@ backend_err.txt
 .vscode/*
 !.vscode/extensions.json
 
+# Claude Code local settings (machine-specific permissions)
+.claude/
+
 # Misc
 *.png
 *.jpg
 *.jpeg
+*.db-journal
 SESSION_SUMMARY.md
