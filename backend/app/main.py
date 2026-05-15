@@ -72,8 +72,7 @@ async def read_root():
 
 @app.get("/health")
 async def health_check():
-    """
-    Checks the health of the application.
-    This endpoint returns a simple status to indicate the application is running.
-    """
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "commit": os.getenv("RENDER_GIT_COMMIT", "local")[:7],
+    }

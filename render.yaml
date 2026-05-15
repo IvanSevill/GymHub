@@ -35,7 +35,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://gymhub-backend.onrender.com   # must match the backend service URL
+        value: https://gymhub-jd53.onrender.com
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
 
