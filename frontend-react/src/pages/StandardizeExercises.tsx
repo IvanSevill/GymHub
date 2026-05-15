@@ -63,9 +63,7 @@ const StandardizeExercises: React.FC = () => {
       g[ex.muscle_name].push(ex);
     }
     for (const m of Object.keys(g)) {
-      g[m].sort(
-        (a, b) => b.usage_count - a.usage_count || a.name.localeCompare(b.name),
-      );
+      g[m].sort((a, b) => a.name.localeCompare(b.name));
     }
     return g;
   }, [exercises]);
