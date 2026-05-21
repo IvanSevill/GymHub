@@ -144,9 +144,10 @@ def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time:
             except Exception:
                 continue
             
-            # Match if Fitbit activity started within ±1 h of the workout start time
+            # Match if Fitbit activity started within ±3 h of the workout start time.
+            # Calendar events are often entered manually and can misalign by 1-2 h.
             start_diff = abs((act_start - start_time).total_seconds())
-            if start_diff < 3600:
+            if start_diff < 10800:
                 return activity
                 
             # Or if the activity covers the middle of our workout

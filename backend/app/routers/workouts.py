@@ -375,9 +375,15 @@ def _is_gym_activity(activity: dict) -> bool:
 
 
 def _should_skip_activity(activity: dict) -> bool:
-    """Returns True for activities that should be ignored entirely (Walk = auto-tracked steps)."""
+    """Returns True for activities that should not generate standalone workouts.
+
+    - Walk: auto-tracked steps by Fitbit, not real exercise sessions.
+    - Weights: gym sessions always come from Google Calendar events; bulk sync
+      attaches their Fitbit data. Creating a standalone workout here would
+      duplicate the Calendar event.
+    """
     name = activity.get("activityName", "").lower()
-    return name == "walk"
+    return name in ("walk", "weights")
 
 
 def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
