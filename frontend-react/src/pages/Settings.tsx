@@ -16,6 +16,7 @@ import {
   Mail,
   Shield,
   LogOut,
+  DatabaseZap,
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import StandardizeExercises from "./StandardizeExercises";
@@ -30,6 +31,8 @@ const Settings: React.FC = () => {
   const [isCalendarListOpen, setIsCalendarListOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const fetchCalendars = async () => {
     setLoadingCalendars(true);
@@ -92,6 +95,25 @@ const Settings: React.FC = () => {
       );
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleResetExercises = async () => {
+    setIsResetting(true);
+    try {
+      const result = await workoutService.resetExercisesAndResync();
+      setShowResetConfirm(false);
+      addToast(
+        `Limpieza completada: ${result.deleted_sets} series y ${result.deleted_exercises} ejercicios eliminados. Sincroniza para reimportar.`,
+        "success",
+      );
+      // Trigger full re-sync from Calendar
+      await workoutService.syncAllFromCalendar().catch(() => {});
+      addToast("Re-sincronización completada", "success");
+    } catch {
+      addToast("Error al limpiar la base de datos", "error");
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -348,6 +370,68 @@ const Settings: React.FC = () => {
           )}
         </section>
       </div>
+
+      {/* Data management */}
+      <section className="glass-card p-5 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-danger/10 text-danger rounded-xl flex items-center justify-center border border-danger/20 shrink-0">
+            <DatabaseZap size={18} />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-white uppercase tracking-tighter">
+              Datos de ejercicios
+            </h3>
+            <p className="text-[10px] text-slate-500 leading-snug mt-0.5">
+              Limpia el catálogo y reimporta desde Google Calendar
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+          <p className="text-[10px] font-bold text-amber-400 leading-relaxed">
+            Borra todos los sets de ejercicios y el catálogo sucio, luego fuerza
+            una re-sincronización completa desde Google Calendar. Los
+            entrenamientos, fechas y datos de Fitbit se conservan.
+          </p>
+        </div>
+
+        {showResetConfirm ? (
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-danger text-center uppercase tracking-wider">
+              ¿Confirmar? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                disabled={isResetting}
+                className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleResetExercises}
+                disabled={isResetting}
+                className="flex-1 py-2 rounded-xl bg-danger text-white font-black text-[10px] uppercase tracking-widest hover:bg-danger/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+              >
+                {isResetting ? (
+                  <RefreshCw size={12} className="animate-spin" />
+                ) : (
+                  <Trash2 size={12} />
+                )}
+                {isResetting ? "Limpiando..." : "Confirmar Reset"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="w-full flex items-center justify-center gap-2 bg-danger/10 text-danger border border-danger/20 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-danger hover:text-white transition-all"
+          >
+            <DatabaseZap size={13} />
+            Limpiar y Re-importar Ejercicios
+          </button>
+        )}
+      </section>
 
       {/* Standardize Exercises */}
       <section>

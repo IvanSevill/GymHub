@@ -111,6 +111,50 @@ async def cleanup_unused_exercises(
     return {"deleted": count}
 
 
+@router.post("/exercises/reset-and-resync", response_model=dict)
+async def reset_exercises_and_force_resync(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Deletes all exercise sets from the current user's workouts and removes
+    exercises that are no longer referenced by any set. Also resets the
+    Google Calendar sync token so the next sync performs a full re-import.
+    """
+    user_workout_ids = (
+        db.query(models.Workout.id)
+        .filter(models.Workout.user_id == current_user.id)
+        .subquery()
+    )
+    deleted_sets = (
+        db.query(models.ExerciseSet)
+        .filter(models.ExerciseSet.workout_id.in_(user_workout_ids))
+        .delete(synchronize_session=False)
+    )
+
+    used_ids = db.query(models.ExerciseSet.exercise_id).distinct()
+    deleted_exercises = (
+        db.query(models.Exercise)
+        .filter(~models.Exercise.id.in_(used_ids))
+        .delete(synchronize_session=False)
+    )
+
+    user_tokens = (
+        db.query(models.UserTokens)
+        .filter(models.UserTokens.user_id == current_user.id)
+        .first()
+    )
+    if user_tokens:
+        user_tokens.google_calendar_sync_token = None
+
+    db.commit()
+    return {
+        "deleted_sets": deleted_sets,
+        "deleted_exercises": deleted_exercises,
+        "message": "Ejercicios eliminados. Sincroniza para reimportar desde Google Calendar.",
+    }
+
+
 @router.post("/exercises/standardize")
 async def standardize_exercises(
     data: Dict[str, Any] = Body(...),

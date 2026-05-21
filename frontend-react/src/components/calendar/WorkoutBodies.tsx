@@ -116,32 +116,18 @@ const SetChip: React.FC<{ set: ExerciseSet; completed: boolean }> = ({
   );
 };
 
-const ExerciseRow: React.FC<{ group: ExerciseGroup }> = ({ group }) => {
-  const completed = group.sets.filter((s) => s.is_completed);
-  const planned = group.sets.filter((s) => !s.is_completed);
-  const hasCompleted = completed.length > 0;
-  return (
-    <div
-      className={`flex items-start justify-between gap-3 px-3 py-2.5 rounded-xl border transition-all ${
-        hasCompleted
-          ? "bg-white/[0.02] border-primary/15"
-          : "border-white/[0.04] opacity-50"
-      }`}
-    >
-      <p className="text-xs font-black text-white capitalize shrink-0">
-        {group.name}
-      </p>
-      <div className="flex flex-wrap gap-1 justify-end">
-        {completed.map((s, i) => (
-          <SetChip key={i} set={s} completed />
-        ))}
-        {planned.map((s, i) => (
-          <SetChip key={i} set={s} completed={false} />
-        ))}
-      </div>
+const ExerciseRow: React.FC<{ group: ExerciseGroup }> = ({ group }) => (
+  <div className="flex items-start justify-between gap-3 px-3 py-2.5 rounded-xl border bg-white/[0.02] border-primary/15 transition-all">
+    <p className="text-xs font-black text-white capitalize shrink-0">
+      {group.name}
+    </p>
+    <div className="flex flex-wrap gap-1 justify-end">
+      {group.sets.map((s, i) => (
+        <SetChip key={i} set={s} completed />
+      ))}
     </div>
-  );
-};
+  </div>
+);
 
 const PlannedExerciseRow: React.FC<{ group: ExerciseGroup }> = ({ group }) => {
   const ref = group.sets.find((s) => s.value && s.value !== "0");
@@ -222,7 +208,7 @@ export const CardioBody: React.FC<{ workout: Workout }> = ({ workout }) => {
 export const WeightsBody: React.FC<{ workout: Workout }> = ({ workout }) => {
   const f = workout.fitbit_data;
   const muscleGroups = useMemo(
-    () => groupWorkoutSets(workout.exercise_sets),
+    () => groupWorkoutSets(workout.exercise_sets.filter((s) => s.is_completed)),
     [workout.exercise_sets],
   );
   return (
@@ -234,7 +220,7 @@ export const WeightsBody: React.FC<{ workout: Workout }> = ({ workout }) => {
       )}
       {muscleGroups.length === 0 ? (
         <p className="text-center text-slate-600 text-xs py-4 font-bold uppercase tracking-widest">
-          Sin ejercicios registrados
+          Sin ejercicios completados
         </p>
       ) : (
         muscleGroups.map((mg) => (
