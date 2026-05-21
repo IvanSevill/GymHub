@@ -369,18 +369,25 @@ async def sync_fitbit_bulk(
 
 
 def _is_gym_activity(activity: dict) -> bool:
-    """Returns True for activities that originate from a pre-planned Calendar gym session."""
+    """Returns True for activities that match a pre-planned Calendar gym session."""
     name = activity.get("activityName", "").lower()
-    return "weights" in name or "walk" in name
+    return "weights" in name
+
+
+def _should_skip_activity(activity: dict) -> bool:
+    """Returns True for activities that should be ignored entirely (Walk = auto-tracked steps)."""
+    name = activity.get("activityName", "").lower()
+    return name == "walk"
 
 
 def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
     """Returns True if a Fitbit activity matches any existing DB workout by time.
 
-    Cardio activities (run, swim, bike, …) always return False so they always
-    create their own DB workout — only logId deduplication prevents duplicates.
-    Gym activities (weights, walk) use a ±1 h window because calendar events
-    are often manually entered and can misalign with the actual start time.
+    Walk activities are ignored upstream via _should_skip_activity.
+    Non-gym activities (cardio) always return False so they create their own
+    DB workout — only logId deduplication prevents duplicates.
+    Gym activities (weights) use a ±1 h window because calendar events are
+    often manually entered and can misalign with the actual start time.
     """
     if not _is_gym_activity(activity):
         return False
@@ -448,6 +455,8 @@ async def sync_fitbit_create_missing(
 
     created = 0
     for activity in activities:
+        if _should_skip_activity(activity):
+            continue
         if str(activity.get("logId", "")) in existing_log_ids:
             continue
         if _activity_matches_any_workout(activity, existing):
