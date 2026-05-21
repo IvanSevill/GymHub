@@ -374,6 +374,20 @@ def _is_gym_activity(activity: dict) -> bool:
     return "weights" in name
 
 
+def _resolve_activity_name(activity: dict) -> str:
+    """Returns a display name, resolving generic Fitbit types via heuristics.
+
+    Fitbit records outdoor runs as 'Workout' (activityTypeId 91060) when using
+    a Pixel Watch — there is no finer type in the API response. GPS presence
+    is a reliable signal: swimming has no GPS, gym sessions have no GPS, only
+    outdoor cardio (running, hiking, cycling) produces GPS tracks.
+    """
+    name = activity.get("activityName", "Actividad Fitbit")
+    if name.lower() == "workout" and activity.get("hasGps"):
+        return "Run"
+    return name
+
+
 def _should_skip_activity(activity: dict) -> bool:
     """Returns True for activities that should not generate standalone workouts.
 
@@ -484,7 +498,7 @@ async def sync_fitbit_create_missing(
         except Exception:
             continue
 
-        activity_name = activity.get("activityName", "Actividad Fitbit")
+        activity_name = _resolve_activity_name(activity)
         workout = models.Workout(
             user_id=current_user.id,
             start_time=act_start,
