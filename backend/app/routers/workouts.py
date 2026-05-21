@@ -389,14 +389,14 @@ def _should_skip_activity(activity: dict) -> bool:
 def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
     """Returns True if a Fitbit activity matches any existing DB workout by time.
 
-    Walk activities are ignored upstream via _should_skip_activity.
-    Non-gym activities (cardio) always return False so they create their own
-    DB workout — only logId deduplication prevents duplicates.
-    Gym activities (weights) use a ±1 h window because calendar events are
-    often manually entered and can misalign with the actual start time.
+    Gym (weights): ±3 h window — calendar events are often manually entered
+    and can misalign with the actual session time.
+    Cardio (run, swim, sport, …): ±2 h window but only against existing
+    workouts that already carry the same Fitbit activity name. This catches
+    null-logId duplicates left by earlier syncs without blocking a real
+    cardio event that happens near a gym session.
     """
-    if not _is_gym_activity(activity):
-        return False
+    act_name = activity.get("activityName", "")
 
     try:
         raw_start = activity["startTime"].replace("Z", "+00:00")
@@ -405,12 +405,20 @@ def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
     except Exception:
         return False
 
-    for w in workouts:
-        if abs((act_start - w.start_time).total_seconds()) < 3600:
-            return True
-        mid = w.start_time + (w.end_time - w.start_time) / 2
-        if act_start <= mid <= act_end:
-            return True
+    if _is_gym_activity(activity):
+        for w in workouts:
+            if abs((act_start - w.start_time).total_seconds()) < 10800:
+                return True
+            mid = w.start_time + (w.end_time - w.start_time) / 2
+            if act_start <= mid <= act_end:
+                return True
+    else:
+        for w in workouts:
+            if abs((act_start - w.start_time).total_seconds()) < 7200:
+                fd = w.fitbit_data
+                if fd and fd.activity_name and fd.activity_name.lower() == act_name.lower():
+                    return True
+
     return False
 
 
@@ -451,6 +459,7 @@ async def sync_fitbit_create_missing(
 
     existing = (
         db.query(models.Workout)
+        .options(joinedload(models.Workout.fitbit_data))
         .filter(
             models.Workout.user_id == current_user.id,
             models.Workout.start_time >= cutoff,
