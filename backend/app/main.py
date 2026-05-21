@@ -8,11 +8,22 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
+from sqlalchemy import inspect, text  # noqa: E402
 from .database import engine, Base  # noqa: E402
 from .routers import auth_routes, exercises, workouts, analytics  # noqa: E402
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Incremental migrations: add new columns to existing tables that create_all won't touch
+def _run_migrations():
+    inspector = inspect(engine)
+    existing = {c["name"] for c in inspector.get_columns("user_tokens")}
+    with engine.begin() as conn:
+        if "google_calendar_sync_token" not in existing:
+            conn.execute(text("ALTER TABLE user_tokens ADD COLUMN google_calendar_sync_token TEXT"))
+
+_run_migrations()
 
 app = FastAPI(title="GymHub Backend v2")
 

@@ -68,6 +68,47 @@ def extract_azm(activity_data: dict) -> dict:
         "peakMinutes": activity_data.get("peakMinutes", 0),
     }
 
+def get_fitbit_activities_range(db: Session, user_tokens: models.UserTokens, days: int = 30) -> list:
+    """
+    Fetches all Fitbit activities from the last N days, most-recent first.
+    """
+    access_token = user_tokens.fitbit_access_token
+    if not access_token:
+        return []
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    date_str = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    def make_request(token):
+        url = (
+            f"https://api.fitbit.com/1.1/user/-/activities/list.json"
+            f"?beforeDate={date_str}&offset=0&limit=100&sort=desc"
+        )
+        return requests.get(url, headers={"Authorization": f"Bearer {token}"})
+
+    response = make_request(access_token)
+    if response.status_code == 401:
+        access_token = refresh_fitbit_token(db, user_tokens)
+        if access_token:
+            response = make_request(access_token)
+
+    if response.status_code != 200:
+        return []
+
+    result = []
+    for activity in response.json().get("activities", []):
+        try:
+            raw_start = activity["startTime"].replace("Z", "+00:00")
+            act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+            if act_start < cutoff:
+                break  # sorted desc — stop once outside the window
+            result.append(activity)
+        except Exception:
+            continue
+
+    return result
+
+
 def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time: datetime, end_time: datetime) -> Optional[dict]:
     """
     Finds a Fitbit activity within a time range, handles token refresh.

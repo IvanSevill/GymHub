@@ -94,6 +94,23 @@ async def get_unique_exercises(
         for ex, count in rows
     ]
 
+@router.post("/exercises/cleanup-unused")
+async def cleanup_unused_exercises(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Deletes all exercises that have no associated exercise sets (usage_count = 0).
+    """
+    used_ids = db.query(models.ExerciseSet.exercise_id).distinct()
+    unused = db.query(models.Exercise).filter(~models.Exercise.id.in_(used_ids)).all()
+    count = len(unused)
+    for ex in unused:
+        db.delete(ex)
+    db.commit()
+    return {"deleted": count}
+
+
 @router.post("/exercises/standardize")
 async def standardize_exercises(
     data: Dict[str, Any] = Body(...),

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import os
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request as GoogleAuthRequest  # Alias to avoid conflict with FastAPI Request
 
@@ -361,6 +362,149 @@ async def sync_fitbit_bulk(
     return {"synced": synced, "not_found": not_found, "total": len(workouts)}
 
 
+def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
+    """Returns True if a Fitbit activity matches any workout in the list.
+
+    For gym activities (weights/walk): ±1 h window — calendar events often
+    misalign due to manual entry or timezone offsets.
+    For cardio activities (run, swim, bike, …): ±15 min window — these
+    activities are usually NOT pre-scheduled in Calendar, so a nearby gym
+    session should never consume a running/swimming Fitbit entry.
+    """
+    try:
+        raw_start = activity["startTime"].replace("Z", "+00:00")
+        act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+        act_end = act_start + timedelta(milliseconds=activity.get("duration", 0))
+    except Exception:
+        return False
+
+    act_name = activity.get("activityName", "").lower()
+    is_gym = "weights" in act_name or "walk" in act_name
+    window = 3600 if is_gym else 900  # 1 h for gym, 15 min for cardio
+
+    for w in workouts:
+        if abs((act_start - w.start_time).total_seconds()) < window:
+            return True
+        mid = w.start_time + (w.end_time - w.start_time) / 2
+        if act_start <= mid <= act_end:
+            return True
+    return False
+
+
+@router.post("/sync-fitbit-create-missing", response_model=dict)
+async def sync_fitbit_create_missing(
+    days: int = 30,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Fetches recent Fitbit activities and creates workouts for any that
+    don't have a matching DB workout within the ±1h time window.
+    Also creates Google Calendar events if a calendar is configured.
+    """
+    user_tokens = (
+        db.query(models.UserTokens)
+        .filter(models.UserTokens.user_id == current_user.id)
+        .first()
+    )
+    if not user_tokens or not user_tokens.fitbit_access_token:
+        return {"created": 0}
+
+    activities = fitbit_utils.get_fitbit_activities_range(db, user_tokens, days)
+    if not activities:
+        return {"created": 0}
+
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=days)
+
+    existing_log_ids = {
+        fd[0]
+        for fd in db.query(models.FitbitData.fitbit_log_id)
+        .join(models.Workout, models.FitbitData.workout_id == models.Workout.id)
+        .filter(models.Workout.user_id == current_user.id)
+        .all()
+        if fd[0]
+    }
+
+    existing = (
+        db.query(models.Workout)
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.start_time >= cutoff,
+            models.Workout.start_time <= now,
+        )
+        .all()
+    )
+
+    created = 0
+    for activity in activities:
+        if str(activity.get("logId", "")) in existing_log_ids:
+            continue
+        if _activity_matches_any_workout(activity, existing):
+            continue
+
+        try:
+            raw_start = activity["startTime"].replace("Z", "+00:00")
+            act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+            act_end = act_start + timedelta(milliseconds=activity.get("duration", 0))
+        except Exception:
+            continue
+
+        activity_name = activity.get("activityName", "Actividad Fitbit")
+        workout = models.Workout(
+            user_id=current_user.id,
+            start_time=act_start,
+            end_time=act_end,
+            title=activity_name,
+        )
+        db.add(workout)
+        db.flush()
+
+        azm = fitbit_utils.extract_azm(activity)
+        fitbit_data = models.FitbitData(
+            workout_id=workout.id,
+            fitbit_log_id=str(activity.get("logId", "")),
+            calories=activity.get("calories", 0),
+            heart_rate_avg=activity.get("averageHeartRate", 0),
+            duration_ms=activity.get("duration", 0),
+            distance_km=activity.get("distance", 0.0),
+            elevation_gain_m=activity.get("elevationGain", 0.0),
+            activity_name=activity_name,
+            azm_fat_burn=azm.get("fatBurnMinutes", 0),
+            azm_cardio=azm.get("cardioMinutes", 0),
+            azm_peak=azm.get("peakMinutes", 0),
+        )
+        db.add(fitbit_data)
+        db.flush()
+        workout.fitbit_data = fitbit_data
+
+        act_name_lower = activity_name.lower()
+        if "weights" not in act_name_lower and "walk" not in act_name_lower:
+            cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
+            if cardio_ex:
+                db.add(
+                    models.ExerciseSet(
+                        workout_id=workout.id,
+                        exercise_id=cardio_ex.id,
+                        value=str(activity.get("duration", 0) // 60000),
+                        measurement="min",
+                        is_completed=True,
+                    )
+                )
+
+        if user_tokens.selected_calendar_id:
+            try:
+                update_google_calendar_event(db, user_tokens, workout, fitbit_data)
+            except Exception as e:
+                print(f"Calendar sync error for Fitbit activity {activity.get('logId')}: {e}")
+
+        existing.append(workout)
+        created += 1
+
+    db.commit()
+    return {"created": created}
+
+
 @router.put("/{workout_id}", response_model=schemas.Workout)
 async def update_workout(
     workout_id: str,
@@ -661,30 +805,67 @@ async def sync_all_from_calendar(
         raise HTTPException(status_code=400, detail="Could not refresh Google credentials. Please reconnect your Google account.")
 
     service = build('calendar', 'v3', credentials=creds)
-    
+
     calendar_id = user_tokens.selected_calendar_id or 'primary'
-    
-    # Fetch events from the last 2 years (730 days) as in original GymHub
-    sync_days = 730
-    time_min_dt = datetime.utcnow() - timedelta(days=sync_days)
-    time_min = time_min_dt.isoformat() + "Z"
-    
+
     all_events = []
-    page_token = None
-    try:
-        while True:
-            events_result = service.events().list(
-                calendarId=calendar_id, timeMin=time_min,
-                singleEvents=True, orderBy='startTime',
-                pageToken=page_token
-            ).execute()
-            all_events.extend(events_result.get('items', []))
-            page_token = events_result.get('nextPageToken')
-            if not page_token:
-                break
-        events = all_events
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {str(e)}")
+    next_sync_token = None
+    is_incremental = bool(user_tokens.google_calendar_sync_token)
+    time_min_dt = None  # only set for full sync (used later in orphan cleanup)
+
+    # --- Incremental sync via syncToken ---
+    if is_incremental:
+        try:
+            page_token = None
+            while True:
+                kwargs: dict = {
+                    "calendarId": calendar_id,
+                    "syncToken": user_tokens.google_calendar_sync_token,
+                    "singleEvents": True,
+                    "showDeleted": True,
+                }
+                if page_token:
+                    kwargs["pageToken"] = page_token
+                result = service.events().list(**kwargs).execute()
+                all_events.extend(result.get("items", []))
+                page_token = result.get("nextPageToken")
+                next_sync_token = result.get("nextSyncToken", next_sync_token)
+                if not page_token:
+                    break
+        except HttpError as e:
+            if e.resp.status == 410:
+                # Token expired or invalidated — fall back to full sync
+                user_tokens.google_calendar_sync_token = None
+                is_incremental = False
+                all_events = []
+            else:
+                raise HTTPException(status_code=500, detail=f"Calendar sync error: {e}")
+
+    # --- Full sync (first time or after token expiry) ---
+    if not is_incremental:
+        sync_days = 730
+        time_min_dt = datetime.utcnow() - timedelta(days=sync_days)
+        time_min = time_min_dt.isoformat() + "Z"
+        try:
+            page_token = None
+            while True:
+                result = service.events().list(
+                    calendarId=calendar_id,
+                    timeMin=time_min,
+                    singleEvents=True,
+                    orderBy="startTime",
+                    showDeleted=True,
+                    pageToken=page_token,
+                ).execute()
+                all_events.extend(result.get("items", []))
+                page_token = result.get("nextPageToken")
+                next_sync_token = result.get("nextSyncToken", next_sync_token)
+                if not page_token:
+                    break
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {str(e)}")
+
+    events = all_events
 
     processed_count = 0
     calendar_event_ids = set()
@@ -697,7 +878,17 @@ async def sync_all_from_calendar(
         desc = event.get('description', '')
         event_id = event.get('id')
         calendar_event_ids.add(event_id)
-        
+
+        # Deleted events (status='cancelled') — remove from DB if present
+        if event.get('status') == 'cancelled':
+            dead = db.query(models.Workout).filter(
+                models.Workout.google_event_id == event_id,
+                models.Workout.user_id == current_user.id,
+            ).first()
+            if dead:
+                db.delete(dead)
+            continue
+
         # Determine if this is a GymHub event based on tags or format
         is_gymhub_tagged = "[GymHub]" in desc or "[gymhub]" in desc.lower()
         has_workout_format = " - " in desc and any(m in desc.lower() for m in muscle_map.keys())
@@ -794,21 +985,26 @@ async def sync_all_from_calendar(
         if sets_added_to_workout > 0 or parsed_fitbit_data:
             processed_count += 1
             
-    # Cleanup: Delete local workouts that were deleted from Google Calendar
-    local_workouts = db.query(models.Workout).filter(
-        models.Workout.user_id == current_user.id,
-        models.Workout.google_event_id is not None,
-        models.Workout.start_time >= time_min_dt # Only consider workouts within the sync period
-    ).all()
-    
+    # Orphan cleanup only on full sync (incremental gets deletions via status='cancelled')
     deleted_count = 0
-    for lw in local_workouts:
-        if lw.google_event_id not in calendar_event_ids:
-            db.delete(lw)
-            deleted_count += 1
-    
+    if not is_incremental and time_min_dt:
+        local_workouts = db.query(models.Workout).filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.google_event_id.isnot(None),
+            models.Workout.start_time >= time_min_dt,
+        ).all()
+        for lw in local_workouts:
+            if lw.google_event_id not in calendar_event_ids:
+                db.delete(lw)
+                deleted_count += 1
+
+    # Persist the new sync token for next incremental sync
+    if next_sync_token:
+        user_tokens.google_calendar_sync_token = next_sync_token
+
     db.commit()
-    msg = f"Successfully synced {processed_count} workouts from Google Calendar"
+    sync_type = "incremental" if is_incremental else "full"
+    msg = f"Successfully synced {processed_count} workouts from Google Calendar ({sync_type})"
     if deleted_count > 0:
         msg += f" (deleted {deleted_count} orphaned workouts)"
     return {"message": msg}

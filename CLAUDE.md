@@ -19,14 +19,15 @@ frontend-react/   React/Vite frontend
 
 ```powershell
 # Install dependencies
-cd backend_v2
+cd backend
 pip install -r requirements.txt
 
-# Run dev server (from repo root)
-uvicorn backend_v2.app.main:app --reload
+# Run dev server (run from inside the backend/ directory)
+cd backend
+uvicorn app.main:app --reload
 
 # Lint (must run after every .py edit)
-cd backend_v2
+cd backend
 ruff check .
 ruff check --fix .
 ```
@@ -35,7 +36,7 @@ ruff check --fix .
 
 ```powershell
 # Install dependencies
-cd frontend_v2
+cd frontend-react
 npm install
 
 # Dev server

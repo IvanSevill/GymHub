@@ -37,7 +37,7 @@ const StandardizeExercises: React.FC = () => {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetchExercises();
+    api.post("/exercises/cleanup-unused").then(() => fetchExercises());
   }, []);
 
   const fetchExercises = async () => {

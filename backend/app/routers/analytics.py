@@ -12,7 +12,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 @router.get("/weight-progress", response_model=List[schemas.WeightProgressPoint])
 async def get_weight_progress(
     exercise_id: str = Query(..., description="ID of the exercise to track progress for"),
-    period: str = Query("month", description="Time period for aggregation (e.g., 'week', 'month', 'year')"), # week, month, year
+    days: int = Query(30, description="Number of past days to include"),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -20,6 +20,9 @@ async def get_weight_progress(
     Retrieves a time series of maximum weight lifted per day for a specific exercise.
     The 'value' in ExerciseSet is parsed as float, taking the maximum if a range is provided (e.g., '45-40').
     """
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    now = datetime.utcnow()
     query = (
         db.query(
             models.Workout.start_time,
@@ -29,6 +32,10 @@ async def get_weight_progress(
         .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
         .filter(models.Workout.user_id == current_user.id)
         .filter(models.ExerciseSet.exercise_id == exercise_id)
+        .filter(models.Workout.start_time >= cutoff)
+        .filter(models.Workout.start_time <= now)
+        .filter(models.ExerciseSet.value != "")
+        .filter(models.ExerciseSet.value != "0")
         .order_by(models.Workout.start_time)
     )
     
@@ -50,7 +57,7 @@ async def get_weight_progress(
     response_data = []
     for date, val in sorted(daily_data.items()):
         response_data.append({
-            "date": date,
+            "date": datetime.combine(date, datetime.min.time()),
             "value": val
         })
         
@@ -116,6 +123,9 @@ async def get_max_lifts(
         .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
         .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
         .filter(models.Workout.user_id == current_user.id)
+        .filter(models.Workout.start_time <= datetime.utcnow())
+        .filter(models.ExerciseSet.value != "")
+        .filter(models.ExerciseSet.value != "0")
     )
     
     results = query.all()

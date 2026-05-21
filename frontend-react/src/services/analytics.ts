@@ -1,4 +1,4 @@
-import api from './api';
+import api from "./api";
 
 export interface WeightProgressPoint {
   date: string;
@@ -21,24 +21,38 @@ export interface MaxLift {
 }
 
 export const analyticsService = {
-  getWeightProgress: async (exerciseId: string, period: string = 'month'): Promise<WeightProgressPoint[]> => {
-    const response = await api.get<WeightProgressPoint[]>('/analytics/weight-progress', {
-      params: { exercise_id: exerciseId, period },
-    });
+  getWeightProgress: async (
+    exerciseId: string,
+    days: number = 30,
+  ): Promise<WeightProgressPoint[]> => {
+    const response = await api.get<WeightProgressPoint[]>(
+      "/analytics/weight-progress",
+      {
+        params: { exercise_id: exerciseId, days },
+      },
+    );
     return response.data;
   },
-  getExerciseFrequency: async (muscleId?: string, days: number = 730): Promise<ExerciseFrequency[]> => {
+  getExerciseFrequency: async (
+    muscleId?: string,
+    days: number = 730,
+  ): Promise<ExerciseFrequency[]> => {
     const params: any = { days };
     if (muscleId) params.muscle_id = muscleId;
-    const response = await api.get<ExerciseFrequency[]>('/analytics/frequency', { params });
+    const response = await api.get<ExerciseFrequency[]>(
+      "/analytics/frequency",
+      { params },
+    );
     return response.data;
   },
   getMaxLifts: async (): Promise<MaxLift[]> => {
-    const response = await api.get<MaxLift[]>('/analytics/max-lifts');
+    const response = await api.get<MaxLift[]>("/analytics/max-lifts");
     return response.data;
   },
   getExerciseHistory: async (exerciseId: string): Promise<any[]> => {
-    const response = await api.get<any[]>(`/analytics/exercise-history/${exerciseId}`);
+    const response = await api.get<any[]>(
+      `/analytics/exercise-history/${exerciseId}`,
+    );
     return response.data;
   },
 };

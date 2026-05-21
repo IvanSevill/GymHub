@@ -32,6 +32,8 @@ export interface Workout {
     azm_fat_burn: number;
     azm_cardio: number;
     azm_peak: number;
+    distance_km: number;
+    elevation_gain_m: number;
   };
 }
 
@@ -91,6 +93,12 @@ export const workoutService = {
       not_found: number;
       total: number;
     }>("/workouts/sync-fitbit-bulk");
+    return response.data;
+  },
+  syncFitbitCreate: async (days: number = 30): Promise<{ created: number }> => {
+    const response = await api.post<{ created: number }>(
+      `/workouts/sync-fitbit-create-missing?days=${days}`,
+    );
     return response.data;
   },
   getCalendars: async (): Promise<any[]> => {

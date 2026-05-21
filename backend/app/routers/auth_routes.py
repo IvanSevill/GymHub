@@ -44,7 +44,7 @@ async def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(data
         )
 
     tokens = response.json()
-    id_info = id_token.verify_oauth2_token(tokens["id_token"], google_requests.Request(), GOOGLE_CLIENT_ID)
+    id_info = id_token.verify_oauth2_token(tokens["id_token"], google_requests.Request(), GOOGLE_CLIENT_ID, clock_skew_in_seconds=10)
 
     email = id_info["email"]
     name = id_info.get("name", "")

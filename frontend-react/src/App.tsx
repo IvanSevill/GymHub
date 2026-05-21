@@ -7,13 +7,14 @@ import {
 } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Workouts from "./pages/Workouts";
 import Calendar from "./pages/Calendar";
-import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import Records from "./pages/Records";
 
 import "./App.css";
 
@@ -67,18 +68,18 @@ const AppContent: React.FC = () => {
           }
         />
         <Route
-          path="/analytics"
-          element={
-            <ProtectedRoute>
-              <Analytics />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/settings"
           element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/records"
+          element={
+            <ProtectedRoute>
+              <Records />
             </ProtectedRoute>
           }
         />
@@ -94,7 +95,9 @@ function App() {
   return (
     <GoogleOAuthProvider clientId={googleClientId}>
       <AuthProvider>
-        <AppContent />
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
       </AuthProvider>
     </GoogleOAuthProvider>
   );

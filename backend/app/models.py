@@ -40,6 +40,8 @@ class UserTokens(Base):
     fitbit_access_token = Column(String, nullable=True)
     fitbit_refresh_token = Column(String, nullable=True)
 
+    google_calendar_sync_token = Column(String, nullable=True)
+
     user = relationship("User", back_populates="tokens")
 
 class Workout(Base):

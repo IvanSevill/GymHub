@@ -1,62 +1,116 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import {
-  LayoutDashboard,
   Dumbbell,
   Calendar as CalendarIcon,
   BarChart2,
   Settings,
+  X,
+  Trophy,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const navItems = [
+  { to: "/", icon: <BarChart2 size={18} />, label: "Análisis" },
+  { to: "/calendar", icon: <CalendarIcon size={18} />, label: "Calendario" },
+  { to: "/workouts", icon: <Dumbbell size={18} />, label: "Entrenamientos" },
+  { to: "/records", icon: <Trophy size={18} />, label: "Récords" },
+];
+
+const SidebarContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { user } = useAuth();
 
-  const navItems = [
-    { to: "/", icon: <LayoutDashboard size={18} />, label: "Dashboard" },
-    { to: "/calendar", icon: <CalendarIcon size={18} />, label: "Calendario" },
-    { to: "/workouts", icon: <Dumbbell size={18} />, label: "Entrenamientos" },
-    { to: "/analytics", icon: <BarChart2 size={18} />, label: "Análisis" },
-  ];
-
   return (
-    <div className="w-64 bg-background border-r border-white/5 text-white h-screen flex flex-col fixed left-0 top-0 z-50">
-      <div className="p-8">
-        <h1 className="text-2xl font-black tracking-tighter text-white flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
-            <Dumbbell size={18} />
+    <div
+      className="w-64 h-screen flex flex-col"
+      style={{
+        background: "rgba(8, 12, 20, 0.85)",
+        backdropFilter: "blur(32px)",
+        WebkitBackdropFilter: "blur(32px)",
+        borderRight: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      {/* Logo */}
+      <div className="px-6 pt-8 pb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            style={{
+              background: "rgba(249,115,22,0.15)",
+              border: "1px solid rgba(249,115,22,0.3)",
+            }}
+          >
+            <Dumbbell size={17} className="text-primary" />
           </div>
-          Gym<span className="text-primary">Hub</span>
-        </h1>
+          <span className="text-[15px] font-black tracking-tight text-white">
+            Gym<span className="text-primary">Hub</span>
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          className="md:hidden text-slate-600 hover:text-slate-300 transition-colors"
+        >
+          <X size={18} />
+        </button>
       </div>
 
-      <nav className="flex-1 px-4 space-y-2 mt-4">
+      {/* Divider */}
+      <div className="mx-6 h-px bg-white/5 mb-4" />
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 space-y-1">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.to === "/"}
+            onClick={onClose}
             className={({ isActive }) =>
-              `flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 font-bold text-sm uppercase tracking-widest ${
+              `flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 text-sm font-semibold group ${
                 isActive
-                  ? "bg-primary text-white shadow-xl shadow-primary/20"
-                  : "text-slate-500 hover:text-white hover:bg-white/5"
+                  ? "bg-primary/10 text-primary"
+                  : "text-slate-500 hover:text-slate-200 hover:bg-white/[0.04]"
               }`
             }
           >
-            {item.icon}
-            <span>{item.label}</span>
+            {({ isActive }) => (
+              <>
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                    isActive
+                      ? "bg-primary/15 text-primary"
+                      : "text-slate-600 group-hover:text-slate-300"
+                  }`}
+                >
+                  {item.icon}
+                </div>
+                <span className="tracking-tight">{item.label}</span>
+                {isActive && (
+                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="p-6 mt-auto border-t border-white/5 bg-black/20">
+      {/* User card */}
+      <div className="p-4 mt-auto">
+        <div className="h-px bg-white/5 mb-4" />
         <NavLink
           to="/settings"
+          onClick={onClose}
           className={({ isActive }) =>
-            `flex items-center gap-3 p-3 rounded-2xl border transition-all duration-300 group ${
+            `flex items-center gap-3 p-3 rounded-2xl transition-all duration-200 group ${
               isActive
-                ? "bg-primary/10 border-primary/20"
-                : "bg-white/5 border-white/5 hover:bg-white/10"
+                ? "bg-primary/8 border border-primary/15"
+                : "hover:bg-white/[0.04] border border-transparent"
             }`
           }
         >
@@ -64,28 +118,64 @@ const Sidebar: React.FC = () => {
             <img
               src={user.picture_url}
               alt={user.name}
-              className="w-10 h-10 rounded-xl shadow-lg border border-white/10"
+              className="w-9 h-9 rounded-xl border border-white/10 shrink-0"
             />
           ) : (
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center font-black">
+            <div className="w-9 h-9 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center font-black text-sm shrink-0">
               {user?.name?.charAt(0) || "U"}
             </div>
           )}
-          <div className="overflow-hidden flex-1">
-            <p className="text-xs font-black text-white truncate uppercase tracking-tighter">
+          <div className="overflow-hidden flex-1 min-w-0">
+            <p className="text-xs font-bold text-white truncate">
               {user?.name}
             </p>
-            <p className="text-[9px] text-slate-500 truncate font-bold">
-              {user?.email}
-            </p>
+            <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
           </div>
           <Settings
-            size={14}
-            className="text-slate-500 group-hover:text-primary transition-colors"
+            size={13}
+            className="text-slate-600 group-hover:text-primary transition-colors shrink-0"
           />
         </NavLink>
       </div>
     </div>
+  );
+};
+
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+  return (
+    <>
+      {/* Desktop: always visible */}
+      <div className="hidden md:block fixed left-0 top-0 z-50">
+        <SidebarContent onClose={onClose} />
+      </div>
+
+      {/* Mobile: drawer with backdrop */}
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/70 z-40 md:hidden"
+              onClick={onClose}
+            />
+            <motion.div
+              key="drawer"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed left-0 top-0 z-50 md:hidden"
+            >
+              <SidebarContent onClose={onClose} />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 
