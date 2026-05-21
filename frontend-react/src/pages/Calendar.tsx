@@ -9,6 +9,8 @@ import {
   subMonths,
   startOfWeek,
   endOfWeek,
+  isSameDay,
+  parseISO,
 } from "date-fns";
 import { useToast } from "../context/ToastContext";
 import CalendarHeader from "../components/calendar/CalendarHeader";
@@ -59,7 +61,17 @@ const Calendar: React.FC = () => {
   const fetchWorkouts = async () => {
     setLoading(true);
     try {
-      setWorkouts(await workoutService.getWorkouts());
+      const fresh = await workoutService.getWorkouts();
+      setWorkouts(fresh);
+      setSelectedDayWorkouts((prev) => {
+        if (!prev) return null;
+        return {
+          date: prev.date,
+          workouts: fresh.filter((w) =>
+            isSameDay(parseISO(w.start_time), prev.date),
+          ),
+        };
+      });
     } catch {
       addToast("Error al cargar los entrenamientos", "error");
     } finally {
