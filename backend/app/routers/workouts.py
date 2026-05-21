@@ -304,7 +304,12 @@ async def sync_fitbit_bulk(
         raise HTTPException(status_code=400, detail="Fitbit not connected.")
 
     now = datetime.utcnow()
-    already_synced_ids = db.query(models.FitbitData.workout_id)
+    # Include workouts that have no FitbitData OR have FitbitData with a null
+    # logId (created by a previous incomplete sync — need to be re-linked).
+    synced_with_logid = db.query(models.FitbitData.workout_id).filter(
+        models.FitbitData.fitbit_log_id.isnot(None),
+        models.FitbitData.fitbit_log_id != "",
+    )
     workouts = (
         db.query(models.Workout)
         .options(
@@ -316,7 +321,7 @@ async def sync_fitbit_bulk(
         .filter(
             models.Workout.user_id == current_user.id,
             models.Workout.start_time < now,
-            ~models.Workout.id.in_(already_synced_ids),
+            ~models.Workout.id.in_(synced_with_logid),
         )
         .order_by(models.Workout.start_time.desc())
         .all()
@@ -332,29 +337,46 @@ async def sync_fitbit_bulk(
                 not_found += 1
                 continue
 
-            # Cardio activities (run, swim, bike) must not be consumed here —
-            # they will create their own workout via sync_fitbit_create_missing.
+            # Cardio activities must not be consumed here —
+            # they create their own workout via sync_fitbit_create_missing.
             if not _is_gym_activity(activity):
                 not_found += 1
                 continue
 
-            fitbit_data = models.FitbitData(
-                workout_id=workout.id,
-                fitbit_log_id=str(activity.get("logId")),
-                calories=activity.get("calories", 0),
-                heart_rate_avg=activity.get("averageHeartRate", 0),
-                duration_ms=activity.get("duration", 0),
-                distance_km=activity.get("distance", 0.0),
-                elevation_gain_m=activity.get("elevationGain", 0.0),
-                activity_name=activity.get("activityName", "Unknown"),
-            )
+            log_id = str(activity.get("logId", "")) or None
             azm = fitbit_utils.extract_azm(activity)
-            fitbit_data.azm_fat_burn = azm.get("fatBurnMinutes", 0)
-            fitbit_data.azm_cardio = azm.get("cardioMinutes", 0)
-            fitbit_data.azm_peak = azm.get("peakMinutes", 0)
-            db.add(fitbit_data)
-            db.flush()
-            workout.fitbit_data = fitbit_data
+
+            existing_fd = workout.fitbit_data
+            if existing_fd:
+                # Update stale record (logId was null) in-place
+                existing_fd.fitbit_log_id = log_id
+                existing_fd.calories = activity.get("calories", 0)
+                existing_fd.heart_rate_avg = activity.get("averageHeartRate", 0)
+                existing_fd.duration_ms = activity.get("duration", 0)
+                existing_fd.distance_km = activity.get("distance", 0.0)
+                existing_fd.elevation_gain_m = activity.get("elevationGain", 0.0)
+                existing_fd.activity_name = activity.get("activityName", "Unknown")
+                existing_fd.azm_fat_burn = azm.get("fatBurnMinutes", 0)
+                existing_fd.azm_cardio = azm.get("cardioMinutes", 0)
+                existing_fd.azm_peak = azm.get("peakMinutes", 0)
+                fitbit_data = existing_fd
+            else:
+                fitbit_data = models.FitbitData(
+                    workout_id=workout.id,
+                    fitbit_log_id=log_id,
+                    calories=activity.get("calories", 0),
+                    heart_rate_avg=activity.get("averageHeartRate", 0),
+                    duration_ms=activity.get("duration", 0),
+                    distance_km=activity.get("distance", 0.0),
+                    elevation_gain_m=activity.get("elevationGain", 0.0),
+                    activity_name=activity.get("activityName", "Unknown"),
+                    azm_fat_burn=azm.get("fatBurnMinutes", 0),
+                    azm_cardio=azm.get("cardioMinutes", 0),
+                    azm_peak=azm.get("peakMinutes", 0),
+                )
+                db.add(fitbit_data)
+                db.flush()
+                workout.fitbit_data = fitbit_data
 
             if user_tokens.selected_calendar_id and workout.google_event_id:
                 update_google_calendar_event(db, user_tokens, workout, fitbit_data)
