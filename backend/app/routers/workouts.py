@@ -332,6 +332,12 @@ async def sync_fitbit_bulk(
                 not_found += 1
                 continue
 
+            # Cardio activities (run, swim, bike) must not be consumed here —
+            # they will create their own workout via sync_fitbit_create_missing.
+            if not _is_gym_activity(activity):
+                not_found += 1
+                continue
+
             fitbit_data = models.FitbitData(
                 workout_id=workout.id,
                 fitbit_log_id=str(activity.get("logId")),
@@ -362,15 +368,23 @@ async def sync_fitbit_bulk(
     return {"synced": synced, "not_found": not_found, "total": len(workouts)}
 
 
-def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
-    """Returns True if a Fitbit activity matches any workout in the list.
+def _is_gym_activity(activity: dict) -> bool:
+    """Returns True for activities that originate from a pre-planned Calendar gym session."""
+    name = activity.get("activityName", "").lower()
+    return "weights" in name or "walk" in name
 
-    For gym activities (weights/walk): ±1 h window — calendar events often
-    misalign due to manual entry or timezone offsets.
-    For cardio activities (run, swim, bike, …): ±15 min window — these
-    activities are usually NOT pre-scheduled in Calendar, so a nearby gym
-    session should never consume a running/swimming Fitbit entry.
+
+def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
+    """Returns True if a Fitbit activity matches any existing DB workout by time.
+
+    Cardio activities (run, swim, bike, …) always return False so they always
+    create their own DB workout — only logId deduplication prevents duplicates.
+    Gym activities (weights, walk) use a ±1 h window because calendar events
+    are often manually entered and can misalign with the actual start time.
     """
+    if not _is_gym_activity(activity):
+        return False
+
     try:
         raw_start = activity["startTime"].replace("Z", "+00:00")
         act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
@@ -378,12 +392,8 @@ def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
     except Exception:
         return False
 
-    act_name = activity.get("activityName", "").lower()
-    is_gym = "weights" in act_name or "walk" in act_name
-    window = 3600 if is_gym else 900  # 1 h for gym, 15 min for cardio
-
     for w in workouts:
-        if abs((act_start - w.start_time).total_seconds()) < window:
+        if abs((act_start - w.start_time).total_seconds()) < 3600:
             return True
         mid = w.start_time + (w.end_time - w.start_time) / 2
         if act_start <= mid <= act_end:

@@ -176,13 +176,14 @@ const Calendar: React.FC = () => {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      // Step 1: sync calendar first so existing workouts are up to date
+      // Step 1: pull calendar events into DB
       await workoutService.syncAllFromCalendar().catch(() => {});
-      // Step 2: create missing Fitbit workouts + attach Fitbit data to existing ones in parallel
-      const [fitbitResult] = await Promise.all([
-        workoutService.syncFitbitCreate().catch(() => null),
-        workoutService.syncFitbitBulk().catch(() => null),
-      ]);
+      // Step 2: attach Fitbit data to existing gym workouts
+      await workoutService.syncFitbitBulk().catch(() => null);
+      // Step 3: create standalone workouts for Fitbit activities not in DB yet
+      const fitbitResult = await workoutService
+        .syncFitbitCreate()
+        .catch(() => null);
       await fetchWorkouts();
       if (fitbitResult && fitbitResult.created > 0) {
         addToast(
