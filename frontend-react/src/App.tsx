@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useNavigate,
 } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -25,6 +26,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { user, loading, refreshUser } = useAuth();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -45,6 +47,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
         onSelect={async (id) => {
           await workoutService.setCalendar(id);
           await refreshUser();
+          navigate("/calendar");
         }}
       />
     );
