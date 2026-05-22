@@ -1,32 +1,18 @@
 import React, { useEffect, useState } from "react";
-import {
-  Dumbbell,
-  Award,
-  ArrowUpRight,
-  ChevronRight,
-  Clock,
-  CalendarDays,
-  Hash,
-  Trophy,
-  Calendar as CalendarIcon,
-} from "lucide-react";
+import { Clock, CalendarDays, Hash, Trophy } from "lucide-react";
 import { analyticsService, MaxLift } from "../services/analytics";
 import { workoutService, Workout } from "../services/workout";
 import { exerciseService, Exercise } from "../services/exercise";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import { SkeletonCard, SkeletonBlock } from "../components/ui/Skeleton";
+import { SkeletonCard } from "../components/ui/Skeleton";
 import WeightProgressCard from "../components/analytics/WeightProgressCard";
 import FrequencyAnalysisCard from "../components/analytics/FrequencyAnalysisCard";
 import FitbitSection from "../components/analytics/FitbitSection";
 
 const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
-
   const [maxLifts, setMaxLifts] = useState<MaxLift[]>([]);
-  const [recentWorkouts, setRecentWorkouts] = useState<Workout[]>([]);
   const [allWorkouts, setAllWorkouts] = useState<Workout[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +26,6 @@ const Dashboard: React.FC = () => {
           exerciseService.getExercises(),
         ]);
         setMaxLifts(lifts);
-        setRecentWorkouts(workouts.slice(0, 3));
         setAllWorkouts(workouts);
         setExercises(exRes);
       } catch {
