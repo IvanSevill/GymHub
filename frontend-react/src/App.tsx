@@ -17,6 +17,8 @@ import Workouts from "./pages/Workouts";
 import Calendar from "./pages/Calendar";
 import Settings from "./pages/Settings";
 import Records from "./pages/Records";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import { workoutService } from "./services/workout";
 
 import "./App.css";
@@ -59,6 +61,8 @@ const AppContent: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
         <Route
           path="/"
           element={

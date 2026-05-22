@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a1a"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+    <linearGradient id="plate-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+    <linearGradient id="bar-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4b5563"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+    <radialGradient id="hub-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#fde68a"/>
+      <stop offset="45%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#f97316" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="120" height="120" rx="22" fill="url(#bg-grad)"/>
+
+  <!-- Inner subtle border -->
+  <rect x="1" y="1" width="118" height="118" rx="21" fill="none" stroke="#2a2a2a" stroke-width="1"/>
+
+  <!-- Dumbbell group (centered vertically at y=54) -->
+
+  <!-- Left outer plate -->
+  <rect x="6" y="46" width="7" height="28" rx="3" fill="url(#plate-grad)" filter="url(#shadow)"/>
+  <!-- Left inner plate -->
+  <rect x="13" y="41" width="11" height="38" rx="4" fill="url(#plate-grad)" filter="url(#shadow)"/>
+
+  <!-- Left bar segment -->
+  <rect x="24" y="53" width="22" height="14" rx="2" fill="url(#bar-grad)"/>
+  <!-- Bar highlight -->
+  <rect x="24" y="53" width="22" height="3" rx="1" fill="#6b7280" opacity="0.5"/>
+
+  <!-- Center hub (the "Hub" in GymHub) -->
+  <circle cx="60" cy="60" r="20" fill="url(#hub-glow)" filter="url(#shadow)"/>
+  <!-- Hub inner ring (weight plate hole) -->
+  <circle cx="60" cy="60" r="11" fill="url(#bg-grad)"/>
+  <!-- Hub inner ring edge -->
+  <circle cx="60" cy="60" r="11" fill="none" stroke="#f97316" stroke-width="1" opacity="0.4"/>
+
+  <!-- Right bar segment -->
+  <rect x="74" y="53" width="22" height="14" rx="2" fill="url(#bar-grad)"/>
+  <!-- Bar highlight -->
+  <rect x="74" y="53" width="22" height="3" rx="1" fill="#6b7280" opacity="0.5"/>
+
+  <!-- Right inner plate -->
+  <rect x="96" y="41" width="11" height="38" rx="4" fill="url(#plate-grad)" filter="url(#shadow)"/>
+  <!-- Right outer plate -->
+  <rect x="107" y="46" width="7" height="28" rx="3" fill="url(#plate-grad)" filter="url(#shadow)"/>
+
+  <!-- GymHub wordmark -->
+  <text
+    x="60" y="100"
+    text-anchor="middle"
+    font-family="'Arial Black', 'Arial', sans-serif"
+    font-weight="900"
+    font-size="10.5"
+    letter-spacing="2.5"
+    fill="#f97316"
+    opacity="0.95"
+  >GYMHUB</text>
+</svg>
