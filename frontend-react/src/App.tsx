@@ -9,6 +9,7 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import Layout from "./components/Layout";
+import BackendWakeup from "./components/BackendWakeup";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Workouts from "./pages/Workouts";
@@ -93,13 +94,15 @@ function App() {
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   return (
-    <GoogleOAuthProvider clientId={googleClientId}>
-      <AuthProvider>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
-      </AuthProvider>
-    </GoogleOAuthProvider>
+    <BackendWakeup>
+      <GoogleOAuthProvider clientId={googleClientId}>
+        <AuthProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </AuthProvider>
+      </GoogleOAuthProvider>
+    </BackendWakeup>
   );
 }
 
