@@ -10,30 +10,44 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import Layout from "./components/Layout";
 import BackendWakeup from "./components/BackendWakeup";
+import CalendarSetup from "./pages/CalendarSetup";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Workouts from "./pages/Workouts";
 import Calendar from "./pages/Calendar";
 import Settings from "./pages/Settings";
 import Records from "./pages/Records";
+import { workoutService } from "./services/workout";
 
 import "./App.css";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen text-white">
-        Loading...
+      <div className="flex items-center justify-center min-h-screen bg-neutral-950 text-white text-sm">
+        Cargando…
       </div>
     );
   }
 
   if (!user) {
     return <Navigate to="/login" />;
+  }
+
+  if (!user.has_calendar) {
+    return (
+      <CalendarSetup
+        fetchCalendars={workoutService.getCalendars}
+        onSelect={async (id) => {
+          await workoutService.setCalendar(id);
+          await refreshUser();
+        }}
+      />
+    );
   }
 
   return <Layout>{children}</Layout>;
