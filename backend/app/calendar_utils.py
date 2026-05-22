@@ -7,15 +7,15 @@ PIERNA_MUSCLES = ["gluteos", "femoral", "cuadriceps", "gemelos"]
 
 # Typos / singular forms → canonical muscle name
 MUSCLE_ALIASES: Dict[str, str] = {
-    "abdomen": "abdominales",
-    "gluteo":  "gluteos",
-    "gemelo":  "gemelos",
-    "buceps":  "biceps",
+    "abdominales": "abdomen",
+    "gluteo":      "gluteos",
+    "gemelo":      "gemelos",
+    "buceps":      "biceps",
 }
 
 _VALID_MUSCLES = {
     "pecho", "hombro", "triceps", "biceps", "espalda",
-    "abdominales", "gluteos", "femoral", "cuadriceps", "gemelos", "pierna",
+    "abdomen", "gluteos", "femoral", "cuadriceps", "gemelos", "pierna",
 }
 
 

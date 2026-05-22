@@ -16,7 +16,7 @@ const MUSCLE_ORDER = [
   "hombro",
   "biceps",
   "triceps",
-  "abdominales",
+  "abdomen",
   "gluteos",
   "cuadriceps",
   "femoral",

@@ -11,7 +11,7 @@ router = APIRouter(tags=["exercises"])
 # Predefined list of valid muscle groups
 VALID_MUSCLES = [
     "pecho", "hombro", "triceps", "biceps", "espalda",
-    "abdominales", "abdomen", "gluteos", "femoral", "cuadriceps", "gemelos"
+    "abdomen", "gluteos", "femoral", "cuadriceps", "gemelos"
 ]
 
 @router.get("/muscles", response_model=List[schemas.Muscle])
@@ -20,6 +20,19 @@ async def get_muscles(db: Session = Depends(database.get_db)):
     Retrieves a list of all available muscle groups.
     If muscles do not exist, they are initialized from VALID_MUSCLES.
     """
+    # One-time migration: merge legacy "abdominales" muscle into "abdomen"
+    abdominales = db.query(models.Muscle).filter(models.Muscle.name == "abdominales").first()
+    if abdominales:
+        abdomen = db.query(models.Muscle).filter(models.Muscle.name == "abdomen").first()
+        if abdomen:
+            db.query(models.Exercise).filter(
+                models.Exercise.muscle_id == abdominales.id
+            ).update({"muscle_id": abdomen.id}, synchronize_session=False)
+            db.delete(abdominales)
+        else:
+            abdominales.name = "abdomen"
+        db.commit()
+
     # Initialize muscles if they don't exist
     for m_name in VALID_MUSCLES:
         if not db.query(models.Muscle).filter(models.Muscle.name == m_name).first():
