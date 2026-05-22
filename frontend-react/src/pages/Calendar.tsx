@@ -16,7 +16,9 @@ import { useToast } from "../context/ToastContext";
 import CalendarHeader from "../components/calendar/CalendarHeader";
 import CalendarGrid from "../components/calendar/CalendarGrid";
 import CalendarLegend from "../components/calendar/CalendarLegend";
-import CreateEventModal from "../components/calendar/CreateEventModal";
+import CreateEventModal, {
+  EventPayload,
+} from "../components/calendar/CreateEventModal";
 import DayDetailModal from "../components/calendar/DayDetailModal";
 import type { DraftSet } from "../components/calendar/types";
 
@@ -168,21 +170,25 @@ const Calendar: React.FC = () => {
     }
   };
 
-  const handleCreateEvent = async (
-    title: string,
-    start: string,
-    end: string,
-  ) => {
-    const payload: WorkoutCreate = {
-      title,
-      start_time: new Date(start).toISOString(),
-      end_time: new Date(end).toISOString(),
-      exercise_sets: [],
-    };
-    await workoutService.createWorkout(payload);
+  const handleCreateEvent = async (events: EventPayload[]) => {
+    await Promise.all(
+      events.map((e) =>
+        workoutService.createWorkout({
+          title: e.title,
+          start_time: e.start,
+          end_time: e.end,
+          exercise_sets: [],
+        } as WorkoutCreate),
+      ),
+    );
     await fetchWorkouts();
     setIsCreatingEvent(false);
-    addToast("Evento creado correctamente", "success");
+    addToast(
+      events.length > 1
+        ? `${events.length} sesiones planificadas correctamente`
+        : "Evento creado correctamente",
+      "success",
+    );
   };
 
   const handleSync = async () => {

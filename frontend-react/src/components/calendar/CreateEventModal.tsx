@@ -1,40 +1,335 @@
-import React, { useState } from "react";
-import { format, addHours } from "date-fns";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, Loader2 } from "lucide-react";
+import { X, Loader2, CalendarDays, LayoutGrid, Check } from "lucide-react";
+import { addHours, format } from "date-fns";
+import { exerciseService } from "../../services/exercise";
+import type { Muscle } from "../../services/exercise";
 
-const toLocalDatetimeValue = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm");
-
-const makeTomorrow = (): Date => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(10, 0, 0, 0);
-  return d;
-};
+export interface EventPayload {
+  title: string;
+  start: string;
+  end: string;
+}
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (title: string, start: string, end: string) => Promise<void>;
+  onSubmit: (events: EventPayload[]) => Promise<void>;
 }
 
+type Mode = "single" | "weekly";
+type SplitType = 3 | 4;
+
+const SPLITS: Record<SplitType, { label: string }[]> = {
+  3: [
+    { label: "Espalda + Bíceps" },
+    { label: "Pecho + Hombros + Tríceps" },
+    { label: "Pierna + Abdominales" },
+  ],
+  4: [
+    { label: "Espalda + Bíceps" },
+    { label: "Hombros + Tríceps" },
+    { label: "Pecho + Abdominales" },
+    { label: "Pierna" },
+  ],
+};
+
+const DAYS_ES = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo",
+];
+
+const DEFAULT_TIME = "10:00";
+
+interface WeeklyAssignment {
+  dayIndex: number;
+  time: string;
+}
+
+const DEFAULT_3DAY: Record<number, WeeklyAssignment> = {
+  0: { dayIndex: 0, time: DEFAULT_TIME },
+  1: { dayIndex: 2, time: DEFAULT_TIME },
+  2: { dayIndex: 4, time: DEFAULT_TIME },
+};
+
+const DEFAULT_4DAY: Record<number, WeeklyAssignment> = {
+  0: { dayIndex: 0, time: DEFAULT_TIME },
+  1: { dayIndex: 1, time: DEFAULT_TIME },
+  2: { dayIndex: 3, time: DEFAULT_TIME },
+  3: { dayIndex: 4, time: DEFAULT_TIME },
+};
+
+function nextOccurrenceOf(dayIndex: number): Date {
+  const today = new Date();
+  const todayDow = (today.getDay() + 6) % 7;
+  const daysUntil = (dayIndex - todayDow + 7) % 7 || 7;
+  const d = new Date(today);
+  d.setDate(today.getDate() + daysUntil);
+  return d;
+}
+
+function buildEventTimes(
+  dayIndex: number,
+  time: string,
+): { start: string; end: string } {
+  const base = nextOccurrenceOf(dayIndex);
+  const [h, m] = time.split(":").map(Number);
+  const start = new Date(base);
+  start.setHours(h, m, 0, 0);
+  const end = addHours(start, 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+// ── Single-event panel ──────────────────────────────────────────────────────
+
+interface SinglePanelProps {
+  muscles: Muscle[];
+  selectedMuscles: string[];
+  onToggle: (id: string) => void;
+  date: string;
+  onDateChange: (v: string) => void;
+  startTime: string;
+  onStartChange: (v: string) => void;
+  endTime: string;
+  onEndChange: (v: string) => void;
+}
+
+const SinglePanel: React.FC<SinglePanelProps> = ({
+  muscles,
+  selectedMuscles,
+  onToggle,
+  date,
+  onDateChange,
+  startTime,
+  onStartChange,
+  endTime,
+  onEndChange,
+}) => (
+  <div className="space-y-5">
+    <div>
+      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3">
+        Grupos musculares
+      </p>
+      {muscles.length === 0 ? (
+        <p className="text-[10px] text-slate-600 font-semibold">
+          Cargando grupos musculares…
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {muscles.map((m) => {
+            const on = selectedMuscles.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                onClick={() => onToggle(m.id)}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all capitalize ${
+                  on
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "bg-white/5 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-300"
+                }`}
+              >
+                {m.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+
+    <div>
+      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">
+        Fecha
+      </p>
+      <input
+        type="date"
+        value={date}
+        onChange={(e) => onDateChange(e.target.value)}
+        className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50 transition-colors"
+      />
+    </div>
+
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">
+          Inicio
+        </p>
+        <input
+          type="time"
+          value={startTime}
+          onChange={(e) => onStartChange(e.target.value)}
+          className="w-full bg-black/30 border border-white/10 rounded-2xl px-3 py-3 text-xs text-white outline-none focus:border-primary/50 transition-colors"
+        />
+      </div>
+      <div>
+        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">
+          Fin
+        </p>
+        <input
+          type="time"
+          value={endTime}
+          onChange={(e) => onEndChange(e.target.value)}
+          className="w-full bg-black/30 border border-white/10 rounded-2xl px-3 py-3 text-xs text-white outline-none focus:border-primary/50 transition-colors"
+        />
+      </div>
+    </div>
+  </div>
+);
+
+// ── Weekly-planning panel ───────────────────────────────────────────────────
+
+interface WeeklyPanelProps {
+  splitType: SplitType;
+  onSplitChange: (t: SplitType) => void;
+  assignments: Record<number, WeeklyAssignment>;
+  onAssignmentChange: (i: number, val: WeeklyAssignment) => void;
+}
+
+const WeeklyPanel: React.FC<WeeklyPanelProps> = ({
+  splitType,
+  onSplitChange,
+  assignments,
+  onAssignmentChange,
+}) => {
+  const split = SPLITS[splitType];
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3">
+          Tipo de split
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {([3, 4] as SplitType[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => onSplitChange(t)}
+              className={`py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${
+                splitType === t
+                  ? "bg-primary/15 border-primary/40 text-primary"
+                  : "bg-white/5 border-white/10 text-slate-400 hover:border-white/20"
+              }`}
+            >
+              Split {t} días
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {split.map((day, i) => {
+          const asgn = assignments[i];
+          if (!asgn) return null;
+          return (
+            <div
+              key={i}
+              className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-4"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-5 h-5 rounded-lg bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0">
+                  <span className="text-[9px] font-black text-primary">
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                </div>
+                <p className="text-[11px] font-black text-white leading-tight">
+                  {day.label}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1.5">
+                    Día
+                  </p>
+                  <select
+                    value={asgn.dayIndex}
+                    onChange={(e) =>
+                      onAssignmentChange(i, {
+                        ...asgn,
+                        dayIndex: Number(e.target.value),
+                      })
+                    }
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-xs text-white outline-none focus:border-primary/50"
+                  >
+                    {DAYS_ES.map((d, di) => (
+                      <option key={di} value={di}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1.5">
+                    Hora inicio
+                  </p>
+                  <input
+                    type="time"
+                    value={asgn.time}
+                    onChange={(e) =>
+                      onAssignmentChange(i, { ...asgn, time: e.target.value })
+                    }
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-xs text-white outline-none focus:border-primary/50"
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/15">
+        <p className="text-[9px] text-slate-400 leading-relaxed">
+          Cada sesión durará{" "}
+          <span className="text-white font-bold">1 hora</span> por defecto.
+          Puedes ajustar el horario desde el calendario.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ── Main modal ──────────────────────────────────────────────────────────────
+
 const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
-  const [title, setTitle] = useState("");
-  const [start, setStart] = useState(() =>
-    toLocalDatetimeValue(makeTomorrow()),
-  );
-  const [end, setEnd] = useState(() =>
-    toLocalDatetimeValue(addHours(makeTomorrow(), 1)),
-  );
-  const [titleError, setTitleError] = useState("");
+  const [mode, setMode] = useState<Mode>("single");
+  const [muscles, setMuscles] = useState<Muscle[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
+  const [singleDate, setSingleDate] = useState(() =>
+    format(new Date(Date.now() + 86400000), "yyyy-MM-dd"),
+  );
+  const [singleStart, setSingleStart] = useState(DEFAULT_TIME);
+  const [singleEnd, setSingleEnd] = useState("11:00");
+
+  const [splitType, setSplitType] = useState<SplitType>(3);
+  const [assignments, setAssignments] =
+    useState<Record<number, WeeklyAssignment>>(DEFAULT_3DAY);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    exerciseService
+      .getMuscles()
+      .then(setMuscles)
+      .catch(() => {});
+  }, [isOpen]);
+
+  useEffect(() => {
+    setAssignments(splitType === 3 ? { ...DEFAULT_3DAY } : { ...DEFAULT_4DAY });
+  }, [splitType]);
 
   const reset = () => {
-    const d = makeTomorrow();
-    setTitle("");
-    setStart(toLocalDatetimeValue(d));
-    setEnd(toLocalDatetimeValue(addHours(d, 1)));
-    setTitleError("");
+    setMode("single");
+    setSelectedMuscles([]);
+    setSingleDate(format(new Date(Date.now() + 86400000), "yyyy-MM-dd"));
+    setSingleStart(DEFAULT_TIME);
+    setSingleEnd("11:00");
+    setSplitType(3);
+    setAssignments({ ...DEFAULT_3DAY });
+    setError("");
   };
 
   const handleClose = () => {
@@ -43,23 +338,52 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
   };
 
   const handleSubmit = async () => {
-    if (!title.trim()) {
-      setTitleError("El título es obligatorio");
-      return;
+    setError("");
+    let events: EventPayload[];
+
+    if (mode === "single") {
+      if (selectedMuscles.length === 0) {
+        setError("Selecciona al menos un grupo muscular");
+        return;
+      }
+      if (singleEnd <= singleStart) {
+        setError("La hora de fin debe ser posterior al inicio");
+        return;
+      }
+      const title = selectedMuscles
+        .map((id) => muscles.find((m) => m.id === id)?.name ?? "")
+        .filter(Boolean)
+        .map((n) => n.charAt(0).toUpperCase() + n.slice(1))
+        .join(" + ");
+      const start = new Date(`${singleDate}T${singleStart}`);
+      const end = new Date(`${singleDate}T${singleEnd}`);
+      events = [{ title, start: start.toISOString(), end: end.toISOString() }];
+    } else {
+      const split = SPLITS[splitType];
+      events = split.map((day, i) => {
+        const asgn = assignments[i] ?? { dayIndex: i, time: DEFAULT_TIME };
+        return {
+          title: day.label,
+          ...buildEventTimes(asgn.dayIndex, asgn.time),
+        };
+      });
     }
-    if (end <= start) {
-      setTitleError("La hora de fin debe ser posterior al inicio");
-      return;
-    }
-    setTitleError("");
+
     setIsSubmitting(true);
     try {
-      await onSubmit(title.trim(), start, end);
+      await onSubmit(events);
       reset();
+    } catch {
+      setError("Error al crear los eventos");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const toggleMuscle = (id: string) =>
+    setSelectedMuscles((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
 
   return (
     <AnimatePresence>
@@ -76,9 +400,10 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
             initial={{ scale: 0.96, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 20 }}
-            className="bg-surface rounded-t-[2.5rem] sm:rounded-[2rem] border border-white/10 shadow-2xl w-full sm:max-w-md z-10"
+            className="bg-surface rounded-t-[2.5rem] sm:rounded-[2rem] border border-white/10 shadow-2xl w-full sm:max-w-lg z-10 max-h-[90vh] overflow-y-auto"
           >
-            <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center sticky top-0 bg-surface z-10">
               <div>
                 <h3 className="text-lg font-black text-white tracking-tight">
                   Nuevo Evento
@@ -95,55 +420,71 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                  Título
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                    setTitleError("");
+            {/* Mode switcher */}
+            <div className="px-6 pt-5">
+              <div className="flex gap-1 p-1 bg-black/30 rounded-2xl border border-white/[0.05]">
+                <button
+                  onClick={() => {
+                    setMode("single");
+                    setError("");
                   }}
-                  placeholder="Ej: Piernas + Glúteos"
-                  className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none focus:border-primary/50 transition-colors"
-                  autoFocus
-                />
-                {titleError && (
-                  <p className="text-[10px] text-danger mt-1.5 font-semibold">
-                    {titleError}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                    Inicio
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={start}
-                    onChange={(e) => setStart(e.target.value)}
-                    className="w-full bg-black/30 border border-white/10 rounded-2xl px-3 py-3 text-xs text-white outline-none focus:border-primary/50 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                    Fin
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={end}
-                    onChange={(e) => setEnd(e.target.value)}
-                    className="w-full bg-black/30 border border-white/10 rounded-2xl px-3 py-3 text-xs text-white outline-none focus:border-primary/50 transition-colors"
-                  />
-                </div>
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                    mode === "single"
+                      ? "bg-primary text-white shadow-lg shadow-primary/20"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  <CalendarDays size={11} />
+                  Evento único
+                </button>
+                <button
+                  onClick={() => {
+                    setMode("weekly");
+                    setError("");
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                    mode === "weekly"
+                      ? "bg-primary text-white shadow-lg shadow-primary/20"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  <LayoutGrid size={11} />
+                  Planificación semanal
+                </button>
               </div>
             </div>
 
+            {/* Body */}
+            <div className="p-6 space-y-5">
+              {mode === "single" ? (
+                <SinglePanel
+                  muscles={muscles}
+                  selectedMuscles={selectedMuscles}
+                  onToggle={toggleMuscle}
+                  date={singleDate}
+                  onDateChange={setSingleDate}
+                  startTime={singleStart}
+                  onStartChange={setSingleStart}
+                  endTime={singleEnd}
+                  onEndChange={setSingleEnd}
+                />
+              ) : (
+                <WeeklyPanel
+                  splitType={splitType}
+                  onSplitChange={setSplitType}
+                  assignments={assignments}
+                  onAssignmentChange={(i, val) =>
+                    setAssignments((prev) => ({ ...prev, [i]: val }))
+                  }
+                />
+              )}
+
+              {error && (
+                <p className="text-[10px] text-danger font-semibold">{error}</p>
+              )}
+            </div>
+
+            {/* Footer */}
             <div className="px-6 pb-6 flex gap-3">
               <button
                 onClick={handleClose}
@@ -161,7 +502,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
                 ) : (
                   <Check size={13} />
                 )}
-                Crear Evento
+                {mode === "weekly" ? "Planificar semana" : "Crear evento"}
               </button>
             </div>
           </motion.div>

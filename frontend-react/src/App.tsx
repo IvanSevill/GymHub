@@ -44,6 +44,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
         fetchCalendars={workoutService.getCalendars}
         onSelect={async (id) => {
           await workoutService.setCalendar(id);
+          await workoutService.syncAllFromCalendar().catch(() => {});
           window.location.href = "/";
         }}
       />
