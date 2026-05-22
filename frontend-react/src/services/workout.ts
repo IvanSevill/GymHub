@@ -118,6 +118,12 @@ export const workoutService = {
     );
     return response.data;
   },
+  resetAll: async (): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>(
+      "/exercises/reset-all",
+    );
+    return response.data;
+  },
   resetExercisesAndResync: async (): Promise<{
     deleted_sets: number;
     deleted_exercises: number;

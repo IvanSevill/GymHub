@@ -170,6 +170,22 @@ const Calendar: React.FC = () => {
     }
   };
 
+  const handleDeleteWorkout = async (workoutId: string) => {
+    await workoutService.deleteWorkout(workoutId);
+    const fresh = await workoutService.getWorkouts();
+    setWorkouts(fresh);
+    setSelectedDayWorkouts((prev) => {
+      if (!prev) return null;
+      const remaining = fresh.filter((w) =>
+        isSameDay(parseISO(w.start_time), prev.date),
+      );
+      return remaining.length > 0
+        ? { date: prev.date, workouts: remaining }
+        : null;
+    });
+    addToast("Evento eliminado", "success");
+  };
+
   const handleCreateEvent = async (events: EventPayload[]) => {
     await Promise.all(
       events.map((e) =>
@@ -264,6 +280,7 @@ const Calendar: React.FC = () => {
         onCancelEdit={cancelEdit}
         onSaveEdit={saveEdit}
         onDraftChange={setDraftSets}
+        onDelete={handleDeleteWorkout}
       />
     </div>
   );

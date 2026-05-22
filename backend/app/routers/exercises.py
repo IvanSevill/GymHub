@@ -111,6 +111,39 @@ async def cleanup_unused_exercises(
     return {"deleted": count}
 
 
+@router.post("/exercises/reset-all", response_model=dict)
+async def reset_all_data(
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Root-only: wipes all workouts, exercises, and muscles; resets the sync token."""
+    user_workout_ids = (
+        db.query(models.Workout.id)
+        .filter(models.Workout.user_id == current_user.id)
+        .subquery()
+    )
+    db.query(models.ExerciseSet).filter(
+        models.ExerciseSet.workout_id.in_(user_workout_ids)
+    ).delete(synchronize_session=False)
+    db.query(models.FitbitData).filter(
+        models.FitbitData.workout_id.in_(user_workout_ids)
+    ).delete(synchronize_session=False)
+    db.query(models.Workout).filter(
+        models.Workout.user_id == current_user.id
+    ).delete(synchronize_session=False)
+    db.query(models.Exercise).delete(synchronize_session=False)
+    db.query(models.Muscle).delete(synchronize_session=False)
+    user_tokens = (
+        db.query(models.UserTokens)
+        .filter(models.UserTokens.user_id == current_user.id)
+        .first()
+    )
+    if user_tokens:
+        user_tokens.google_calendar_sync_token = None
+    db.commit()
+    return {"message": "Base de datos limpiada correctamente"}
+
+
 @router.post("/exercises/reset-and-resync", response_model=dict)
 async def reset_exercises_and_force_resync(
     current_user: models.User = Depends(auth.get_current_user),

@@ -34,52 +34,42 @@ const SPLITS: Record<SplitType, { label: string }[]> = {
   ],
 };
 
-const DAYS_ES = [
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-  "Domingo",
-];
-
 const DEFAULT_TIME = "10:00";
 
 interface WeeklyAssignment {
-  dayIndex: number;
+  date: string;
   time: string;
 }
 
-const DEFAULT_3DAY: Record<number, WeeklyAssignment> = {
-  0: { dayIndex: 0, time: DEFAULT_TIME },
-  1: { dayIndex: 2, time: DEFAULT_TIME },
-  2: { dayIndex: 4, time: DEFAULT_TIME },
-};
+function daysFromNow(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return format(d, "yyyy-MM-dd");
+}
 
-const DEFAULT_4DAY: Record<number, WeeklyAssignment> = {
-  0: { dayIndex: 0, time: DEFAULT_TIME },
-  1: { dayIndex: 1, time: DEFAULT_TIME },
-  2: { dayIndex: 3, time: DEFAULT_TIME },
-  3: { dayIndex: 4, time: DEFAULT_TIME },
-};
+function makeDefault3Day(): Record<number, WeeklyAssignment> {
+  return {
+    0: { date: daysFromNow(1), time: DEFAULT_TIME },
+    1: { date: daysFromNow(3), time: DEFAULT_TIME },
+    2: { date: daysFromNow(5), time: DEFAULT_TIME },
+  };
+}
 
-function nextOccurrenceOf(dayIndex: number): Date {
-  const today = new Date();
-  const todayDow = (today.getDay() + 6) % 7;
-  const daysUntil = (dayIndex - todayDow + 7) % 7 || 7;
-  const d = new Date(today);
-  d.setDate(today.getDate() + daysUntil);
-  return d;
+function makeDefault4Day(): Record<number, WeeklyAssignment> {
+  return {
+    0: { date: daysFromNow(1), time: DEFAULT_TIME },
+    1: { date: daysFromNow(2), time: DEFAULT_TIME },
+    2: { date: daysFromNow(4), time: DEFAULT_TIME },
+    3: { date: daysFromNow(5), time: DEFAULT_TIME },
+  };
 }
 
 function buildEventTimes(
-  dayIndex: number,
+  date: string,
   time: string,
 ): { start: string; end: string } {
-  const base = nextOccurrenceOf(dayIndex);
   const [h, m] = time.split(":").map(Number);
-  const start = new Date(base);
+  const start = new Date(`${date}T${time}`);
   start.setHours(h, m, 0, 0);
   const end = addHours(start, 1);
   return { start: start.toISOString(), end: end.toISOString() };
@@ -241,24 +231,16 @@ const WeeklyPanel: React.FC<WeeklyPanelProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1.5">
-                    Día
+                    Fecha
                   </p>
-                  <select
-                    value={asgn.dayIndex}
+                  <input
+                    type="date"
+                    value={asgn.date}
                     onChange={(e) =>
-                      onAssignmentChange(i, {
-                        ...asgn,
-                        dayIndex: Number(e.target.value),
-                      })
+                      onAssignmentChange(i, { ...asgn, date: e.target.value })
                     }
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-xs text-white outline-none focus:border-primary/50"
-                  >
-                    {DAYS_ES.map((d, di) => (
-                      <option key={di} value={di}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
                   <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1.5">
@@ -307,7 +289,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
 
   const [splitType, setSplitType] = useState<SplitType>(3);
   const [assignments, setAssignments] =
-    useState<Record<number, WeeklyAssignment>>(DEFAULT_3DAY);
+    useState<Record<number, WeeklyAssignment>>(makeDefault3Day);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -318,7 +300,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
   }, [isOpen]);
 
   useEffect(() => {
-    setAssignments(splitType === 3 ? { ...DEFAULT_3DAY } : { ...DEFAULT_4DAY });
+    setAssignments(splitType === 3 ? makeDefault3Day() : makeDefault4Day());
   }, [splitType]);
 
   const reset = () => {
@@ -328,7 +310,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
     setSingleStart(DEFAULT_TIME);
     setSingleEnd("11:00");
     setSplitType(3);
-    setAssignments({ ...DEFAULT_3DAY });
+    setAssignments(makeDefault3Day());
     setError("");
   };
 
@@ -361,10 +343,13 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
     } else {
       const split = SPLITS[splitType];
       events = split.map((day, i) => {
-        const asgn = assignments[i] ?? { dayIndex: i, time: DEFAULT_TIME };
+        const asgn = assignments[i] ?? {
+          date: daysFromNow(i + 1),
+          time: DEFAULT_TIME,
+        };
         return {
           title: day.label,
-          ...buildEventTimes(asgn.dayIndex, asgn.time),
+          ...buildEventTimes(asgn.date, asgn.time),
         };
       });
     }
