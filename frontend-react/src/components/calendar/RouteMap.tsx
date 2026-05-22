@@ -90,6 +90,8 @@ const RouteMap: React.FC<Props> = ({ workoutId }) => {
     };
   }, [workoutId]);
 
+  if (status === "error") return null;
+
   return (
     <div className="relative rounded-2xl overflow-hidden border border-white/10">
       {status === "loading" && (
@@ -99,17 +101,7 @@ const RouteMap: React.FC<Props> = ({ workoutId }) => {
           </p>
         </div>
       )}
-      {status === "error" && (
-        <div className="h-32 flex items-center justify-center bg-white/5">
-          <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-            Ruta no disponible
-          </p>
-        </div>
-      )}
-      <div
-        ref={containerRef}
-        style={{ height: 220, display: status === "error" ? "none" : "block" }}
-      />
+      <div ref={containerRef} style={{ height: 220 }} />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, CalendarDays, LayoutGrid, Check } from "lucide-react";
 import { addHours, format } from "date-fns";
+import { es } from "date-fns/locale";
 import { exerciseService } from "../../services/exercise";
 import type { Muscle } from "../../services/exercise";
 
@@ -22,14 +23,14 @@ type SplitType = 3 | 4;
 
 const SPLITS: Record<SplitType, { label: string }[]> = {
   3: [
-    { label: "Espalda + Bíceps" },
-    { label: "Pecho + Hombros + Tríceps" },
-    { label: "Pierna + Abdominales" },
+    { label: "Espalda - Bíceps" },
+    { label: "Pecho - Hombros - Tríceps" },
+    { label: "Pierna - Abdominales" },
   ],
   4: [
-    { label: "Espalda + Bíceps" },
-    { label: "Hombros + Tríceps" },
-    { label: "Pecho + Abdominales" },
+    { label: "Espalda - Bíceps" },
+    { label: "Hombros - Tríceps" },
+    { label: "Pecho - Abdominales" },
     { label: "Pierna" },
   ],
 };
@@ -74,6 +75,38 @@ function buildEventTimes(
   const end = addHours(start, 1);
   return { start: start.toISOString(), end: end.toISOString() };
 }
+
+function fmtDate(dateStr: string): string {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  return format(new Date(y, mo - 1, d), "eee d MMM", { locale: es });
+}
+
+interface DatePickerProps {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+}
+
+const DatePicker: React.FC<DatePickerProps> = ({
+  value,
+  onChange,
+  className = "",
+}) => (
+  <div className={`relative ${className}`}>
+    <div className="pointer-events-none flex items-center gap-2 w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white">
+      <CalendarDays size={14} className="text-slate-400 shrink-0" />
+      <span className="capitalize">
+        {value ? fmtDate(value) : "Seleccionar fecha"}
+      </span>
+    </div>
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+    />
+  </div>
+);
 
 // ── Single-event panel ──────────────────────────────────────────────────────
 
@@ -135,12 +168,7 @@ const SinglePanel: React.FC<SinglePanelProps> = ({
       <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">
         Fecha
       </p>
-      <input
-        type="date"
-        value={date}
-        onChange={(e) => onDateChange(e.target.value)}
-        className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50 transition-colors"
-      />
+      <DatePicker value={date} onChange={onDateChange} />
     </div>
 
     <div className="grid grid-cols-2 gap-3">
@@ -233,13 +261,12 @@ const WeeklyPanel: React.FC<WeeklyPanelProps> = ({
                   <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1.5">
                     Fecha
                   </p>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={asgn.date}
-                    onChange={(e) =>
-                      onAssignmentChange(i, { ...asgn, date: e.target.value })
+                    onChange={(v) =>
+                      onAssignmentChange(i, { ...asgn, date: v })
                     }
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-xs text-white outline-none focus:border-primary/50"
+                    className="text-xs"
                   />
                 </div>
                 <div>
@@ -336,7 +363,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
         .map((id) => muscles.find((m) => m.id === id)?.name ?? "")
         .filter(Boolean)
         .map((n) => n.charAt(0).toUpperCase() + n.slice(1))
-        .join(" + ");
+        .join(" - ");
       const start = new Date(`${singleDate}T${singleStart}`);
       const end = new Date(`${singleDate}T${singleEnd}`);
       events = [{ title, start: start.toISOString(), end: end.toISOString() }];
