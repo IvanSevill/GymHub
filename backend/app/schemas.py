@@ -10,6 +10,10 @@ class MuscleCreate(MuscleBase):
     """Schema for creating a new muscle group."""
     pass
 
+class MuscleUpdate(BaseModel):
+    """Schema for renaming a muscle group."""
+    name: str = Field(..., description="New name for the muscle group")
+
 class Muscle(MuscleBase):
     """Schema for returning muscle group details."""
     id: str = Field(..., description="Unique identifier of the muscle group")
@@ -25,6 +29,11 @@ class ExerciseBase(BaseModel):
 class ExerciseCreate(ExerciseBase):
     """Schema for creating a new exercise."""
     pass
+
+class ExerciseUpdate(BaseModel):
+    """Schema for renaming an exercise or reassigning its muscle group."""
+    name: str = Field(..., description="New name for the exercise")
+    muscle_id: Optional[str] = Field(None, description="New muscle group ID")
 
 class Exercise(ExerciseBase):
     """Schema for returning exercise details."""

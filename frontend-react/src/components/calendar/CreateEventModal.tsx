@@ -73,7 +73,10 @@ function buildEventTimes(
   const start = new Date(`${date}T${time}`);
   start.setHours(h, m, 0, 0);
   const end = addHours(start, 1);
-  return { start: start.toISOString(), end: end.toISOString() };
+  return {
+    start: format(start, "yyyy-MM-dd'T'HH:mm:ss"),
+    end: format(end, "yyyy-MM-dd'T'HH:mm:ss"),
+  };
 }
 
 function fmtDate(dateStr: string): string {
@@ -392,7 +395,13 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
         .join(" - ");
       const start = new Date(`${singleDate}T${singleStart}`);
       const end = new Date(`${singleDate}T${singleEnd}`);
-      events = [{ title, start: start.toISOString(), end: end.toISOString() }];
+      events = [
+        {
+          title,
+          start: format(start, "yyyy-MM-dd'T'HH:mm:ss"),
+          end: format(end, "yyyy-MM-dd'T'HH:mm:ss"),
+        },
+      ];
     } else {
       const split = SPLITS[splitType];
       events = split.map((day, i) => {

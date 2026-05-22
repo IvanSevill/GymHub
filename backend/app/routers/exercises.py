@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from .. import models, schemas, database, auth
@@ -25,6 +26,116 @@ async def get_muscles(db: Session = Depends(database.get_db)):
             db.add(models.Muscle(name=m_name))
     db.commit()
     return db.query(models.Muscle).all()
+
+@router.post("/muscles", response_model=schemas.Muscle)
+async def create_muscle(
+    muscle: schemas.MuscleCreate,
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Root-only: creates a new muscle group."""
+    name = muscle.name.strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="Muscle name cannot be empty")
+    existing = db.query(models.Muscle).filter(models.Muscle.name == name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Muscle group already exists")
+    db_muscle = models.Muscle(name=name)
+    db.add(db_muscle)
+    try:
+        db.commit()
+        db.refresh(db_muscle)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Could not create muscle group")
+    return db_muscle
+
+
+@router.put("/muscles/{muscle_id}", response_model=schemas.Muscle)
+async def update_muscle(
+    muscle_id: str,
+    data: schemas.MuscleUpdate,
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Root-only: renames a muscle group."""
+    db_muscle = db.query(models.Muscle).filter(models.Muscle.id == muscle_id).first()
+    if not db_muscle:
+        raise HTTPException(status_code=404, detail="Muscle not found")
+    name = data.name.strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="Muscle name cannot be empty")
+    duplicate = (
+        db.query(models.Muscle)
+        .filter(models.Muscle.name == name, models.Muscle.id != muscle_id)
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(status_code=400, detail="A muscle group with that name already exists")
+    db_muscle.name = name
+    db.commit()
+    db.refresh(db_muscle)
+    return db_muscle
+
+
+@router.delete("/muscles/{muscle_id}")
+async def delete_muscle(
+    muscle_id: str,
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Root-only: deletes a muscle group and all its exercises (cascade)."""
+    db_muscle = db.query(models.Muscle).filter(models.Muscle.id == muscle_id).first()
+    if not db_muscle:
+        raise HTTPException(status_code=404, detail="Muscle not found")
+    db.delete(db_muscle)
+    db.commit()
+    return {"message": f"Muscle group '{db_muscle.name}' deleted"}
+
+
+@router.put("/exercises/{exercise_id}", response_model=schemas.Exercise)
+async def update_exercise(
+    exercise_id: str,
+    data: schemas.ExerciseUpdate,
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Root-only: renames an exercise or moves it to a different muscle group."""
+    db_exercise = db.query(models.Exercise).filter(models.Exercise.id == exercise_id).first()
+    if not db_exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Exercise name cannot be empty")
+    db_exercise.name = name
+    if data.muscle_id and data.muscle_id != db_exercise.muscle_id:
+        target_muscle = db.query(models.Muscle).filter(models.Muscle.id == data.muscle_id).first()
+        if not target_muscle:
+            raise HTTPException(status_code=404, detail="Target muscle not found")
+        db_exercise.muscle_id = data.muscle_id
+    try:
+        db.commit()
+        db.refresh(db_exercise)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="An exercise with that name already exists")
+    return db_exercise
+
+
+@router.delete("/exercises/{exercise_id}")
+async def delete_exercise(
+    exercise_id: str,
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Root-only: deletes an exercise and all its associated sets (cascade)."""
+    db_exercise = db.query(models.Exercise).filter(models.Exercise.id == exercise_id).first()
+    if not db_exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    db.delete(db_exercise)
+    db.commit()
+    return {"message": f"Exercise '{db_exercise.name}' deleted"}
+
 
 @router.get("/exercises", response_model=List[schemas.Exercise])
 async def get_exercises(

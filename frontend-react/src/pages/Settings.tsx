@@ -16,10 +16,9 @@ import {
   Mail,
   Shield,
   LogOut,
-  DatabaseZap,
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
-import StandardizeExercises from "./StandardizeExercises";
+import AdminPanel from "../components/settings/AdminPanel";
 
 const Settings: React.FC = () => {
   const { user, logout, refreshUser } = useAuth();
@@ -31,8 +30,6 @@ const Settings: React.FC = () => {
   const [isCalendarListOpen, setIsCalendarListOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
 
   const fetchCalendars = async () => {
     setLoadingCalendars(true);
@@ -95,22 +92,6 @@ const Settings: React.FC = () => {
       );
     } finally {
       setIsSyncing(false);
-    }
-  };
-
-  const handleResetAll = async () => {
-    setIsResetting(true);
-    try {
-      await workoutService.resetAll();
-      setShowResetConfirm(false);
-      addToast(
-        "Base de datos limpiada. Sincroniza el calendario para reimportar.",
-        "success",
-      );
-    } catch {
-      addToast("Error al limpiar la base de datos", "error");
-    } finally {
-      setIsResetting(false);
     }
   };
 
@@ -368,79 +349,8 @@ const Settings: React.FC = () => {
         </section>
       </div>
 
-      {/* Data management — root only */}
-      {user?.is_root === 1 && (
-        <section className="glass-card p-5 flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-danger/10 text-danger rounded-xl flex items-center justify-center border border-danger/20 shrink-0">
-              <DatabaseZap size={18} />
-            </div>
-            <div>
-              <h3 className="text-sm font-black text-white uppercase tracking-tighter">
-                Limpiar base de datos
-              </h3>
-              <p className="text-[10px] text-slate-500 leading-snug mt-0.5">
-                Elimina todos los datos y reinicia desde cero
-              </p>
-            </div>
-          </div>
-
-          <div className="p-3 bg-danger/5 rounded-xl border border-danger/20">
-            <p className="text-[10px] font-bold text-danger/80 leading-relaxed">
-              Borra <strong className="text-danger">todos</strong> los
-              entrenamientos, series, ejercicios, grupos musculares y datos de
-              Fitbit. Tu cuenta y la conexión con Google Calendar se conservan.
-              Deberás volver a sincronizar el calendario para reimportar los
-              datos.
-            </p>
-          </div>
-
-          {showResetConfirm ? (
-            <div className="space-y-2">
-              <p className="text-[10px] font-black text-danger text-center uppercase tracking-wider">
-                ¿Confirmar? Esta acción borrará todos los datos y no se puede
-                deshacer.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowResetConfirm(false)}
-                  disabled={isResetting}
-                  className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-40"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleResetAll}
-                  disabled={isResetting}
-                  className="flex-1 py-2 rounded-xl bg-danger text-white font-black text-[10px] uppercase tracking-widest hover:bg-danger/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-                >
-                  {isResetting ? (
-                    <RefreshCw size={12} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={12} />
-                  )}
-                  {isResetting ? "Limpiando..." : "Confirmar"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="w-full flex items-center justify-center gap-2 bg-danger/10 text-danger border border-danger/20 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-danger hover:text-white transition-all"
-            >
-              <DatabaseZap size={13} />
-              Limpiar base de datos
-            </button>
-          )}
-        </section>
-      )}
-
-      {/* Standardize Exercises — root only */}
-      {user?.is_root === 1 && (
-        <section>
-          <StandardizeExercises />
-        </section>
-      )}
+      {/* Admin panel — root only */}
+      {user?.is_root === 1 && <AdminPanel />}
     </div>
   );
 };
