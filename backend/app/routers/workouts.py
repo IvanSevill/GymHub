@@ -815,7 +815,7 @@ async def get_workout_route(
         .filter(models.Workout.id == workout_id, models.Workout.user_id == current_user.id)
         .first()
     )
-    if not workout or not workout.fitbit_data or not workout.fitbit_data.has_gps:
+    if not workout or not workout.fitbit_data or not workout.fitbit_data.fitbit_log_id:
         raise HTTPException(status_code=404, detail="No GPS route available for this workout")
 
     user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()

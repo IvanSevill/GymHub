@@ -202,7 +202,9 @@ export const CardioBody: React.FC<{ workout: Workout }> = ({ workout }) => {
         cardio={f.azm_cardio}
         peak={f.azm_peak}
       />
-      {f.has_gps && <RouteMap workoutId={workout.id} />}
+      {(f.has_gps || workout.title.toLowerCase() === "run") && (
+        <RouteMap workoutId={workout.id} />
+      )}
     </div>
   );
 };
