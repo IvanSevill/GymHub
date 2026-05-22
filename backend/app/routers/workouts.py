@@ -269,6 +269,45 @@ async def create_workout(
     db.refresh(db_workout)
     return db_workout
 
+@router.post("/reformat-all", response_model=dict)
+async def reformat_all_events(
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Root-only: runs DB muscle migration then reformats every workout event in Google Calendar."""
+    from ..routers.exercises import _migrate_abdomen
+    _migrate_abdomen(db)
+
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=400, detail="Google Calendar not connected.")
+
+    workouts = (
+        db.query(models.Workout)
+        .options(
+            joinedload(models.Workout.exercise_sets)
+            .joinedload(models.ExerciseSet.exercise)
+            .joinedload(models.Exercise.muscle),
+            joinedload(models.Workout.fitbit_data),
+        )
+        .filter(models.Workout.user_id == current_user.id)
+        .filter(models.Workout.google_event_id.isnot(None))
+        .order_by(models.Workout.start_time.desc())
+        .all()
+    )
+
+    updated, failed = 0, 0
+    for workout in workouts:
+        event_id = update_google_calendar_event(db, user_tokens, workout, workout.fitbit_data)
+        if event_id:
+            updated += 1
+        else:
+            failed += 1
+
+    db.commit()
+    return {"updated": updated, "failed": failed, "total": len(workouts)}
+
+
 @router.post("/reformat-last/{n}", response_model=dict)
 async def reformat_last_n_events(
     n: int,

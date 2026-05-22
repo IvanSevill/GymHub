@@ -126,6 +126,18 @@ export const workoutService = {
     );
     return response.data;
   },
+  reformatAll: async (): Promise<{
+    updated: number;
+    failed: number;
+    total: number;
+  }> => {
+    const response = await api.post<{
+      updated: number;
+      failed: number;
+      total: number;
+    }>("/workouts/reformat-all");
+    return response.data;
+  },
   resetAll: async (): Promise<{ message: string }> => {
     const response = await api.post<{ message: string }>(
       "/exercises/reset-all",

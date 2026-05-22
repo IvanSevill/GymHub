@@ -14,6 +14,22 @@ VALID_MUSCLES = [
     "abdomen", "gluteos", "femoral", "cuadriceps", "gemelos"
 ]
 
+def _migrate_abdomen(db: Session) -> None:
+    """Merge legacy 'abdominales' muscle group into 'abdomen'."""
+    abdominales = db.query(models.Muscle).filter(models.Muscle.name == "abdominales").first()
+    if not abdominales:
+        return
+    abdomen = db.query(models.Muscle).filter(models.Muscle.name == "abdomen").first()
+    if abdomen:
+        db.query(models.Exercise).filter(
+            models.Exercise.muscle_id == abdominales.id
+        ).update({"muscle_id": abdomen.id}, synchronize_session=False)
+        db.delete(abdominales)
+    else:
+        abdominales.name = "abdomen"
+    db.commit()
+
+
 @router.get("/muscles", response_model=List[schemas.Muscle])
 async def get_muscles(db: Session = Depends(database.get_db)):
     """
@@ -21,17 +37,7 @@ async def get_muscles(db: Session = Depends(database.get_db)):
     If muscles do not exist, they are initialized from VALID_MUSCLES.
     """
     # One-time migration: merge legacy "abdominales" muscle into "abdomen"
-    abdominales = db.query(models.Muscle).filter(models.Muscle.name == "abdominales").first()
-    if abdominales:
-        abdomen = db.query(models.Muscle).filter(models.Muscle.name == "abdomen").first()
-        if abdomen:
-            db.query(models.Exercise).filter(
-                models.Exercise.muscle_id == abdominales.id
-            ).update({"muscle_id": abdomen.id}, synchronize_session=False)
-            db.delete(abdominales)
-        else:
-            abdominales.name = "abdomen"
-        db.commit()
+    _migrate_abdomen(db)
 
     # Initialize muscles if they don't exist
     for m_name in VALID_MUSCLES:
