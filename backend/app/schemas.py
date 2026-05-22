@@ -64,6 +64,7 @@ class FitbitDataBase(BaseModel):
     azm_fat_burn: Optional[int] = Field(0, description="Active Zone Minutes in Fat Burn zone")
     azm_cardio: Optional[int] = Field(0, description="Active Zone Minutes in Cardio zone")
     azm_peak: Optional[int] = Field(0, description="Active Zone Minutes in Peak zone")
+    has_gps: bool = Field(False, description="Whether this activity has a GPS route available")
 
 class FitbitData(FitbitDataBase):
     """Schema for returning Fitbit data details."""

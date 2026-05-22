@@ -1,6 +1,7 @@
 import os
 import requests
 import base64
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -107,6 +108,56 @@ def get_fitbit_activities_range(db: Session, user_tokens: models.UserTokens, day
             continue
 
     return result
+
+
+def get_fitbit_route(db: Session, user_tokens: models.UserTokens, log_id: str) -> list:
+    """
+    Fetches GPS trackpoints from a Fitbit activity's TCX file.
+    Returns a list of {lat, lon, ele} dicts. Requires the 'location' OAuth scope.
+    """
+    access_token = user_tokens.fitbit_access_token
+    if not access_token or not log_id:
+        return []
+
+    def make_request(token):
+        url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
+        return requests.get(url, headers={"Authorization": f"Bearer {token}"})
+
+    response = make_request(access_token)
+    if response.status_code == 401:
+        access_token = refresh_fitbit_token(db, user_tokens)
+        if access_token:
+            response = make_request(access_token)
+
+    if response.status_code != 200:
+        return []
+
+    ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
+    try:
+        root = ET.fromstring(response.text)
+    except ET.ParseError:
+        return []
+
+    points = []
+    for tp in root.findall(".//tcx:Trackpoint", ns):
+        pos = tp.find("tcx:Position", ns)
+        if pos is None:
+            continue
+        lat_el = pos.find("tcx:LatitudeDegrees", ns)
+        lon_el = pos.find("tcx:LongitudeDegrees", ns)
+        ele_el = tp.find("tcx:AltitudeMeters", ns)
+        if lat_el is None or lon_el is None:
+            continue
+        try:
+            points.append({
+                "lat": float(lat_el.text),
+                "lon": float(lon_el.text),
+                "ele": float(ele_el.text) if ele_el is not None else None,
+            })
+        except (ValueError, TypeError):
+            continue
+
+    return points
 
 
 def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time: datetime, end_time: datetime) -> Optional[dict]:

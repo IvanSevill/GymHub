@@ -114,5 +114,6 @@ class FitbitData(Base):
     azm_fat_burn = Column(Integer, default=0, nullable=False)
     azm_cardio = Column(Integer, default=0, nullable=False)
     azm_peak = Column(Integer, default=0, nullable=False)
+    has_gps = Column(Boolean, default=False, nullable=False)
 
     workout = relationship("Workout", back_populates="fitbit_data")

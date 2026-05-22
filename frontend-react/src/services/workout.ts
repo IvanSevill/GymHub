@@ -34,6 +34,7 @@ export interface Workout {
     azm_peak: number;
     distance_km: number;
     elevation_gain_m: number;
+    has_gps: boolean;
   };
 }
 
@@ -99,6 +100,12 @@ export const workoutService = {
     const response = await api.post<{ created: number }>(
       `/workouts/sync-fitbit-create-missing?days=${days}`,
     );
+    return response.data;
+  },
+  getRoute: async (
+    workoutId: string,
+  ): Promise<{ lat: number; lon: number; ele: number | null }[]> => {
+    const response = await api.get(`/workouts/${workoutId}/route`);
     return response.data;
   },
   getCalendars: async (): Promise<any[]> => {

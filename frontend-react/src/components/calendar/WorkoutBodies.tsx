@@ -12,6 +12,7 @@ import {
 import type { Workout, ExerciseSet } from "../../services/workout";
 import { fmtDuration, groupWorkoutSets } from "./helpers";
 import type { ExerciseGroup, FitbitData } from "./types";
+import RouteMap from "./RouteMap";
 
 export const MuscleLabel: React.FC<{ name: string }> = ({ name }) => (
   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1 capitalize">
@@ -201,6 +202,7 @@ export const CardioBody: React.FC<{ workout: Workout }> = ({ workout }) => {
         cardio={f.azm_cardio}
         peak={f.azm_peak}
       />
+      {f.has_gps && <RouteMap workoutId={workout.id} />}
     </div>
   );
 };

@@ -99,7 +99,7 @@ async def fitbit_auth_init(current_user: models.User = Depends(auth.get_current_
     Returns the Fitbit authorization URL to the frontend.
     """
     from urllib.parse import quote
-    scope = "activity heartrate profile sleep weight"
+    scope = "activity heartrate location profile sleep weight"
     # Use the variable from .env or fallback
     redirect_uri = os.getenv("FITBIT_REDIRECT_URI", f"{BACKEND_HOST}/auth/fitbit/callback")
     

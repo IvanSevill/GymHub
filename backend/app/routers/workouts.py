@@ -345,6 +345,7 @@ async def sync_fitbit_bulk(
 
             log_id = str(activity.get("logId", "")) or None
             azm = fitbit_utils.extract_azm(activity)
+            has_gps = bool(activity.get("hasGps", False))
 
             existing_fd = workout.fitbit_data
             if existing_fd:
@@ -359,6 +360,7 @@ async def sync_fitbit_bulk(
                 existing_fd.azm_fat_burn = azm.get("fatBurnMinutes", 0)
                 existing_fd.azm_cardio = azm.get("cardioMinutes", 0)
                 existing_fd.azm_peak = azm.get("peakMinutes", 0)
+                existing_fd.has_gps = has_gps
                 fitbit_data = existing_fd
             else:
                 fitbit_data = models.FitbitData(
@@ -373,6 +375,7 @@ async def sync_fitbit_bulk(
                     azm_fat_burn=azm.get("fatBurnMinutes", 0),
                     azm_cardio=azm.get("cardioMinutes", 0),
                     azm_peak=azm.get("peakMinutes", 0),
+                    has_gps=has_gps,
                 )
                 db.add(fitbit_data)
                 db.flush()
@@ -543,6 +546,7 @@ async def sync_fitbit_create_missing(
             azm_fat_burn=azm.get("fatBurnMinutes", 0),
             azm_cardio=azm.get("cardioMinutes", 0),
             azm_peak=azm.get("peakMinutes", 0),
+            has_gps=bool(activity.get("hasGps", False)),
         )
         db.add(fitbit_data)
         db.flush()
@@ -788,6 +792,35 @@ async def sync_fitbit_to_workout(
         db.commit()
 
     return fitbit_data
+
+@router.get("/{workout_id}/route", response_model=List[dict])
+async def get_workout_route(
+    workout_id: str,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Returns GPS trackpoints for a workout that has Fitbit GPS data.
+    Each point is {lat, lon, ele}. Requires Fitbit location scope.
+    """
+    workout = (
+        db.query(models.Workout)
+        .options(joinedload(models.Workout.fitbit_data))
+        .filter(models.Workout.id == workout_id, models.Workout.user_id == current_user.id)
+        .first()
+    )
+    if not workout or not workout.fitbit_data or not workout.fitbit_data.has_gps:
+        raise HTTPException(status_code=404, detail="No GPS route available for this workout")
+
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.fitbit_access_token:
+        raise HTTPException(status_code=400, detail="Fitbit not connected")
+
+    points = fitbit_utils.get_fitbit_route(db, user_tokens, workout.fitbit_data.fitbit_log_id)
+    if not points:
+        raise HTTPException(status_code=404, detail="No GPS trackpoints found — reconnect Fitbit with location scope")
+    return points
+
 
 @router.get("/test-parse", response_model=List[dict])
 async def test_parse_calendar_events(
