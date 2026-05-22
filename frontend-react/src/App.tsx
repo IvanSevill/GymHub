@@ -4,7 +4,6 @@ import {
   Routes,
   Route,
   Navigate,
-  useNavigate,
 } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -25,8 +24,7 @@ import "./App.css";
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { user, loading, refreshUser } = useAuth();
-  const navigate = useNavigate();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -46,8 +44,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
         fetchCalendars={workoutService.getCalendars}
         onSelect={async (id) => {
           await workoutService.setCalendar(id);
-          await refreshUser();
-          navigate("/calendar");
+          window.location.href = "/";
         }}
       />
     );
