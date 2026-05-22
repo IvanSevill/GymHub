@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, CalendarDays, LayoutGrid, Check } from "lucide-react";
 import { addHours, format } from "date-fns";
@@ -91,22 +91,48 @@ const DatePicker: React.FC<DatePickerProps> = ({
   value,
   onChange,
   className = "",
-}) => (
-  <div className={`relative ${className}`}>
-    <div className="pointer-events-none flex items-center gap-2 w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white">
-      <CalendarDays size={14} className="text-slate-400 shrink-0" />
-      <span className="capitalize">
-        {value ? fmtDate(value) : "Seleccionar fecha"}
-      </span>
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const open = () => {
+    try {
+      inputRef.current?.showPicker();
+    } catch {
+      inputRef.current?.click();
+    }
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={open}
+        className="flex items-center gap-2 w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white hover:border-primary/40 transition-colors cursor-pointer"
+      >
+        <CalendarDays size={14} className="text-slate-400 shrink-0" />
+        <span className="capitalize">
+          {value ? fmtDate(value) : "Seleccionar fecha"}
+        </span>
+      </button>
+      <input
+        ref={inputRef}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        tabIndex={-1}
+        style={{
+          position: "absolute",
+          opacity: 0,
+          pointerEvents: "none",
+          width: 1,
+          height: 1,
+          top: 0,
+          left: 0,
+        }}
+      />
     </div>
-    <input
-      type="date"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-    />
-  </div>
-);
+  );
+};
 
 // ── Single-event panel ──────────────────────────────────────────────────────
 
