@@ -452,10 +452,16 @@ def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
             if act_start <= mid <= act_end:
                 return True
     else:
+        resolved_name = _resolve_activity_name(activity)
         for w in workouts:
             if abs((act_start - w.start_time).total_seconds()) < 7200:
                 fd = w.fitbit_data
-                if fd and fd.activity_name and fd.activity_name.lower() == act_name.lower():
+                if fd and fd.activity_name:
+                    stored = fd.activity_name.lower()
+                    if stored in (act_name.lower(), resolved_name.lower()):
+                        return True
+                elif w.title.lower() in (act_name.lower(), resolved_name.lower()):
+                    # FitbitData was wiped by a calendar sync — match by title to avoid duplicate
                     return True
 
     return False
@@ -1022,9 +1028,8 @@ async def sync_all_from_calendar(
             workout.start_time = start_dt
             workout.end_time = end_dt
             workout.title = event.get('summary', 'Workout')
-            # Delete existing exercise sets and fitbit data to re-create
+            # Only delete exercise sets — FitbitData is preserved to keep fitbit_log_id and has_gps
             db.query(models.ExerciseSet).filter(models.ExerciseSet.workout_id == workout.id).delete(synchronize_session=False)
-            db.query(models.FitbitData).filter(models.FitbitData.workout_id == workout.id).delete(synchronize_session=False)
             db.flush()
 
         # Parse exercises and fitbit from description using calendar_utils
@@ -1040,9 +1045,16 @@ async def sync_all_from_calendar(
         
         sets_added_to_workout = 0
         for ps in parsed_sets:
-            muscle_obj = muscle_map.get(ps["muscle_name"])
-            if not muscle_obj: # Skip if muscle not found
-                continue
+            muscle_obj = muscle_map.get(ps["muscle_name"].lower() if ps.get("muscle_name") else "")
+            if not muscle_obj:
+                if current_user.is_root == 1 and ps.get("muscle_name"):
+                    new_muscle = models.Muscle(name=ps["muscle_name"].strip())
+                    db.add(new_muscle)
+                    db.flush()
+                    muscle_map[new_muscle.name.lower()] = new_muscle
+                    muscle_obj = new_muscle
+                else:
+                    continue
 
             exercise_obj = exercise_map.get(ps["exercise_name"].lower())
             
@@ -1069,21 +1081,33 @@ async def sync_all_from_calendar(
             db.add(db_set)
             sets_added_to_workout += 1
         
-        # Save parsed Fitbit data
+        # Save parsed Fitbit data — update existing record to preserve fitbit_log_id/has_gps
         if parsed_fitbit_data:
-            db_fitbit = models.FitbitData(
-                workout_id=workout.id,
-                calories=parsed_fitbit_data.get("calories", 0),
-                heart_rate_avg=parsed_fitbit_data.get("heart_rate_avg", 0),
-                duration_ms=parsed_fitbit_data.get("duration_ms", 0),
-                distance_km=parsed_fitbit_data.get("distance_km", 0.0),
-                elevation_gain_m=parsed_fitbit_data.get("elevation_gain_m", 0.0),
-                activity_name=parsed_fitbit_data.get("activity_name", "Unknown"),
-                azm_fat_burn=parsed_fitbit_data.get("azm_fat_burn", 0),
-                azm_cardio=parsed_fitbit_data.get("azm_cardio", 0),
-                azm_peak=parsed_fitbit_data.get("azm_peak", 0),
-            )
-            db.add(db_fitbit)
+            existing_fd = workout.fitbit_data
+            if existing_fd:
+                existing_fd.calories = parsed_fitbit_data.get("calories", existing_fd.calories)
+                existing_fd.heart_rate_avg = parsed_fitbit_data.get("heart_rate_avg", existing_fd.heart_rate_avg)
+                existing_fd.duration_ms = parsed_fitbit_data.get("duration_ms", existing_fd.duration_ms)
+                existing_fd.distance_km = parsed_fitbit_data.get("distance_km", existing_fd.distance_km)
+                existing_fd.elevation_gain_m = parsed_fitbit_data.get("elevation_gain_m", existing_fd.elevation_gain_m)
+                existing_fd.activity_name = parsed_fitbit_data.get("activity_name", existing_fd.activity_name)
+                existing_fd.azm_fat_burn = parsed_fitbit_data.get("azm_fat_burn", existing_fd.azm_fat_burn)
+                existing_fd.azm_cardio = parsed_fitbit_data.get("azm_cardio", existing_fd.azm_cardio)
+                existing_fd.azm_peak = parsed_fitbit_data.get("azm_peak", existing_fd.azm_peak)
+            else:
+                db_fitbit = models.FitbitData(
+                    workout_id=workout.id,
+                    calories=parsed_fitbit_data.get("calories", 0),
+                    heart_rate_avg=parsed_fitbit_data.get("heart_rate_avg", 0),
+                    duration_ms=parsed_fitbit_data.get("duration_ms", 0),
+                    distance_km=parsed_fitbit_data.get("distance_km", 0.0),
+                    elevation_gain_m=parsed_fitbit_data.get("elevation_gain_m", 0.0),
+                    activity_name=parsed_fitbit_data.get("activity_name", "Unknown"),
+                    azm_fat_burn=parsed_fitbit_data.get("azm_fat_burn", 0),
+                    azm_cardio=parsed_fitbit_data.get("azm_cardio", 0),
+                    azm_peak=parsed_fitbit_data.get("azm_peak", 0),
+                )
+                db.add(db_fitbit)
         
         if sets_added_to_workout > 0 or parsed_fitbit_data:
             processed_count += 1
