@@ -120,6 +120,27 @@ def update_google_calendar_event(db: Session, user_tokens: models.UserTokens, wo
         return None # Indicate failure to sync
 
 
+@router.post("/create-calendar", response_model=dict)
+async def create_calendar(
+    name: str = Query(..., description="Name for the new Google Calendar"),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Creates a new Google Calendar with the given name and returns its id."""
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        raise HTTPException(status_code=400, detail="Could not refresh Google credentials")
+    service = build("calendar", "v3", credentials=creds)
+    try:
+        new_cal = service.calendars().insert(body={"summary": name.strip()}).execute()
+        return {"id": new_cal["id"], "summary": new_cal["summary"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create calendar: {str(e)}")
+
+
 @router.get("/calendars", response_model=List[dict])
 async def list_calendars(
     current_user: models.User = Depends(auth.get_current_user),

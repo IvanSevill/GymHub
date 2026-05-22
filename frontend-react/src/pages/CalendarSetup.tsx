@@ -1,6 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Calendar, Loader2, AlertTriangle, Star } from "lucide-react";
+import {
+  Activity,
+  Calendar,
+  Loader2,
+  AlertTriangle,
+  Star,
+  Plus,
+  Check,
+} from "lucide-react";
 
 interface CalendarItem {
   id: string;
@@ -11,14 +19,25 @@ interface CalendarItem {
 interface Props {
   fetchCalendars: () => Promise<CalendarItem[]>;
   onSelect: (id: string) => Promise<void>;
+  onCreateCalendar: (name: string) => Promise<void>;
 }
 
-const CalendarSetup: React.FC<Props> = ({ fetchCalendars, onSelect }) => {
+const CalendarSetup: React.FC<Props> = ({
+  fetchCalendars,
+  onSelect,
+  onCreateCalendar,
+}) => {
   const [calendars, setCalendars] = useState<CalendarItem[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
   const [selecting, setSelecting] = useState<string | null>(null);
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [newCalName, setNewCalName] = useState("GymHub");
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const createInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchCalendars()
@@ -29,8 +48,17 @@ const CalendarSetup: React.FC<Props> = ({ fetchCalendars, onSelect }) => {
       .catch(() => setStatus("error"));
   }, []);
 
+  useEffect(() => {
+    if (showCreate) {
+      setTimeout(() => {
+        createInputRef.current?.select();
+        createInputRef.current?.focus();
+      }, 80);
+    }
+  }, [showCreate]);
+
   const handleSelect = async (id: string) => {
-    if (selecting) return;
+    if (selecting || isCreating) return;
     setSelecting(id);
     try {
       await onSelect(id);
@@ -39,9 +67,26 @@ const CalendarSetup: React.FC<Props> = ({ fetchCalendars, onSelect }) => {
     }
   };
 
+  const handleCreate = async () => {
+    const name = newCalName.trim();
+    if (!name) {
+      setCreateError("Escribe un nombre para el calendario");
+      return;
+    }
+    setCreateError("");
+    setIsCreating(true);
+    try {
+      await onCreateCalendar(name);
+    } catch {
+      setCreateError("No se pudo crear el calendario. Inténtalo de nuevo.");
+      setIsCreating(false);
+    }
+  };
+
+  const isBusy = !!selecting || isCreating;
+
   return (
     <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center px-4 py-16 relative overflow-hidden">
-      {/* Subtle background glow */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -134,8 +179,8 @@ const CalendarSetup: React.FC<Props> = ({ fetchCalendars, onSelect }) => {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.06 }}
                       onClick={() => handleSelect(cal.id)}
-                      disabled={!!selecting}
-                      className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all duration-200 group"
+                      disabled={isBusy}
+                      className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all duration-200"
                       style={{
                         background: isSelecting
                           ? "rgba(249,115,22,0.08)"
@@ -143,10 +188,10 @@ const CalendarSetup: React.FC<Props> = ({ fetchCalendars, onSelect }) => {
                         border: isSelecting
                           ? "1px solid rgba(249,115,22,0.4)"
                           : "1px solid rgba(255,255,255,0.07)",
-                        opacity: selecting && !isSelecting ? 0.4 : 1,
+                        opacity: isBusy && !isSelecting ? 0.4 : 1,
                       }}
                       onMouseEnter={(e) => {
-                        if (!selecting)
+                        if (!isBusy)
                           (
                             e.currentTarget as HTMLButtonElement
                           ).style.borderColor = "rgba(249,115,22,0.25)";
@@ -172,12 +217,7 @@ const CalendarSetup: React.FC<Props> = ({ fetchCalendars, onSelect }) => {
                             className="text-primary animate-spin"
                           />
                         ) : (
-                          <Calendar
-                            size={16}
-                            className={
-                              isSelecting ? "text-primary" : "text-slate-400"
-                            }
-                          />
+                          <Calendar size={16} className="text-slate-400" />
                         )}
                       </div>
 
@@ -196,12 +236,113 @@ const CalendarSetup: React.FC<Props> = ({ fetchCalendars, onSelect }) => {
                     </motion.button>
                   );
                 })}
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 py-1">
+                  <div className="flex-1 h-px bg-white/[0.06]" />
+                  <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">
+                    o
+                  </span>
+                  <div className="flex-1 h-px bg-white/[0.06]" />
+                </div>
+
+                {/* Create new calendar */}
+                <AnimatePresence mode="wait">
+                  {showCreate ? (
+                    <motion.div
+                      key="form"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="space-y-2"
+                    >
+                      <div
+                        className="flex items-center gap-3 px-4 py-3 rounded-2xl"
+                        style={{
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(249,115,22,0.2)",
+                        }}
+                      >
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: "rgba(249,115,22,0.1)" }}
+                        >
+                          {isCreating ? (
+                            <Loader2
+                              size={16}
+                              className="text-primary animate-spin"
+                            />
+                          ) : (
+                            <Calendar size={16} className="text-primary" />
+                          )}
+                        </div>
+                        <input
+                          ref={createInputRef}
+                          value={newCalName}
+                          onChange={(e) => {
+                            setNewCalName(e.target.value);
+                            setCreateError("");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleCreate();
+                            if (e.key === "Escape") {
+                              setShowCreate(false);
+                              setCreateError("");
+                            }
+                          }}
+                          disabled={isCreating}
+                          placeholder="Nombre del calendario"
+                          className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-600 outline-none disabled:opacity-50"
+                        />
+                        <button
+                          onClick={handleCreate}
+                          disabled={isCreating}
+                          className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors disabled:opacity-40"
+                          style={{ background: "rgba(249,115,22,0.15)" }}
+                        >
+                          <Check size={14} className="text-primary" />
+                        </button>
+                      </div>
+                      {createError && (
+                        <p className="text-[11px] text-red-400 px-1">
+                          {createError}
+                        </p>
+                      )}
+                    </motion.div>
+                  ) : (
+                    <motion.button
+                      key="btn"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setShowCreate(true)}
+                      disabled={isBusy}
+                      className="w-full flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-2xl text-sm font-semibold text-slate-400 transition-all duration-200 disabled:opacity-40"
+                      style={{ border: "1px dashed rgba(255,255,255,0.1)" }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.color =
+                          "rgba(249,115,22,0.9)";
+                        (
+                          e.currentTarget as HTMLButtonElement
+                        ).style.borderColor = "rgba(249,115,22,0.25)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.color = "";
+                        (
+                          e.currentTarget as HTMLButtonElement
+                        ).style.borderColor = "rgba(255,255,255,0.1)";
+                      }}
+                    >
+                      <Plus size={15} />
+                      Crear nuevo calendario
+                    </motion.button>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Footer note */}
         <p className="text-[11px] text-slate-600 text-center mt-8">
           Puedes cambiar el calendario en cualquier momento desde Ajustes.
         </p>

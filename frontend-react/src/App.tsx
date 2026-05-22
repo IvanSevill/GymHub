@@ -49,6 +49,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
           await workoutService.syncAllFromCalendar().catch(() => {});
           window.location.href = "/";
         }}
+        onCreateCalendar={async (name) => {
+          const { id } = await workoutService.createCalendar(name);
+          await workoutService.setCalendar(id);
+          await workoutService.syncAllFromCalendar().catch(() => {});
+          window.location.href = "/";
+        }}
       />
     );
   }

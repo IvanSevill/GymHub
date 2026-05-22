@@ -108,6 +108,14 @@ export const workoutService = {
     const response = await api.get(`/workouts/${workoutId}/route`);
     return response.data;
   },
+  createCalendar: async (
+    name: string,
+  ): Promise<{ id: string; summary: string }> => {
+    const response = await api.post<{ id: string; summary: string }>(
+      `/workouts/create-calendar?name=${encodeURIComponent(name)}`,
+    );
+    return response.data;
+  },
   getCalendars: async (): Promise<any[]> => {
     const response = await api.get<any[]>("/workouts/calendars");
     return response.data;
