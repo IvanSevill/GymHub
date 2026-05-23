@@ -126,6 +126,15 @@ export const workoutService = {
     );
     return response.data;
   },
+  fixAbdomenCalendar: async (): Promise<{
+    updated: number;
+    checked: number;
+  }> => {
+    const response = await api.post<{ updated: number; checked: number }>(
+      "/workouts/fix-abdomen-calendar",
+    );
+    return response.data;
+  },
   reformatAll: async (): Promise<{
     updated: number;
     failed: number;

@@ -269,6 +269,71 @@ async def create_workout(
     db.refresh(db_workout)
     return db_workout
 
+@router.post("/fix-abdomen-calendar", response_model=dict)
+async def fix_abdomen_in_calendar(
+    current_user: models.User = Depends(auth.get_current_root_user),
+    db: Session = Depends(database.get_db),
+):
+    """Replace 'Abdominales' with 'Abdomen' in all Google Calendar event summaries and descriptions."""
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=400, detail="Google Calendar not connected.")
+
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        raise HTTPException(status_code=400, detail="Could not refresh Google credentials.")
+
+    service = build("calendar", "v3", credentials=creds)
+    calendar_id = user_tokens.selected_calendar_id or "primary"
+
+    time_min = (datetime.utcnow() - timedelta(days=730)).isoformat() + "Z"
+    all_events = []
+    page_token = None
+    try:
+        while True:
+            result = service.events().list(
+                calendarId=calendar_id,
+                timeMin=time_min,
+                singleEvents=True,
+                pageToken=page_token,
+            ).execute()
+            all_events.extend(result.get("items", []))
+            page_token = result.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {str(e)}")
+
+    import re
+
+    def _replace(text: str) -> str:
+        return re.sub(
+            r"(?i)abdominales",
+            lambda m: "Abdomen" if m.group()[0].isupper() else "abdomen",
+            text,
+        )
+
+    updated = 0
+    for event in all_events:
+        patch: dict = {}
+        summary = event.get("summary", "") or ""
+        if re.search(r"(?i)abdominales", summary):
+            patch["summary"] = _replace(summary)
+        desc = event.get("description", "") or ""
+        if re.search(r"(?i)abdominales", desc):
+            patch["description"] = _replace(desc)
+        if patch:
+            try:
+                service.events().patch(
+                    calendarId=calendar_id, eventId=event["id"], body=patch
+                ).execute()
+                updated += 1
+            except Exception as e:
+                print(f"Failed to patch event {event['id']}: {e}")
+
+    return {"updated": updated, "checked": len(all_events)}
+
+
 @router.post("/reformat-all", response_model=dict)
 async def reformat_all_events(
     current_user: models.User = Depends(auth.get_current_root_user),
@@ -712,7 +777,7 @@ async def update_workout(
                     # Ensure 'cardio' exercise exists, create if not (only if current_user is root)
                     cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
                     if not cardio_ex:
-                        muscle_for_cardio = db.query(models.Muscle).filter(models.Muscle.name == "abdominales").first() # Arbitrary muscle
+                        muscle_for_cardio = db.query(models.Muscle).filter(models.Muscle.name == "abdomen").first()
                         if muscle_for_cardio and current_user.is_root == 1: # Only root can create automatically
                              cardio_ex = models.Exercise(name="cardio", muscle_id=muscle_for_cardio.id)
                              db.add(cardio_ex)
@@ -829,7 +894,7 @@ async def sync_fitbit_to_workout(
     if "weights" not in act_name_lower and "walk" not in act_name_lower:
         cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
         if not cardio_ex:
-            muscle_for_cardio = db.query(models.Muscle).filter(models.Muscle.name == "abdominales").first() # Arbitrary muscle
+            muscle_for_cardio = db.query(models.Muscle).filter(models.Muscle.name == "abdomen").first()
             if muscle_for_cardio and current_user.is_root == 1: # Only root can create automatically
                 cardio_ex = models.Exercise(name="cardio", muscle_id=muscle_for_cardio.id)
                 db.add(cardio_ex)
