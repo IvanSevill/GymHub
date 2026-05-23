@@ -1,11 +1,5 @@
 import React, { useState } from "react";
-import {
-  DatabaseZap,
-  Trash2,
-  RefreshCw,
-  CalendarSync,
-  Replace,
-} from "lucide-react";
+import { DatabaseZap, Trash2, RefreshCw, CalendarSync } from "lucide-react";
 import { workoutService } from "../../services/workout";
 import { useToast } from "../../context/ToastContext";
 
@@ -14,8 +8,6 @@ const DataResetPanel: React.FC = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isReformatting, setIsReformatting] = useState(false);
-  const [isFixingAbdomen, setIsFixingAbdomen] = useState(false);
-
   const handleReset = async () => {
     setIsResetting(true);
     try {
@@ -47,51 +39,10 @@ const DataResetPanel: React.FC = () => {
     }
   };
 
-  const handleFixAbdomen = async () => {
-    setIsFixingAbdomen(true);
-    try {
-      const result = await workoutService.fixAbdomenCalendar();
-      addToast(
-        `Corregido: ${result.updated} eventos actualizados de ${result.checked} revisados`,
-        "success",
-      );
-    } catch {
-      addToast("Error al corregir eventos del calendario", "error");
-    } finally {
-      setIsFixingAbdomen(false);
-    }
-  };
-
-  const isBusy = isResetting || isReformatting || isFixingAbdomen;
+  const isBusy = isResetting || isReformatting;
 
   return (
     <div className="space-y-3">
-      {/* Fix abdominales → abdomen in calendar */}
-      <div className="p-3 bg-white/[0.02] rounded-xl border border-white/[0.06] space-y-2.5">
-        <div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-            Corregir "Abdominales" en Calendar
-          </p>
-          <p className="text-[10px] text-slate-600 leading-relaxed">
-            Sustituye el grupo muscular "Abdominales" por "Abdomen" en el título
-            y descripción de todos los eventos de Google Calendar (últimos 2
-            años).
-          </p>
-        </div>
-        <button
-          onClick={handleFixAbdomen}
-          disabled={isBusy}
-          className="w-full flex items-center justify-center gap-2 bg-secondary/10 text-secondary border border-secondary/20 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-secondary hover:text-white transition-all disabled:opacity-40"
-        >
-          {isFixingAbdomen ? (
-            <RefreshCw size={13} className="animate-spin" />
-          ) : (
-            <Replace size={13} />
-          )}
-          {isFixingAbdomen ? "Corrigiendo..." : "Corregir abdominales"}
-        </button>
-      </div>
-
       {/* Reformat calendar */}
       <div className="p-3 bg-white/[0.02] rounded-xl border border-white/[0.06] space-y-2.5">
         <div>
