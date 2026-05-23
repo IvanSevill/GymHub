@@ -20,6 +20,8 @@ import {
 import { useToast } from "../context/ToastContext";
 import AdminPanel from "../components/settings/AdminPanel";
 
+const CALENDAR_CACHE_KEY = "gymhub_selected_calendar_id";
+
 const Settings: React.FC = () => {
   const { user, logout, refreshUser } = useAuth();
   const { addToast } = useToast();
@@ -37,6 +39,18 @@ const Settings: React.FC = () => {
     try {
       const data = await workoutService.getCalendars();
       setCalendars(data);
+
+      const alreadySelected = data.some((c: any) => c.selected);
+      if (!alreadySelected) {
+        const cached = localStorage.getItem(CALENDAR_CACHE_KEY);
+        const cachedExists = cached && data.some((c: any) => c.id === cached);
+        if (cachedExists) {
+          await workoutService.setCalendar(cached!);
+          const updated = await workoutService.getCalendars();
+          setCalendars(updated);
+          await refreshUser();
+        }
+      }
     } catch (err: any) {
       setCalendarError(err.response?.data?.detail || "Error loading calendars");
     } finally {
@@ -51,6 +65,7 @@ const Settings: React.FC = () => {
   const handleSetCalendar = async (id: string) => {
     try {
       await workoutService.setCalendar(id);
+      localStorage.setItem(CALENDAR_CACHE_KEY, id);
       await fetchCalendars();
       setIsCalendarListOpen(false);
       addToast("Calendario configurado correctamente", "success");
