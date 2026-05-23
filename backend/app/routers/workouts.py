@@ -271,7 +271,7 @@ async def create_workout(
 
 @router.post("/fix-abdomen-calendar", response_model=dict)
 async def fix_abdomen_in_calendar(
-    current_user: models.User = Depends(auth.get_current_root_user),
+    current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
     """Replace 'Abdominales' with 'Abdomen' in all Google Calendar event summaries and descriptions."""

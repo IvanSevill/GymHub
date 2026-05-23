@@ -30,6 +30,7 @@ const Settings: React.FC = () => {
   const [isCalendarListOpen, setIsCalendarListOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [isFixingAbdomen, setIsFixingAbdomen] = useState(false);
 
   const fetchCalendars = async () => {
     setLoadingCalendars(true);
@@ -92,6 +93,21 @@ const Settings: React.FC = () => {
       );
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleFixAbdomen = async () => {
+    setIsFixingAbdomen(true);
+    try {
+      const result = await workoutService.fixAbdomenCalendar();
+      addToast(
+        `Corregido: ${result.updated} eventos actualizados de ${result.checked} revisados`,
+        "success",
+      );
+    } catch {
+      addToast("Error al corregir eventos del calendario", "error");
+    } finally {
+      setIsFixingAbdomen(false);
     }
   };
 
@@ -348,6 +364,37 @@ const Settings: React.FC = () => {
           )}
         </section>
       </div>
+
+      {/* Temporary one-time migration */}
+      <section className="glass-card p-5 flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-secondary/10 text-secondary rounded-xl flex items-center justify-center border border-secondary/20 shrink-0">
+            <RefreshCw size={16} />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-white uppercase tracking-tighter">
+              Migración de datos
+            </h3>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              Corrige "Abdominales" → "Abdomen" en Google Calendar
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleFixAbdomen}
+          disabled={isFixingAbdomen}
+          className="w-full flex items-center justify-center gap-2 bg-secondary/10 text-secondary border border-secondary/20 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-secondary hover:text-white transition-all disabled:opacity-40"
+        >
+          {isFixingAbdomen ? (
+            <RefreshCw size={13} className="animate-spin" />
+          ) : (
+            <CheckCircle2 size={13} />
+          )}
+          {isFixingAbdomen
+            ? "Corrigiendo..."
+            : "Corregir abdominales en Calendar"}
+        </button>
+      </section>
 
       {/* Admin panel — root only */}
       {user?.is_root === 1 && <AdminPanel />}
