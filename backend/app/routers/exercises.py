@@ -270,6 +270,7 @@ async def reset_all_data(
     )
     if user_tokens:
         user_tokens.google_calendar_sync_token = None
+        user_tokens.selected_calendar_id = None
     db.commit()
     return {"message": "Base de datos limpiada correctamente"}
 
