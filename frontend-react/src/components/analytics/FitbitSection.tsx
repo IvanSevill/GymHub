@@ -25,11 +25,15 @@ interface HeartRateEntry extends FitbitEntry {
   fc: number;
 }
 
-interface AzmEntry extends FitbitEntry {
-  "Quema grasa": number;
-  Cardio: number;
-  Pico: number;
-}
+export const AZM_ZONES = [
+  { key: "Quema grasa" as const, fill: "#f59e0b" },
+  { key: "Cardio" as const, fill: "#f97316" },
+  { key: "Pico" as const, fill: "#ef4444" },
+] as const;
+
+type AzmKey = (typeof AZM_ZONES)[number]["key"];
+
+type AzmEntry = FitbitEntry & Record<AzmKey, number>;
 
 interface Props {
   caloriesData: CaloriesEntry[];
@@ -211,28 +215,19 @@ const FitbitSection: React.FC<Props> = ({
                     paddingTop: "8px",
                   }}
                 />
-                <Bar
-                  dataKey="Quema grasa"
-                  stackId="azm"
-                  fill="#f59e0b"
-                  fillOpacity={0.85}
-                  maxBarSize={48}
-                />
-                <Bar
-                  dataKey="Cardio"
-                  stackId="azm"
-                  fill="#f97316"
-                  fillOpacity={0.85}
-                  maxBarSize={48}
-                />
-                <Bar
-                  dataKey="Pico"
-                  stackId="azm"
-                  fill="#ef4444"
-                  fillOpacity={0.85}
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={48}
-                />
+                {AZM_ZONES.map(({ key, fill }, i) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    stackId="azm"
+                    fill={fill}
+                    fillOpacity={0.85}
+                    maxBarSize={48}
+                    radius={
+                      i === AZM_ZONES.length - 1 ? [6, 6, 0, 0] : undefined
+                    }
+                  />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           </div>

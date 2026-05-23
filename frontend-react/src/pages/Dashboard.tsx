@@ -9,7 +9,9 @@ import { motion } from "framer-motion";
 import { SkeletonCard } from "../components/ui/Skeleton";
 import WeightProgressCard from "../components/analytics/WeightProgressCard";
 import FrequencyAnalysisCard from "../components/analytics/FrequencyAnalysisCard";
-import FitbitSection from "../components/analytics/FitbitSection";
+import FitbitSection, {
+  AZM_ZONES,
+} from "../components/analytics/FitbitSection";
 
 const Dashboard: React.FC = () => {
   const [maxLifts, setMaxLifts] = useState<MaxLift[]>([]);
@@ -75,9 +77,9 @@ const Dashboard: React.FC = () => {
     )
     .map((w) => ({
       date: format(parseISO(w.start_time), "dd MMM", { locale: es }),
-      "Quema grasa": w.fitbit_data!.azm_fat_burn ?? 0,
-      Cardio: w.fitbit_data!.azm_cardio ?? 0,
-      Pico: w.fitbit_data!.azm_peak ?? 0,
+      [AZM_ZONES[0].key]: w.fitbit_data!.azm_fat_burn ?? 0,
+      [AZM_ZONES[1].key]: w.fitbit_data!.azm_cardio ?? 0,
+      [AZM_ZONES[2].key]: w.fitbit_data!.azm_peak ?? 0,
     }));
 
   const stats = [
