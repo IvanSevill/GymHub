@@ -166,9 +166,6 @@ async def sync_fitbit_bulk(
                 db.flush()
                 workout.fitbit_data = fitbit_data
 
-            if user_tokens.selected_calendar_id and workout.google_event_id:
-                update_google_calendar_event(db, user_tokens, workout, fitbit_data)
-
             synced += 1
         except Exception as e:
             logger.error("Fitbit bulk sync error for workout %s: %s", workout.id, e)
@@ -282,16 +279,6 @@ async def sync_fitbit_create_missing(
                         measurement="min",
                         is_completed=True,
                     )
-                )
-
-        if user_tokens.selected_calendar_id:
-            try:
-                update_google_calendar_event(db, user_tokens, workout, fitbit_data)
-            except Exception as e:
-                logger.error(
-                    "Calendar sync error for Fitbit activity %s: %s",
-                    activity.get("logId"),
-                    e,
                 )
 
         existing.append(workout)
