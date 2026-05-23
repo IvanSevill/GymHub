@@ -2,7 +2,7 @@ import base64
 import logging
 import os
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import requests
@@ -122,8 +122,11 @@ def get_fitbit_activities_range(
     result = []
     for activity in response.json().get("activities", []):
         try:
-            raw_start = activity["startTime"].replace("Z", "+00:00")
-            act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+            act_start = (
+                datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
+                .astimezone(timezone.utc)
+                .replace(tzinfo=None)
+            )
             if act_start < cutoff:
                 break  # sorted desc — stop once outside the window
             result.append(activity)
@@ -197,8 +200,11 @@ def get_fitbit_activity(
 
     for activity in response.json().get("activities", []):
         try:
-            raw_start = activity["startTime"].replace("Z", "+00:00")
-            act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+            act_start = (
+                datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
+                .astimezone(timezone.utc)
+                .replace(tzinfo=None)
+            )
             act_end = act_start + timedelta(milliseconds=activity["duration"])
         except Exception:
             continue

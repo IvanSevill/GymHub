@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -44,8 +44,11 @@ def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
     """
     act_name = activity.get("activityName", "")
     try:
-        raw_start = activity["startTime"].replace("Z", "+00:00")
-        act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+        act_start = (
+            datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
         act_end = act_start + timedelta(milliseconds=activity.get("duration", 0))
     except Exception:
         return False
@@ -222,8 +225,11 @@ async def sync_fitbit_create_missing(
             continue
 
         try:
-            raw_start = activity["startTime"].replace("Z", "+00:00")
-            act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+            act_start = (
+                datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
+                .astimezone(timezone.utc)
+                .replace(tzinfo=None)
+            )
             act_end = act_start + timedelta(milliseconds=activity.get("duration", 0))
         except Exception:
             continue

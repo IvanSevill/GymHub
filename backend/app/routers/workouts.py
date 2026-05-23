@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -633,8 +633,16 @@ async def sync_all_from_calendar(
         if not start or not end:
             continue
 
-        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00")).replace(tzinfo=None)
-        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None)
+        start_dt = (
+            datetime.fromisoformat(start.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
+        end_dt = (
+            datetime.fromisoformat(end.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
 
         workout = (
             db.query(models.Workout)

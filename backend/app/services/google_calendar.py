@@ -107,8 +107,8 @@ def update_google_calendar_event(
     event_body = {
         "summary": workout.title,
         "description": description,
-        "start": {"dateTime": workout.start_time.isoformat() + "+01:00"},
-        "end": {"dateTime": workout.end_time.isoformat() + "+01:00"},
+        "start": {"dateTime": workout.start_time.isoformat() + "Z"},
+        "end": {"dateTime": workout.end_time.isoformat() + "Z"},
     }
 
     calendar_id = user_tokens.selected_calendar_id or "primary"
