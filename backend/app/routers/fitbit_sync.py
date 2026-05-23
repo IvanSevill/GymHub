@@ -17,14 +17,23 @@ def _is_gym_activity(activity: dict) -> bool:
     return "weights" in activity.get("activityName", "").lower()
 
 
+_RUN_ACTIVITY_TYPE_IDS = {90009, 90013}  # Run, Treadmill Run
+_RUN_NAMES = {"run", "running", "outdoor run", "treadmill", "jogging"}
+
+
 def _resolve_activity_name(activity: dict) -> str:
     """Return a display name, resolving generic Fitbit types via heuristics.
 
-    Fitbit records outdoor runs as 'Workout' (activityTypeId 91060) on Pixel Watch.
-    GPS presence is the reliable signal for outdoor cardio.
+    Pixel Watch records outdoor runs as 'Workout' (activityTypeId 90013) with
+    hasGps=false when using Connected GPS (phone GPS). We detect it by activityTypeId
+    or by hasGps being True, so the name stored in DB is 'Run' not 'Workout'.
     """
     name = activity.get("activityName", "Actividad Fitbit")
-    if name.lower() == "workout" and activity.get("hasGps"):
+    type_id = activity.get("activityTypeId", 0)
+
+    if name.lower() in _RUN_NAMES:
+        return "Run"
+    if name.lower() == "workout" and (activity.get("hasGps") or type_id in _RUN_ACTIVITY_TYPE_IDS):
         return "Run"
     return name
 

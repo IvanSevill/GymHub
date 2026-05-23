@@ -142,23 +142,35 @@ def get_fitbit_route(
     """Fetch GPS trackpoints from a Fitbit activity's TCX file.
 
     Returns a list of {lat, lon, ele} dicts. Requires the 'location' OAuth scope.
+    Connected GPS (phone GPS paired to watch) sets hasGps=false in the activities
+    list API but still includes trackpoints in the TCX — so we always attempt the
+    fetch when a log_id is present and let the parse result decide.
     """
     if not log_id:
         return []
 
     url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
+    logger.debug("Fetching TCX for log_id=%s", log_id)
     response = _fitbit_get(db, user_tokens, url)
     if response is None:
+        logger.warning("TCX fetch failed (non-200 or token error) for log_id=%s", log_id)
         return []
 
+    logger.debug("TCX response length=%d bytes for log_id=%s", len(response.text), log_id)
+
+    # Try standard Garmin namespace (Fitbit uses this for both onboard and connected GPS)
     ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
     try:
         root = ET.fromstring(response.text)
-    except ET.ParseError:
+    except ET.ParseError as e:
+        logger.warning("TCX XML parse error for log_id=%s: %s — body: %.200s", log_id, e, response.text)
         return []
 
+    trackpoints = root.findall(".//tcx:Trackpoint", ns)
+    logger.debug("Found %d Trackpoints for log_id=%s", len(trackpoints), log_id)
+
     points = []
-    for tp in root.findall(".//tcx:Trackpoint", ns):
+    for tp in trackpoints:
         pos = tp.find("tcx:Position", ns)
         if pos is None:
             continue
@@ -178,6 +190,7 @@ def get_fitbit_route(
         except (ValueError, TypeError):
             continue
 
+    logger.debug("Parsed %d GPS points for log_id=%s", len(points), log_id)
     return points
 
 
