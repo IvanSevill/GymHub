@@ -19,8 +19,7 @@ import {
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import AdminPanel from "../components/settings/AdminPanel";
-
-const CALENDAR_CACHE_KEY = "gymhub_selected_calendar_id";
+import { CALENDAR_CACHE_KEY } from "../App";
 
 const Settings: React.FC = () => {
   const { user, logout, refreshUser } = useAuth();

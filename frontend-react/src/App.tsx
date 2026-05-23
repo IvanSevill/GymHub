@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -23,12 +23,29 @@ import { workoutService } from "./services/workout";
 
 import "./App.css";
 
+export const CALENDAR_CACHE_KEY = "gymhub_selected_calendar_id";
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
+  const [restoringCalendar, setRestoringCalendar] = useState(false);
 
-  if (loading) {
+  useEffect(() => {
+    if (loading || !user || user.has_calendar) return;
+
+    const cached = localStorage.getItem(CALENDAR_CACHE_KEY);
+    if (!cached) return;
+
+    setRestoringCalendar(true);
+    workoutService
+      .setCalendar(cached)
+      .then(() => refreshUser())
+      .catch(() => localStorage.removeItem(CALENDAR_CACHE_KEY))
+      .finally(() => setRestoringCalendar(false));
+  }, [loading, user?.has_calendar]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading || restoringCalendar) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-neutral-950 text-white text-sm">
         Cargando…
@@ -45,12 +62,14 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
       <CalendarSetup
         fetchCalendars={workoutService.getCalendars}
         onSelect={async (id) => {
+          localStorage.setItem(CALENDAR_CACHE_KEY, id);
           await workoutService.setCalendar(id);
           await workoutService.syncAllFromCalendar().catch(() => {});
           window.location.href = "/";
         }}
         onCreateCalendar={async (name) => {
           const { id } = await workoutService.createCalendar(name);
+          localStorage.setItem(CALENDAR_CACHE_KEY, id);
           await workoutService.setCalendar(id);
           await workoutService.syncAllFromCalendar().catch(() => {});
           window.location.href = "/";
