@@ -1,49 +1,81 @@
-import os
-import requests
 import base64
+import logging
+import os
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from typing import Optional
+
+import requests
 from sqlalchemy.orm import Session
+
 from . import models
+
+logger = logging.getLogger(__name__)
 
 FITBIT_CLIENT_ID = os.getenv("FITBIT_CLIENT_ID")
 FITBIT_CLIENT_SECRET = os.getenv("FITBIT_CLIENT_SECRET")
-FITBIT_AUTH_URL = "https://www.fitbit.com/oauth2/authorize"
 FITBIT_TOKEN_URL = "https://api.fitbit.com/oauth2/token"
 
+
 def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optional[str]:
-    """
-    Refreshes the Fitbit access token using the refresh token.
-    """
+    """Refresh the Fitbit access token. Returns the new token or None on failure."""
     if not user_tokens.fitbit_refresh_token:
         return None
 
-    auth_header = base64.b64encode(f"{FITBIT_CLIENT_ID}:{FITBIT_CLIENT_SECRET}".encode()).decode()
+    auth_header = base64.b64encode(
+        f"{FITBIT_CLIENT_ID}:{FITBIT_CLIENT_SECRET}".encode()
+    ).decode()
     headers = {
         "Authorization": f"Basic {auth_header}",
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Content-Type": "application/x-www-form-urlencoded",
     }
     data = {
         "grant_type": "refresh_token",
-        "refresh_token": user_tokens.fitbit_refresh_token
+        "refresh_token": user_tokens.fitbit_refresh_token,
     }
 
     response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data)
-    
     if response.status_code == 200:
         new_tokens = response.json()
         user_tokens.fitbit_access_token = new_tokens["access_token"]
         user_tokens.fitbit_refresh_token = new_tokens["refresh_token"]
         db.commit()
         return user_tokens.fitbit_access_token
-    else:
-        # Handle error or log
+
+    logger.warning(
+        "Fitbit token refresh failed — status %s: %s",
+        response.status_code,
+        response.text,
+    )
+    return None
+
+
+def _fitbit_get(
+    db: Session,
+    user_tokens: models.UserTokens,
+    url: str,
+) -> Optional[requests.Response]:
+    """Authenticated GET to Fitbit API. Retries once after a token refresh on 401."""
+    access_token = user_tokens.fitbit_access_token
+    if not access_token:
         return None
 
+    response = requests.get(url, headers={"Authorization": f"Bearer {access_token}"})
+    if response.status_code == 401:
+        access_token = refresh_fitbit_token(db, user_tokens)
+        if not access_token:
+            logger.warning("Fitbit token refresh failed — cannot retry request.")
+            return None
+        response = requests.get(
+            url, headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+    return response if response.status_code == 200 else None
+
+
 def extract_azm(activity_data: dict) -> dict:
-    """
-    Extracts Active Zone Minutes from Fitbit activity data.
+    """Extract Active Zone Minutes from Fitbit activity data.
+
     API v1.1 returns activeZoneMinutes.minutesInHeartRateZones as a typed list.
     """
     azm = activity_data.get("activeZoneMinutes", {})
@@ -56,7 +88,9 @@ def extract_azm(activity_data: dict) -> dict:
             "peakMinutes": zones.get("PEAK", 0),
         }
 
-    if isinstance(azm, dict) and any(k in azm for k in ["fatBurnMinutes", "cardioMinutes", "peakMinutes"]):
+    if isinstance(azm, dict) and any(
+        k in azm for k in ["fatBurnMinutes", "cardioMinutes", "peakMinutes"]
+    ):
         return {
             "fatBurnMinutes": azm.get("fatBurnMinutes", 0),
             "cardioMinutes": azm.get("cardioMinutes", 0),
@@ -69,31 +103,20 @@ def extract_azm(activity_data: dict) -> dict:
         "peakMinutes": activity_data.get("peakMinutes", 0),
     }
 
-def get_fitbit_activities_range(db: Session, user_tokens: models.UserTokens, days: int = 30) -> list:
-    """
-    Fetches all Fitbit activities from the last N days, most-recent first.
-    """
-    access_token = user_tokens.fitbit_access_token
-    if not access_token:
-        return []
 
+def get_fitbit_activities_range(
+    db: Session, user_tokens: models.UserTokens, days: int = 30
+) -> list:
+    """Fetch all Fitbit activities from the last N days, most-recent first."""
     cutoff = datetime.utcnow() - timedelta(days=days)
     date_str = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+    url = (
+        "https://api.fitbit.com/1.1/user/-/activities/list.json"
+        f"?beforeDate={date_str}&offset=0&limit=100&sort=desc"
+    )
 
-    def make_request(token):
-        url = (
-            f"https://api.fitbit.com/1.1/user/-/activities/list.json"
-            f"?beforeDate={date_str}&offset=0&limit=100&sort=desc"
-        )
-        return requests.get(url, headers={"Authorization": f"Bearer {token}"})
-
-    response = make_request(access_token)
-    if response.status_code == 401:
-        access_token = refresh_fitbit_token(db, user_tokens)
-        if access_token:
-            response = make_request(access_token)
-
-    if response.status_code != 200:
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
         return []
 
     result = []
@@ -110,26 +133,19 @@ def get_fitbit_activities_range(db: Session, user_tokens: models.UserTokens, day
     return result
 
 
-def get_fitbit_route(db: Session, user_tokens: models.UserTokens, log_id: str) -> list:
-    """
-    Fetches GPS trackpoints from a Fitbit activity's TCX file.
+def get_fitbit_route(
+    db: Session, user_tokens: models.UserTokens, log_id: str
+) -> list:
+    """Fetch GPS trackpoints from a Fitbit activity's TCX file.
+
     Returns a list of {lat, lon, ele} dicts. Requires the 'location' OAuth scope.
     """
-    access_token = user_tokens.fitbit_access_token
-    if not access_token or not log_id:
+    if not log_id:
         return []
 
-    def make_request(token):
-        url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
-        return requests.get(url, headers={"Authorization": f"Bearer {token}"})
-
-    response = make_request(access_token)
-    if response.status_code == 401:
-        access_token = refresh_fitbit_token(db, user_tokens)
-        if access_token:
-            response = make_request(access_token)
-
-    if response.status_code != 200:
+    url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
         return []
 
     ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
@@ -149,61 +165,51 @@ def get_fitbit_route(db: Session, user_tokens: models.UserTokens, log_id: str) -
         if lat_el is None or lon_el is None:
             continue
         try:
-            points.append({
-                "lat": float(lat_el.text),
-                "lon": float(lon_el.text),
-                "ele": float(ele_el.text) if ele_el is not None else None,
-            })
+            points.append(
+                {
+                    "lat": float(lat_el.text),
+                    "lon": float(lon_el.text),
+                    "ele": float(ele_el.text) if ele_el is not None else None,
+                }
+            )
         except (ValueError, TypeError):
             continue
 
     return points
 
 
-def get_fitbit_activity(db: Session, user_tokens: models.UserTokens, start_time: datetime, end_time: datetime) -> Optional[dict]:
-    """
-    Finds a Fitbit activity within a time range, handles token refresh.
-    """
-    access_token = user_tokens.fitbit_access_token
-    if not access_token:
+def get_fitbit_activity(
+    db: Session,
+    user_tokens: models.UserTokens,
+    start_time: datetime,
+    end_time: datetime,
+) -> Optional[dict]:
+    """Find a Fitbit activity matching the given workout time window (±3 h)."""
+    date_str = (start_time + timedelta(days=1)).strftime("%Y-%m-%d")
+    url = (
+        "https://api.fitbit.com/1.1/user/-/activities/list.json"
+        f"?beforeDate={date_str}&offset=0&limit=20&sort=desc"
+    )
+
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
         return None
 
-    def make_request(token):
-        # Use v1.1 for better Active Zone Minutes support
-        date_str = (start_time + timedelta(days=1)).strftime("%Y-%m-%d")
-        url = f"https://api.fitbit.com/1.1/user/-/activities/list.json?beforeDate={date_str}&offset=0&limit=20&sort=desc"
-        headers = {"Authorization": f"Bearer {token}"}
-        return requests.get(url, headers=headers)
+    for activity in response.json().get("activities", []):
+        try:
+            raw_start = activity["startTime"].replace("Z", "+00:00")
+            act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
+            act_end = act_start + timedelta(milliseconds=activity["duration"])
+        except Exception:
+            continue
 
-    response = make_request(access_token)
-    
-    if response.status_code == 401:
-        # Token expired, try refresh
-        access_token = refresh_fitbit_token(db, user_tokens)
-        if access_token:
-            response = make_request(access_token)
-    
-    if response.status_code == 200:
-        activities = response.json().get("activities", [])
-        for activity in activities:
-            # Fitbit 'startTime' is ISO format: 2023-10-27T10:00:00.000+02:00
-            try:
-                raw_start = activity["startTime"].replace("Z", "+00:00")
-                act_start = datetime.fromisoformat(raw_start).replace(tzinfo=None)
-                act_duration = timedelta(milliseconds=activity["duration"])
-                act_end = act_start + act_duration
-            except Exception:
-                continue
-            
-            # Match if Fitbit activity started within ±3 h of the workout start time.
-            # Calendar events are often entered manually and can misalign by 1-2 h.
-            start_diff = abs((act_start - start_time).total_seconds())
-            if start_diff < 10800:
-                return activity
-                
-            # Or if the activity covers the middle of our workout
-            mid_workout = start_time + (end_time - start_time) / 2
-            if act_start <= mid_workout <= act_end:
-                return activity
-                
+        # Match if activity started within ±3 h of the workout start.
+        # Calendar events are often manually entered and can misalign by 1-2 h.
+        if abs((act_start - start_time).total_seconds()) < 10800:
+            return activity
+
+        mid_workout = start_time + (end_time - start_time) / 2
+        if act_start <= mid_workout <= act_end:
+            return activity
+
     return None

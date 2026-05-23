@@ -27,21 +27,41 @@ import {
 
 const ITEMS_PER_PAGE = 10;
 
-/* ── Cardio info card ─────────────────────────────────────────── */
-const CardioCard: React.FC<{ workout: Workout }> = ({ workout }) => {
-  const f = workout.fitbit_data!;
-  const totalAzm = f.azm_fat_burn + f.azm_cardio + f.azm_peak;
+type FitbitData = NonNullable<Workout["fitbit_data"]>;
 
-  return (
-    <div className="mt-4 rounded-2xl bg-accent/5 border border-accent/15 p-4 space-y-3">
-      {/* Activity header */}
-      <div className="flex items-center gap-2">
-        <Zap size={13} className="text-accent fill-accent shrink-0" />
-        <span className="text-xs font-black text-accent uppercase tracking-widest">
-          {f.activity_name}
-        </span>
+/* ── Shared Fitbit metrics display ───────────────────────────── */
+const FitbitMetrics: React.FC<{
+  fitbitData: FitbitData;
+  compact?: boolean;
+}> = ({ fitbitData: f, compact = false }) => {
+  if (compact) {
+    return (
+      <div className="mt-3 flex flex-wrap gap-2">
+        {f.calories > 0 && (
+          <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/15 text-[10px] font-black text-orange-400 tabular-nums">
+            <Flame size={10} />
+            {f.calories} kcal
+          </span>
+        )}
+        {f.heart_rate_avg > 0 && (
+          <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/15 text-[10px] font-black text-red-400 tabular-nums">
+            <Heart size={10} />
+            {f.heart_rate_avg} bpm
+          </span>
+        )}
+        {f.duration_ms > 0 && (
+          <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/8 text-[10px] font-black text-slate-400 tabular-nums">
+            <Timer size={10} />
+            {fmtDuration(f.duration_ms)}
+          </span>
+        )}
       </div>
+    );
+  }
 
+  const totalAzm = f.azm_fat_burn + f.azm_cardio + f.azm_peak;
+  return (
+    <div className="space-y-3">
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {f.duration_ms > 0 && (
@@ -153,6 +173,22 @@ const CardioCard: React.FC<{ workout: Workout }> = ({ workout }) => {
   );
 };
 
+/* ── Cardio info card ─────────────────────────────────────────── */
+const CardioCard: React.FC<{ workout: Workout }> = ({ workout }) => {
+  const f = workout.fitbit_data!;
+  return (
+    <div className="mt-4 rounded-2xl bg-accent/5 border border-accent/15 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Zap size={13} className="text-accent fill-accent shrink-0" />
+        <span className="text-xs font-black text-accent uppercase tracking-widest">
+          {f.activity_name}
+        </span>
+      </div>
+      <FitbitMetrics fitbitData={f} />
+    </div>
+  );
+};
+
 /* ── Weights exercise list ────────────────────────────────────── */
 const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
   const nonCardioSets = workout.exercise_sets.filter(
@@ -224,31 +260,8 @@ const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
 
 /* ── Fitbit summary strip (for weights workouts with Fitbit) ──── */
 const FitbitStrip: React.FC<{ workout: Workout }> = ({ workout }) => {
-  const f = workout.fitbit_data;
-  if (!f) return null;
-
-  return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      {f.calories > 0 && (
-        <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/15 text-[10px] font-black text-orange-400 tabular-nums">
-          <Flame size={10} />
-          {f.calories} kcal
-        </span>
-      )}
-      {f.heart_rate_avg > 0 && (
-        <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/15 text-[10px] font-black text-red-400 tabular-nums">
-          <Heart size={10} />
-          {f.heart_rate_avg} bpm
-        </span>
-      )}
-      {f.duration_ms > 0 && (
-        <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/8 text-[10px] font-black text-slate-400 tabular-nums">
-          <Timer size={10} />
-          {fmtDuration(f.duration_ms)}
-        </span>
-      )}
-    </div>
-  );
+  if (!workout.fitbit_data) return null;
+  return <FitbitMetrics fitbitData={workout.fitbit_data} compact />;
 };
 
 /* ── Main page ────────────────────────────────────────────────── */
