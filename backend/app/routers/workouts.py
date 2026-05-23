@@ -334,6 +334,65 @@ async def fix_abdomen_in_calendar(
     return {"updated": updated, "checked": len(all_events)}
 
 
+@router.post("/fix-abdominales-exercise", response_model=dict)
+async def fix_abdominales_exercise(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Restore exercise name 'Abdomen' back to 'Abdominales' where it was incorrectly renamed."""
+    user_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == current_user.id).first()
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=400, detail="Google Calendar not connected.")
+
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        raise HTTPException(status_code=400, detail="Could not refresh Google credentials.")
+
+    service = build("calendar", "v3", credentials=creds)
+    calendar_id = user_tokens.selected_calendar_id or "primary"
+
+    time_min = (datetime.utcnow() - timedelta(days=730)).isoformat() + "Z"
+    all_events = []
+    page_token = None
+    try:
+        while True:
+            result = service.events().list(
+                calendarId=calendar_id,
+                timeMin=time_min,
+                singleEvents=True,
+                pageToken=page_token,
+            ).execute()
+            all_events.extend(result.get("items", []))
+            page_token = result.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {str(e)}")
+
+    import re
+
+    # Only fix "Abdomen" when it appears as an exercise name (after " - "), not as a muscle group
+    def _restore_exercise(text: str) -> str:
+        return re.sub(r"(?<=- )Abdomen\b", "Abdominales", text)
+
+    updated = 0
+    for event in all_events:
+        patch: dict = {}
+        desc = event.get("description", "") or ""
+        if re.search(r"(?<=- )Abdomen\b", desc):
+            patch["description"] = _restore_exercise(desc)
+        if patch:
+            try:
+                service.events().patch(
+                    calendarId=calendar_id, eventId=event["id"], body=patch
+                ).execute()
+                updated += 1
+            except Exception as e:
+                print(f"Failed to patch event {event['id']}: {e}")
+
+    return {"updated": updated, "checked": len(all_events)}
+
+
 @router.post("/reformat-all", response_model=dict)
 async def reformat_all_events(
     current_user: models.User = Depends(auth.get_current_root_user),
