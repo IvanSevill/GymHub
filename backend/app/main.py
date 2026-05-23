@@ -1,5 +1,6 @@
+import logging
 import os
-import traceback
+
 from dotenv import load_dotenv
 
 # Must run before any router imports — routers read os.getenv() at module level
@@ -9,8 +10,12 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from sqlalchemy import inspect, text  # noqa: E402
-from .database import engine, Base  # noqa: E402
-from .routers import auth_routes, exercises, workouts, analytics  # noqa: E402
+
+from .database import Base, engine  # noqa: E402
+from .routers import analytics, auth_routes, exercises, fitbit_sync, workouts  # noqa: E402
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -47,12 +52,7 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """
-    Global exception handler to catch all unhandled exceptions.
-    Logs the exception traceback and returns a JSON response with a 500 status code.
-    """
-    print("GLOBAL EXCEPTION CAUGHT:")
-    traceback.print_exc() # Print full traceback to console
+    logger.exception("Unhandled exception: %s", exc)
 
     # Ensure CORS headers are present even on error
     origin = request.headers.get("origin")
@@ -67,9 +67,10 @@ async def global_exception_handler(request, exc):
         headers=headers
     )
 
-# Include routers
+# Include routers — fitbit_sync before workouts so specific paths match before /{workout_id}
 app.include_router(auth_routes.router)
 app.include_router(exercises.router)
+app.include_router(fitbit_sync.router)
 app.include_router(workouts.router)
 app.include_router(analytics.router)
 
