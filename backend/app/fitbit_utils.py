@@ -34,7 +34,7 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
         "refresh_token": user_tokens.fitbit_refresh_token,
     }
 
-    response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data)
+    response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data, timeout=10)
     if response.status_code == 200:
         new_tokens = response.json()
         user_tokens.fitbit_access_token = new_tokens["access_token"]
@@ -60,7 +60,7 @@ def _fitbit_get(
     if not access_token:
         return None
 
-    response = requests.get(url, headers={"Authorization": f"Bearer {access_token}"})
+    response = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
     if response.status_code == 401:
         access_token = refresh_fitbit_token(db, user_tokens)
         if not access_token:

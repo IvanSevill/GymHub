@@ -120,10 +120,6 @@ async def sync_fitbit_bulk(
                 not_found += 1
                 continue
 
-            if not _is_gym_activity(activity):
-                not_found += 1
-                continue
-
             log_id = str(activity.get("logId", "")) or None
             azm = fitbit_utils.extract_azm(activity)
             has_gps = bool(activity.get("hasGps", False))
@@ -340,13 +336,14 @@ async def sync_fitbit_to_workout(
         fitbit_data = models.FitbitData(workout_id=workout_id)
         db.add(fitbit_data)
 
-    fitbit_data.fitbit_log_id = str(activity.get("logId"))
+    fitbit_data.fitbit_log_id = str(activity.get("logId", "")) or None
     fitbit_data.calories = activity.get("calories", 0)
     fitbit_data.heart_rate_avg = activity.get("averageHeartRate", 0)
     fitbit_data.duration_ms = activity.get("duration", 0)
     fitbit_data.distance_km = activity.get("distance", 0.0)
     fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
-    fitbit_data.activity_name = activity.get("activityName", "Unknown")
+    fitbit_data.activity_name = _resolve_activity_name(activity)
+    fitbit_data.has_gps = bool(activity.get("hasGps", False))
 
     azm_data = fitbit_utils.extract_azm(activity)
     fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)
@@ -433,12 +430,19 @@ async def get_workout_route(
     if not user_tokens or not user_tokens.fitbit_access_token:
         raise HTTPException(status_code=400, detail="Fitbit not connected")
 
-    points = fitbit_utils.get_fitbit_route(
-        db, user_tokens, workout.fitbit_data.fitbit_log_id
-    )
+    log_id = workout.fitbit_data.fitbit_log_id
+    logger.debug("Fetching GPS route for workout %s, log_id=%s", workout_id, log_id)
+    points = fitbit_utils.get_fitbit_route(db, user_tokens, log_id)
     if not points:
+        logger.warning(
+            "No GPS trackpoints for workout %s (log_id=%s) — "
+            "check Fitbit location scope or device GPS",
+            workout_id,
+            log_id,
+        )
         raise HTTPException(
             status_code=404,
             detail="No GPS trackpoints found — reconnect Fitbit with location scope",
         )
+    logger.debug("Returning %d GPS points for workout %s", len(points), workout_id)
     return points
