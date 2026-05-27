@@ -7,6 +7,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import { TrendingUp, ChevronDown } from "lucide-react";
 import PeriodSelector from "../ui/PeriodSelector";
@@ -189,6 +190,7 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
                 fontWeight="black"
                 axisLine={false}
                 tickLine={false}
+                interval={Math.max(0, Math.ceil(weightData.length / 8) - 1)}
               />
               <YAxis
                 stroke="#64748b"
@@ -210,6 +212,16 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
                   fontWeight: "700",
                   fontSize: "13px",
                 }}
+              />
+              <ReferenceLine
+                y={
+                  weightData.reduce((s, d) => s + d.value, 0) /
+                  weightData.length
+                }
+                stroke="#f97316"
+                strokeDasharray="5 4"
+                strokeOpacity={0.45}
+                strokeWidth={1.5}
               />
               <Line
                 type="monotone"

@@ -148,6 +148,205 @@ async def get_max_lifts(
     return sorted(max_lifts.values(), key=lambda x: x["muscle_name"])
 
 
+def _compute_workout_count(
+    db: Session, user_id: str, period_start: datetime, period_end: datetime
+) -> int:
+    return (
+        db.query(func.count(models.Workout.id))
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time >= period_start,
+            models.Workout.start_time < period_end,
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _compute_volume(
+    db: Session, user_id: str, period_start: datetime, period_end: datetime
+) -> float:
+    sets = (
+        db.query(models.ExerciseSet.value)
+        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time >= period_start,
+            models.Workout.start_time < period_end,
+            models.ExerciseSet.value != "",
+        )
+        .all()
+    )
+    return sum(_parse_exercise_value(s.value) for s in sets)
+
+
+def _compute_avg_duration(
+    db: Session, user_id: str, period_start: datetime, period_end: datetime
+) -> Optional[float]:
+    rows = (
+        db.query(
+            models.Workout.start_time,
+            models.Workout.end_time,
+            models.FitbitData.duration_ms,
+        )
+        .outerjoin(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time >= period_start,
+            models.Workout.start_time < period_end,
+        )
+        .all()
+    )
+    durations = []
+    for start_time, end_time, fitbit_ms in rows:
+        if fitbit_ms and fitbit_ms > 0:
+            durations.append(fitbit_ms / 60000)
+        elif end_time and end_time > start_time:
+            durations.append((end_time - start_time).total_seconds() / 60)
+    return round(sum(durations) / len(durations), 1) if durations else None
+
+
+def _compute_prs(
+    db: Session, user_id: str, period_start: datetime, period_end: datetime
+) -> int:
+    period_sets = (
+        db.query(models.ExerciseSet.exercise_id, models.ExerciseSet.value)
+        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time >= period_start,
+            models.Workout.start_time < period_end,
+            models.ExerciseSet.value != "",
+        )
+        .all()
+    )
+    pre_sets = (
+        db.query(models.ExerciseSet.exercise_id, models.ExerciseSet.value)
+        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time < period_start,
+            models.ExerciseSet.value != "",
+        )
+        .all()
+    )
+    pre_max: dict = {}
+    for ex_id, val in pre_sets:
+        v = _parse_exercise_value(val)
+        if v > 0:
+            pre_max[ex_id] = max(pre_max.get(ex_id, 0.0), v)
+    period_max: dict = {}
+    for ex_id, val in period_sets:
+        v = _parse_exercise_value(val)
+        if v > 0:
+            period_max[ex_id] = max(period_max.get(ex_id, 0.0), v)
+    return sum(1 for ex_id, mv in period_max.items() if mv > pre_max.get(ex_id, 0.0))
+
+
+def _iso_weeks_in_range(start: datetime, end: datetime) -> List[str]:
+    weeks = []
+    current = start.date()
+    current -= timedelta(days=current.weekday())
+    end_date = end.date()
+    while current <= end_date:
+        weeks.append(current.strftime("%G-W%V"))
+        current += timedelta(weeks=1)
+    return weeks
+
+
+@router.get("/summary", response_model=schemas.AnalyticsSummary)
+async def get_analytics_summary(
+    days: int = Query(30, description="Number of past days for the current period"),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """KPI summary with current and previous period values for trend comparison."""
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=days)
+
+    curr_count = _compute_workout_count(db, current_user.id, cutoff, now)
+    curr_volume = _compute_volume(db, current_user.id, cutoff, now)
+    curr_duration = _compute_avg_duration(db, current_user.id, cutoff, now)
+    curr_prs = _compute_prs(db, current_user.id, cutoff, now)
+
+    if days >= 365:
+        prev_count, prev_volume, prev_duration, prev_prs = 0, 0.0, None, 0
+    else:
+        prev_cutoff = cutoff - timedelta(days=days)
+        prev_count = _compute_workout_count(db, current_user.id, prev_cutoff, cutoff)
+        prev_volume = _compute_volume(db, current_user.id, prev_cutoff, cutoff)
+        prev_duration = _compute_avg_duration(db, current_user.id, prev_cutoff, cutoff)
+        prev_prs = _compute_prs(db, current_user.id, prev_cutoff, cutoff)
+
+    return {
+        "workout_count": curr_count,
+        "prev_workout_count": prev_count,
+        "total_volume_kg": round(curr_volume, 1),
+        "prev_total_volume_kg": round(prev_volume, 1),
+        "avg_duration_min": curr_duration,
+        "prev_avg_duration_min": prev_duration,
+        "pr_count": curr_prs,
+        "prev_pr_count": prev_prs,
+    }
+
+
+@router.get("/workout-frequency", response_model=List[schemas.WorkoutFrequencyPoint])
+async def get_workout_frequency(
+    days: int = Query(90, description="Number of past days to include"),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Workout count per ISO week, with zero-filled gaps."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (
+        db.query(models.Workout.start_time)
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.start_time >= cutoff,
+        )
+        .order_by(models.Workout.start_time)
+        .all()
+    )
+    counts: dict = {}
+    for (start_time,) in rows:
+        week_key = start_time.strftime("%G-W%V")
+        counts[week_key] = counts.get(week_key, 0) + 1
+
+    all_weeks = _iso_weeks_in_range(cutoff, datetime.utcnow())
+    return [{"week": w, "count": counts.get(w, 0)} for w in all_weeks]
+
+
+@router.get("/volume-trend", response_model=List[schemas.VolumeTrendPoint])
+async def get_volume_trend(
+    days: int = Query(90, description="Number of past days to include"),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Total exercise volume (kg) per session, sorted chronologically."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (
+        db.query(models.Workout.start_time, models.ExerciseSet.value)
+        .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.start_time >= cutoff,
+            models.ExerciseSet.value != "",
+        )
+        .order_by(models.Workout.start_time)
+        .all()
+    )
+    volume_by_date: dict = {}
+    for start_time, value_str in rows:
+        v = _parse_exercise_value(value_str)
+        if v > 0:
+            date_key = start_time.date()
+            volume_by_date[date_key] = volume_by_date.get(date_key, 0.0) + v
+    return [
+        {"date": datetime.combine(d, datetime.min.time()), "volume": round(v, 1)}
+        for d, v in sorted(volume_by_date.items())
+    ]
+
+
 @router.get("/exercise-history/{exercise_id}", response_model=List[dict])
 async def get_exercise_history(
     exercise_id: str,

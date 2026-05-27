@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 import { BarChart2 } from "lucide-react";
 import PeriodSelector from "../ui/PeriodSelector";
@@ -164,6 +165,22 @@ const FrequencyAnalysisCard: React.FC = () => {
                       fill={COLORS[index % COLORS.length]}
                     />
                   ))}
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    formatter={(v: unknown) => {
+                      const num = typeof v === "number" ? v : 0;
+                      const total = chartData.reduce((s, d) => s + d.count, 0);
+                      return total > 0
+                        ? `${Math.round((num / total) * 100)}%`
+                        : "";
+                    }}
+                    style={{
+                      fill: "#64748b",
+                      fontSize: 10,
+                      fontWeight: "bold",
+                    }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
