@@ -84,6 +84,52 @@ class FitbitData(FitbitDataBase):
     class Config:
         orm_mode = True
 
+# SleepLog Schemas
+class SleepLog(BaseModel):
+    """Schema for returning a Fitbit sleep session."""
+    id: str
+    user_id: str
+    fitbit_log_id: Optional[str] = None
+    date: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    duration_ms: int = 0
+    efficiency: int = 0
+    minutes_asleep: int = 0
+    minutes_awake: int = 0
+    minutes_to_fall_asleep: int = 0
+    time_in_bed: int = 0
+    minutes_deep: int = 0
+    minutes_light: int = 0
+    minutes_rem: int = 0
+    minutes_wake: int = 0
+    is_main_sleep: bool = True
+    log_type: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+# DailyHealth Schemas
+class DailyHealth(BaseModel):
+    """Schema for returning a Fitbit daily activity summary."""
+    id: str
+    user_id: str
+    date: str
+    steps: int = 0
+    floors: int = 0
+    resting_heart_rate: int = 0
+    calories_out: int = 0
+    minutes_sedentary: int = 0
+    minutes_lightly_active: int = 0
+    minutes_fairly_active: int = 0
+    minutes_very_active: int = 0
+    distance_km: float = 0.0
+
+    class Config:
+        orm_mode = True
+
+
 # Workout Schemas
 class WorkoutBase(BaseModel):
     start_time: datetime = Field(..., description="Start time of the workout in ISO 8601 format")

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { MapPinOff } from "lucide-react";
 import { workoutService } from "../../services/workout";
 
 interface RoutePoint {
@@ -90,12 +91,21 @@ const RouteMap: React.FC<Props> = ({ workoutId }) => {
     };
   }, [workoutId]);
 
-  if (status === "error") return null;
+  if (status === "error") {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
+        <MapPinOff size={15} className="text-slate-600 shrink-0" />
+        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+          Ruta GPS no disponible
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative rounded-2xl overflow-hidden border border-white/10">
       {status === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/5 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest animate-pulse">
             Cargando ruta…
           </p>

@@ -97,6 +97,50 @@ class ExerciseSet(Base):
     workout = relationship("Workout", back_populates="exercise_sets")
     exercise = relationship("Exercise", back_populates="sets")
 
+class SleepLog(Base):
+    """Fitbit sleep session for a user, synced daily."""
+    __tablename__ = "sleep_logs"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    fitbit_log_id = Column(String, nullable=True, unique=True)
+    date = Column(String, nullable=False)
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
+    duration_ms = Column(Integer, default=0, nullable=False)
+    efficiency = Column(Integer, default=0, nullable=False)
+    minutes_asleep = Column(Integer, default=0, nullable=False)
+    minutes_awake = Column(Integer, default=0, nullable=False)
+    minutes_to_fall_asleep = Column(Integer, default=0, nullable=False)
+    time_in_bed = Column(Integer, default=0, nullable=False)
+    minutes_deep = Column(Integer, default=0, nullable=False)
+    minutes_light = Column(Integer, default=0, nullable=False)
+    minutes_rem = Column(Integer, default=0, nullable=False)
+    minutes_wake = Column(Integer, default=0, nullable=False)
+    is_main_sleep = Column(Boolean, default=True, nullable=False)
+    log_type = Column(String, nullable=True)
+
+    user = relationship("User")
+
+
+class DailyHealth(Base):
+    """Fitbit daily activity summary (steps, HR, calories, active minutes)."""
+    __tablename__ = "daily_health"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    date = Column(String, nullable=False)
+    steps = Column(Integer, default=0, nullable=False)
+    floors = Column(Integer, default=0, nullable=False)
+    resting_heart_rate = Column(Integer, default=0, nullable=False)
+    calories_out = Column(Integer, default=0, nullable=False)
+    minutes_sedentary = Column(Integer, default=0, nullable=False)
+    minutes_lightly_active = Column(Integer, default=0, nullable=False)
+    minutes_fairly_active = Column(Integer, default=0, nullable=False)
+    minutes_very_active = Column(Integer, default=0, nullable=False)
+    distance_km = Column(Float, default=0.0, nullable=False)
+
+    user = relationship("User")
+
+
 class FitbitData(Base):
     """
     SQLAlchemy model for storing Fitbit activity data associated with a workout.

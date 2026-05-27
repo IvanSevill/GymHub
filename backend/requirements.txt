@@ -9,6 +9,7 @@ python-dotenv==1.0.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 requests==2.31.0
+defusedxml==0.7.1
 google-api-python-client==2.120.0
 google-auth-oauthlib==1.2.0
 ruff==0.3.4

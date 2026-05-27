@@ -1,7 +1,7 @@
 import base64
 import logging
 import os
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -34,7 +34,7 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
         "refresh_token": user_tokens.fitbit_refresh_token,
     }
 
-    response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data)
+    response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data, timeout=10)
     if response.status_code == 200:
         new_tokens = response.json()
         user_tokens.fitbit_access_token = new_tokens["access_token"]
@@ -60,7 +60,7 @@ def _fitbit_get(
     if not access_token:
         return None
 
-    response = requests.get(url, headers={"Authorization": f"Bearer {access_token}"})
+    response = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
     if response.status_code == 401:
         access_token = refresh_fitbit_token(db, user_tokens)
         if not access_token:
@@ -142,23 +142,35 @@ def get_fitbit_route(
     """Fetch GPS trackpoints from a Fitbit activity's TCX file.
 
     Returns a list of {lat, lon, ele} dicts. Requires the 'location' OAuth scope.
+    Connected GPS (phone GPS paired to watch) sets hasGps=false in the activities
+    list API but still includes trackpoints in the TCX — so we always attempt the
+    fetch when a log_id is present and let the parse result decide.
     """
     if not log_id:
         return []
 
     url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
+    logger.debug("Fetching TCX for log_id=%s", log_id)
     response = _fitbit_get(db, user_tokens, url)
     if response is None:
+        logger.warning("TCX fetch failed (non-200 or token error) for log_id=%s", log_id)
         return []
 
+    logger.debug("TCX response length=%d bytes for log_id=%s", len(response.text), log_id)
+
+    # Try standard Garmin namespace (Fitbit uses this for both onboard and connected GPS)
     ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
     try:
         root = ET.fromstring(response.text)
-    except ET.ParseError:
+    except ET.ParseError as e:
+        logger.warning("TCX XML parse error for log_id=%s: %s — body: %.200s", log_id, e, response.text)
         return []
 
+    trackpoints = root.findall(".//tcx:Trackpoint", ns)
+    logger.debug("Found %d Trackpoints for log_id=%s", len(trackpoints), log_id)
+
     points = []
-    for tp in root.findall(".//tcx:Trackpoint", ns):
+    for tp in trackpoints:
         pos = tp.find("tcx:Position", ns)
         if pos is None:
             continue
@@ -178,7 +190,108 @@ def get_fitbit_route(
         except (ValueError, TypeError):
             continue
 
+    logger.debug("Parsed %d GPS points for log_id=%s", len(points), log_id)
     return points
+
+
+def probe_has_gps(
+    db: Session,
+    user_tokens: models.UserTokens,
+    log_id: str,
+) -> bool:
+    """Return True if the Fitbit activity TCX contains at least one GPS Position element."""
+    if not log_id:
+        return False
+    url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return False
+    ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
+    try:
+        root = ET.fromstring(response.text)
+    except ET.ParseError:
+        return False
+    return root.find(".//tcx:Position", ns) is not None
+
+
+def get_sleep_list(
+    db: Session,
+    user_tokens: models.UserTokens,
+    before_date: str,
+    limit: int = 100,
+) -> list:
+    """Fetch up to `limit` sleep records before a date using the list endpoint (one API call)."""
+    url = (
+        f"https://api.fitbit.com/1.2/user/-/sleep/list.json"
+        f"?beforeDate={before_date}&offset=0&limit={limit}&sort=desc"
+    )
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get("sleep", [])
+
+
+def get_activity_time_series(
+    db: Session,
+    user_tokens: models.UserTokens,
+    resource: str,
+    from_date: str,
+    to_date: str,
+) -> list:
+    """Fetch a daily time series for an activity resource over a date range (one API call).
+
+    Returns list of {"dateTime": "YYYY-MM-DD", "value": "<string>"}.
+    """
+    url = f"https://api.fitbit.com/1/user/-/activities/{resource}/date/{from_date}/{to_date}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get(f"activities-{resource}", [])
+
+
+def get_resting_hr_time_series(
+    db: Session,
+    user_tokens: models.UserTokens,
+    from_date: str,
+    to_date: str,
+) -> dict:
+    """Fetch resting heart rate for a date range. Returns {date_str: resting_hr_int}."""
+    url = f"https://api.fitbit.com/1/user/-/activities/heart/date/{from_date}/{to_date}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return {}
+    result = {}
+    for entry in response.json().get("activities-heart", []):
+        val = entry.get("value")
+        if isinstance(val, dict) and "restingHeartRate" in val:
+            result[entry["dateTime"]] = val["restingHeartRate"]
+    return result
+
+
+def get_sleep_for_date(
+    db: Session,
+    user_tokens: models.UserTokens,
+    date_str: str,
+) -> list:
+    """Fetch Fitbit sleep logs for a given date (YYYY-MM-DD). Returns raw sleep list."""
+    url = f"https://api.fitbit.com/1.2/user/-/sleep/date/{date_str}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get("sleep", [])
+
+
+def get_daily_activity(
+    db: Session,
+    user_tokens: models.UserTokens,
+    date_str: str,
+) -> Optional[dict]:
+    """Fetch Fitbit daily activity summary for a given date (YYYY-MM-DD)."""
+    url = f"https://api.fitbit.com/1/user/-/activities/date/{date_str}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return None
+    return response.json().get("summary")
 
 
 def get_fitbit_activity(

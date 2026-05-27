@@ -25,6 +25,7 @@ export interface Workout {
   google_event_id?: string;
   exercise_sets: ExerciseSet[];
   fitbit_data?: {
+    fitbit_log_id?: string | null;
     calories: number;
     heart_rate_avg: number;
     duration_ms: number;
