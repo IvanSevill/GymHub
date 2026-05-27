@@ -11,9 +11,17 @@ import {
   Timer,
   MapPin,
   TrendingUp,
+  History,
 } from "lucide-react";
 import { workoutService, Workout } from "../services/workout";
-import { format, parseISO, isFuture } from "date-fns";
+import {
+  format,
+  parseISO,
+  isFuture,
+  isToday,
+  isTomorrow,
+  formatDistanceToNow,
+} from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../context/ToastContext";
@@ -28,6 +36,13 @@ import {
 const ITEMS_PER_PAGE = 10;
 
 type FitbitData = NonNullable<Workout["fitbit_data"]>;
+
+const relativeDate = (dateStr: string): string => {
+  const d = parseISO(dateStr);
+  if (isToday(d)) return "Hoy";
+  if (isTomorrow(d)) return "Mañana";
+  return formatDistanceToNow(d, { locale: es, addSuffix: true });
+};
 
 /* ── Shared Fitbit metrics display ───────────────────────────── */
 const FitbitMetrics: React.FC<{
@@ -62,7 +77,6 @@ const FitbitMetrics: React.FC<{
   const totalAzm = f.azm_fat_burn + f.azm_cardio + f.azm_peak;
   return (
     <div className="space-y-3">
-      {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {f.duration_ms > 0 && (
           <div className="flex items-center gap-2 bg-black/20 rounded-xl px-3 py-2">
@@ -118,7 +132,6 @@ const FitbitMetrics: React.FC<{
         )}
       </div>
 
-      {/* AZM zones bar */}
       {totalAzm > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 mb-1">
@@ -189,7 +202,7 @@ const CardioCard: React.FC<{ workout: Workout }> = ({ workout }) => {
   );
 };
 
-/* ── Weights exercise list ────────────────────────────────────── */
+/* ── Completed exercise list (bodyweight-aware) ───────────────── */
 const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
   const nonCardioSets = workout.exercise_sets.filter(
     (s) => s.exercise?.name !== "cardio",
@@ -204,9 +217,7 @@ const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
       ...mg,
       exercises: mg.exercises
         .map((eg) => {
-          const completedSets = eg.sets.filter(
-            (s) => s.is_completed && s.value && s.value !== "0",
-          );
+          const completedSets = eg.sets.filter((s) => s.is_completed);
           return { ...eg, completedSets };
         })
         .filter((eg) => eg.completedSets.length > 0),
@@ -226,31 +237,30 @@ const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
             {mg.name}
           </p>
           <div className="space-y-1.5">
-            {mg.exercises.map((eg) => {
-              const values = eg.completedSets.map(
-                (s) => `${s.value}${s.measurement}`,
-              );
-              return (
-                <div
-                  key={eg.name}
-                  className="flex items-center gap-3 flex-wrap"
-                >
-                  <span className="text-sm font-semibold text-white capitalize min-w-0 shrink-0">
-                    {eg.name}
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {values.map((v, i) => (
+            {mg.exercises.map((eg) => (
+              <div key={eg.name} className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-semibold text-white capitalize min-w-0 shrink-0">
+                  {eg.name}
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {eg.completedSets.map((s, i) => {
+                    const hasValue = s.value && s.value !== "0";
+                    return (
                       <span
                         key={i}
-                        className="px-1.5 py-0.5 rounded-md bg-white/5 text-[10px] font-mono text-slate-400 tabular-nums"
+                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono tabular-nums ${
+                          hasValue
+                            ? "bg-white/5 text-slate-400"
+                            : "bg-primary/8 border border-primary/15 text-primary/60"
+                        }`}
                       >
-                        {v}
+                        {hasValue ? `${s.value}${s.measurement}` : "✓"}
                       </span>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       ))}
@@ -258,11 +268,77 @@ const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
   );
 };
 
-/* ── Fitbit summary strip (for weights workouts with Fitbit) ──── */
+/* ── Planned exercise chips (upcoming workouts) ───────────────── */
+const PlannedExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
+  const nonCardioSets = workout.exercise_sets.filter(
+    (s) => s.exercise?.name !== "cardio",
+  );
+  if (nonCardioSets.length === 0) return null;
+
+  const groups = groupWorkoutSets(nonCardioSets);
+  if (groups.length === 0) return null;
+
+  const exercises = groups.flatMap((mg) =>
+    mg.exercises.map((eg) => ({ name: eg.name, sets: eg.sets.length })),
+  );
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {exercises.map((ex) => (
+        <span
+          key={ex.name}
+          className="px-2 py-1 rounded-lg bg-white/[0.04] border border-white/8 text-[10px] text-slate-500 capitalize"
+        >
+          {ex.name}
+          {ex.sets > 1 && (
+            <span className="ml-1 text-slate-600">×{ex.sets}</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+};
+
+/* ── Fitbit compact strip ─────────────────────────────────────── */
 const FitbitStrip: React.FC<{ workout: Workout }> = ({ workout }) => {
   if (!workout.fitbit_data) return null;
   return <FitbitMetrics fitbitData={workout.fitbit_data} compact />;
 };
+
+/* ── Section header ───────────────────────────────────────────── */
+const SectionHeader: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  accent?: boolean;
+}> = ({ icon, label, count, accent = false }) => (
+  <div className="flex items-center gap-3">
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border shrink-0 ${
+        accent
+          ? "bg-primary/8 border-primary/20"
+          : "bg-white/[0.03] border-white/8"
+      }`}
+    >
+      {icon}
+      <span
+        className={`text-[9px] font-black uppercase tracking-[0.2em] ${
+          accent ? "text-primary/70" : "text-slate-500"
+        }`}
+      >
+        {label}
+      </span>
+      <span
+        className={`text-[10px] font-black tabular-nums px-1.5 py-0.5 rounded-md ${
+          accent ? "bg-primary/15 text-primary" : "bg-white/5 text-slate-500"
+        }`}
+      >
+        {count}
+      </span>
+    </div>
+    <div className={`h-px flex-1 ${accent ? "bg-primary/10" : "bg-white/5"}`} />
+  </div>
+);
 
 /* ── Main page ────────────────────────────────────────────────── */
 const Workouts: React.FC = () => {
@@ -288,11 +364,99 @@ const Workouts: React.FC = () => {
     }
   };
 
-  const totalPages = Math.ceil(workouts.length / ITEMS_PER_PAGE);
-  const paginatedWorkouts = workouts.slice(
+  const upcoming = workouts.filter((w) => isFuture(parseISO(w.start_time)));
+  const history = workouts.filter((w) => !isFuture(parseISO(w.start_time)));
+  const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
+  const paginatedHistory = history.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
+
+  const renderCard = (workout: Workout, index: number, isUpcoming: boolean) => {
+    const cardio = isCardioWorkout(workout);
+
+    return (
+      <motion.div
+        key={workout.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.04 }}
+        className={`p-5 transition-all group relative overflow-hidden ${
+          isUpcoming
+            ? "upcoming-card hover:border-primary/40"
+            : "glass-card hover:border-primary/20"
+        }`}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-start gap-4 relative z-10">
+          <div
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+              isUpcoming
+                ? "bg-primary/5 border-primary/20 text-primary/50"
+                : cardio
+                  ? "bg-accent/10 border-accent/20 text-accent"
+                  : "bg-primary/10 border-primary/20 text-primary"
+            }`}
+          >
+            {isUpcoming ? (
+              <CalendarIcon size={20} />
+            ) : cardio ? (
+              <Zap size={20} className="fill-accent" />
+            ) : (
+              <Dumbbell size={20} />
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <h3 className="text-base font-black text-white tracking-tight">
+                {workout.title || "Entrenamiento"}
+              </h3>
+              {isUpcoming && (
+                <span className="px-2 py-0.5 bg-primary/10 text-primary text-[8px] font-black uppercase tracking-widest rounded-lg border border-primary/20">
+                  {relativeDate(workout.start_time)}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-medium text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <Clock size={11} className="text-primary" />
+                {format(parseISO(workout.start_time), "PPP · HH:mm", {
+                  locale: es,
+                })}
+              </span>
+              {!cardio && workout.exercise_sets.length > 0 && (
+                <span className="text-slate-600">
+                  {
+                    new Set(
+                      workout.exercise_sets
+                        .map((s) => s.exercise?.name)
+                        .filter(Boolean),
+                    ).size
+                  }{" "}
+                  ejercicios
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        {isUpcoming ? (
+          <PlannedExerciseList workout={workout} />
+        ) : cardio ? (
+          <CardioCard workout={workout} />
+        ) : (
+          <>
+            <ExerciseList workout={workout} />
+            <FitbitStrip workout={workout} />
+          </>
+        )}
+
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/[0.04] blur-3xl -z-10 group-hover:bg-primary/[0.08] transition-all" />
+      </motion.div>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -331,115 +495,58 @@ const Workouts: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="grid gap-4">
-            <AnimatePresence>
-              {paginatedWorkouts.map((workout, index) => {
-                const future = isFuture(parseISO(workout.start_time));
-                const cardio = isCardioWorkout(workout);
+          {/* ── Upcoming section ── */}
+          {upcoming.length > 0 && (
+            <div className="space-y-3">
+              <SectionHeader
+                icon={<CalendarIcon size={11} className="text-primary" />}
+                label="Próximos"
+                count={upcoming.length}
+                accent
+              />
+              <AnimatePresence>
+                {upcoming.map((w, i) => renderCard(w, i, true))}
+              </AnimatePresence>
+            </div>
+          )}
 
-                return (
-                  <motion.div
-                    key={workout.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.04 }}
-                    className="glass-card p-5 hover:border-primary/20 transition-all group relative overflow-hidden"
+          {/* ── History section ── */}
+          {history.length > 0 && (
+            <div className="space-y-3">
+              <SectionHeader
+                icon={<History size={11} className="text-slate-500" />}
+                label="Historial"
+                count={history.length}
+              />
+              <div className="grid gap-4">
+                <AnimatePresence>
+                  {paginatedHistory.map((w, i) => renderCard(w, i, false))}
+                </AnimatePresence>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 pt-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 btn-secondary rounded-xl disabled:opacity-30"
                   >
-                    {/* ── Header ── */}
-                    <div className="flex items-start gap-4 relative z-10">
-                      <div
-                        className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
-                          future
-                            ? "bg-primary/5 border-primary/20 text-primary/50"
-                            : cardio
-                              ? "bg-accent/10 border-accent/20 text-accent"
-                              : "bg-primary/10 border-primary/20 text-primary"
-                        }`}
-                      >
-                        {future ? (
-                          <CalendarIcon size={20} />
-                        ) : cardio ? (
-                          <Zap size={20} className="fill-accent" />
-                        ) : (
-                          <Dumbbell size={20} />
-                        )}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <h3 className="text-base font-black text-white tracking-tight">
-                            {workout.title || "Entrenamiento"}
-                          </h3>
-                          {future && (
-                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-[8px] font-black uppercase tracking-widest rounded-lg border border-primary/20">
-                              Planeado
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-medium text-slate-500">
-                          <span className="flex items-center gap-1.5">
-                            <Clock size={11} className="text-primary" />
-                            {format(
-                              parseISO(workout.start_time),
-                              "PPP · HH:mm",
-                              { locale: es },
-                            )}
-                          </span>
-                          {!cardio && workout.exercise_sets.length > 0 && (
-                            <span className="text-slate-600">
-                              {
-                                new Set(
-                                  workout.exercise_sets
-                                    .map((s) => s.exercise?.name)
-                                    .filter(Boolean),
-                                ).size
-                              }{" "}
-                              ejercicios
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ── Cardio: full card ── */}
-                    {cardio && <CardioCard workout={workout} />}
-
-                    {/* ── Weights: exercise list + Fitbit strip ── */}
-                    {!cardio && !future && (
-                      <>
-                        <ExerciseList workout={workout} />
-                        <FitbitStrip workout={workout} />
-                      </>
-                    )}
-
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/[0.04] blur-3xl -z-10 group-hover:bg-primary/[0.08] transition-all" />
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4 pt-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-2 btn-secondary rounded-xl disabled:opacity-30"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <span className="text-xs font-medium text-slate-500">
-                Página {currentPage} de {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="p-2 btn-secondary rounded-xl disabled:opacity-30"
-              >
-                <ChevronRight size={18} />
-              </button>
+                    <ChevronLeft size={18} />
+                  </button>
+                  <span className="text-xs font-medium text-slate-500">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className="p-2 btn-secondary rounded-xl disabled:opacity-30"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>

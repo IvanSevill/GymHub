@@ -73,6 +73,15 @@
   .input-field {
     @apply bg-black/30 border border-white/10 rounded-xl px-4 py-2 outline-none focus:border-primary/50 transition-colors text-white placeholder-slate-500;
   }
+
+  .upcoming-card {
+    background: rgba(249, 115, 22, 0.02);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1.5px dashed rgba(249, 115, 22, 0.22);
+    border-radius: 1.5rem;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  }
 }
 
 #root {
