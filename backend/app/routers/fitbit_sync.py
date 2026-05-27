@@ -17,14 +17,23 @@ def _is_gym_activity(activity: dict) -> bool:
     return "weights" in activity.get("activityName", "").lower()
 
 
+_RUN_ACTIVITY_TYPE_IDS = {90009, 90013}  # Run, Treadmill Run
+_RUN_NAMES = {"run", "running", "outdoor run", "treadmill", "jogging"}
+
+
 def _resolve_activity_name(activity: dict) -> str:
     """Return a display name, resolving generic Fitbit types via heuristics.
 
-    Fitbit records outdoor runs as 'Workout' (activityTypeId 91060) on Pixel Watch.
-    GPS presence is the reliable signal for outdoor cardio.
+    Pixel Watch records outdoor runs as 'Workout' (activityTypeId 90013) with
+    hasGps=false when using Connected GPS (phone GPS). We detect it by activityTypeId
+    or by hasGps being True, so the name stored in DB is 'Run' not 'Workout'.
     """
     name = activity.get("activityName", "Actividad Fitbit")
-    if name.lower() == "workout" and activity.get("hasGps"):
+    type_id = activity.get("activityTypeId", 0)
+
+    if name.lower() in _RUN_NAMES:
+        return "Run"
+    if name.lower() == "workout" and (activity.get("hasGps") or type_id in _RUN_ACTIVITY_TYPE_IDS):
         return "Run"
     return name
 
@@ -120,10 +129,6 @@ async def sync_fitbit_bulk(
                 not_found += 1
                 continue
 
-            if not _is_gym_activity(activity):
-                not_found += 1
-                continue
-
             log_id = str(activity.get("logId", "")) or None
             azm = fitbit_utils.extract_azm(activity)
             has_gps = fitbit_utils.probe_has_gps(db, user_tokens, log_id or "") if log_id else False
@@ -160,9 +165,6 @@ async def sync_fitbit_bulk(
                 db.add(fitbit_data)
                 db.flush()
                 workout.fitbit_data = fitbit_data
-
-            if user_tokens.selected_calendar_id and workout.google_event_id:
-                update_google_calendar_event(db, user_tokens, workout, fitbit_data)
 
             synced += 1
         except Exception as e:
@@ -280,16 +282,6 @@ async def sync_fitbit_create_missing(
                     )
                 )
 
-        if user_tokens.selected_calendar_id:
-            try:
-                update_google_calendar_event(db, user_tokens, workout, fitbit_data)
-            except Exception as e:
-                logger.error(
-                    "Calendar sync error for Fitbit activity %s: %s",
-                    activity.get("logId"),
-                    e,
-                )
-
         existing.append(workout)
         created += 1
 
@@ -341,13 +333,14 @@ async def sync_fitbit_to_workout(
         fitbit_data = models.FitbitData(workout_id=workout_id)
         db.add(fitbit_data)
 
-    fitbit_data.fitbit_log_id = str(activity.get("logId"))
+    fitbit_data.fitbit_log_id = str(activity.get("logId", "")) or None
     fitbit_data.calories = activity.get("calories", 0)
     fitbit_data.heart_rate_avg = activity.get("averageHeartRate", 0)
     fitbit_data.duration_ms = activity.get("duration", 0)
     fitbit_data.distance_km = activity.get("distance", 0.0)
     fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
-    fitbit_data.activity_name = activity.get("activityName", "Unknown")
+    fitbit_data.activity_name = _resolve_activity_name(activity)
+    fitbit_data.has_gps = bool(activity.get("hasGps", False))
 
     azm_data = fitbit_utils.extract_azm(activity)
     fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)
@@ -477,12 +470,19 @@ async def get_workout_route(
     if not user_tokens or not user_tokens.fitbit_access_token:
         raise HTTPException(status_code=400, detail="Fitbit not connected")
 
-    points = fitbit_utils.get_fitbit_route(
-        db, user_tokens, workout.fitbit_data.fitbit_log_id
-    )
+    log_id = workout.fitbit_data.fitbit_log_id
+    logger.debug("Fetching GPS route for workout %s, log_id=%s", workout_id, log_id)
+    points = fitbit_utils.get_fitbit_route(db, user_tokens, log_id)
     if not points:
+        logger.warning(
+            "No GPS trackpoints for workout %s (log_id=%s) — "
+            "check Fitbit location scope or device GPS",
+            workout_id,
+            log_id,
+        )
         raise HTTPException(
             status_code=404,
             detail="No GPS trackpoints found — reconnect Fitbit with location scope",
         )
+    logger.debug("Returning %d GPS points for workout %s", len(points), workout_id)
     return points
