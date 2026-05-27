@@ -219,3 +219,27 @@ class MaxLift(BaseModel):
     max_value: float
     measurement: str
     date: datetime
+
+
+class AnalyticsSummary(BaseModel):
+    """KPI summary with current and previous period for trend comparison."""
+    workout_count: int
+    prev_workout_count: int
+    total_volume_kg: float
+    prev_total_volume_kg: float
+    avg_duration_min: Optional[float]
+    prev_avg_duration_min: Optional[float]
+    pr_count: int
+    prev_pr_count: int
+
+
+class WorkoutFrequencyPoint(BaseModel):
+    """Workout count per ISO week."""
+    week: str
+    count: int
+
+
+class VolumeTrendPoint(BaseModel):
+    """Total exercise volume (kg) per session date."""
+    date: datetime
+    volume: float
