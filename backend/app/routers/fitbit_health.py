@@ -254,7 +254,7 @@ async def get_sync_status(
 
 @router.get("/sleep", response_model=List[schemas.SleepLog])
 async def get_sleep_logs(
-    days: int = Query(30, ge=1, le=365),
+    days: int = Query(30, ge=1),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
@@ -274,7 +274,7 @@ async def get_sleep_logs(
 
 @router.get("/daily", response_model=List[schemas.DailyHealth])
 async def get_daily_health(
-    days: int = Query(30, ge=1, le=365),
+    days: int = Query(30, ge=1),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):

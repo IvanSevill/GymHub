@@ -54,3 +54,5 @@ backend_err.txt
 *.jpeg
 *.db-journal
 SESSION_SUMMARY.md
+
+.vercel
