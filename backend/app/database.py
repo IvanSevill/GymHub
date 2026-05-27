@@ -4,42 +4,27 @@ from sqlalchemy.ext.declarative import declarative_base
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# Base class for declarative models
 Base = declarative_base()
 
-# Database URL from environment variable, default to SQLite
 # Render exposes postgres:// but SQLAlchemy 2.x requires postgresql://
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/gymhub")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Create the SQLAlchemy engine
-# For SQLite, check_same_thread is needed for concurrent requests
-if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        DATABASE_URL, connect_args={"check_same_thread": False}
-    )
-    from sqlalchemy import event as _sa_event
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=300,
+)
 
-    @_sa_event.listens_for(engine, "connect")
-    def _set_wal_mode(dbapi_conn, _record):
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.close()
-else:
-    engine = create_engine(DATABASE_URL)
-
-# Create a SessionLocal class to get a database session
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def get_db():
-    """
-    Dependency that provides a database session.
-    Each request will get its own database session that is closed afterwards.
-    """
     db = SessionLocal()
     try:
         yield db
