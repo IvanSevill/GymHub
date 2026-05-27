@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { fitbitService, SleepLog, DailyHealth } from "../services/fitbit";
+import {
+  fitbitService,
+  SleepLog,
+  DailyHealth,
+  SyncStatus,
+} from "../services/fitbit";
 import { useToast } from "../context/ToastContext";
 
 function fmtMin(ms: number): string {
@@ -22,20 +27,22 @@ const FitbitHealth: React.FC = () => {
 
   const [sleep, setSleep] = useState<SleepLog[]>([]);
   const [daily, setDaily] = useState<DailyHealth[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [days, setDays] = useState(30);
 
-  const load = async (d: number) => {
-    if (!user?.fitbit_connected) return;
+  const loadData = async (d: number) => {
     setLoading(true);
     try {
-      const [s, h] = await Promise.all([
+      const [s, h, status] = await Promise.all([
         fitbitService.getSleep(d),
         fitbitService.getDaily(d),
+        fitbitService.getSyncStatus(),
       ]);
       setSleep(s);
       setDaily(h);
+      setSyncStatus(status);
     } catch {
       addToast("Error al cargar datos Fitbit", "error");
     } finally {
@@ -44,18 +51,22 @@ const FitbitHealth: React.FC = () => {
   };
 
   useEffect(() => {
-    load(days);
+    if (user?.fitbit_connected) loadData(days);
   }, [days, user?.fitbit_connected]);
 
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const res = await fitbitService.sync(days);
+      const res = await fitbitService.sync();
+      if (res.error) {
+        addToast(res.error, "error");
+        return;
+      }
       addToast(
-        `Sincronizado: ${res.sleep_synced} noches · ${res.days_synced} días`,
+        `Sincronizado: ${res.sleep_synced} noches · ${res.days_synced} días (${res.from_date} → ${res.to_date})`,
         "success",
       );
-      await load(days);
+      await loadData(days);
     } catch {
       addToast("Error al sincronizar Fitbit", "error");
     } finally {
@@ -91,6 +102,13 @@ const FitbitHealth: React.FC = () => {
           <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">
             Sueño · Actividad diaria · Frecuencia cardíaca
           </p>
+          {syncStatus && (
+            <p className="text-[10px] text-slate-600 mt-1">
+              {syncStatus.has_data
+                ? `Último sueño: ${syncStatus.last_sleep_date ?? "—"} · Última actividad: ${syncStatus.last_daily_date ?? "—"}`
+                : "Sin datos — pulsa Sincronizar para importar el historial completo"}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -101,6 +119,7 @@ const FitbitHealth: React.FC = () => {
             <option value={7}>7 días</option>
             <option value={30}>30 días</option>
             <option value={90}>90 días</option>
+            <option value={365}>365 días</option>
           </select>
           <button
             onClick={handleSync}
@@ -113,17 +132,22 @@ const FitbitHealth: React.FC = () => {
       </div>
 
       {loading ? (
-        <p className="text-slate-500 text-sm">Cargando…</p>
+        <p className="text-slate-500 text-sm animate-pulse">Cargando…</p>
       ) : (
         <>
           {/* Sleep section */}
           <section>
             <h3 className="text-white font-black text-lg mb-3">
-              Sueño ({sleep.length} registros)
+              Sueño{" "}
+              <span className="text-slate-500 font-semibold text-sm">
+                ({sleep.length} registros)
+              </span>
             </h3>
             {sleep.length === 0 ? (
               <p className="text-slate-500 text-sm">
-                Sin datos. Pulsa "Sincronizar" para importar.
+                Sin datos en el período seleccionado.{" "}
+                {!syncStatus?.has_data &&
+                  "Pulsa «Sincronizar» para importar el historial."}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-white/10">
@@ -131,8 +155,8 @@ const FitbitHealth: React.FC = () => {
                   <thead>
                     <tr className="border-b border-white/10 text-left text-slate-500 text-[10px] uppercase tracking-widest">
                       <th className="px-4 py-3">Fecha</th>
-                      <th className="px-4 py-3">Hora inicio</th>
-                      <th className="px-4 py-3">Hora fin</th>
+                      <th className="px-4 py-3">Inicio</th>
+                      <th className="px-4 py-3">Fin</th>
                       <th className="px-4 py-3">Duración</th>
                       <th className="px-4 py-3">En cama</th>
                       <th className="px-4 py-3">Eficiencia</th>
@@ -155,13 +179,21 @@ const FitbitHealth: React.FC = () => {
                         <td className="px-4 py-3 text-slate-400">
                           {fmtTime(s.end_time)}
                         </td>
-                        <td className="px-4 py-3">{fmtMin(s.duration_ms)}</td>
+                        <td className="px-4 py-3 font-bold">
+                          {fmtMin(s.duration_ms)}
+                        </td>
                         <td className="px-4 py-3 text-slate-400">
                           {s.time_in_bed}m
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`font-black ${s.efficiency >= 85 ? "text-green-400" : s.efficiency >= 70 ? "text-yellow-400" : "text-red-400"}`}
+                            className={`font-black ${
+                              s.efficiency >= 85
+                                ? "text-green-400"
+                                : s.efficiency >= 70
+                                  ? "text-yellow-400"
+                                  : "text-red-400"
+                            }`}
                           >
                             {s.efficiency}%
                           </span>
@@ -189,11 +221,16 @@ const FitbitHealth: React.FC = () => {
           {/* Daily activity section */}
           <section>
             <h3 className="text-white font-black text-lg mb-3">
-              Actividad diaria ({daily.length} registros)
+              Actividad diaria{" "}
+              <span className="text-slate-500 font-semibold text-sm">
+                ({daily.length} registros)
+              </span>
             </h3>
             {daily.length === 0 ? (
               <p className="text-slate-500 text-sm">
-                Sin datos. Pulsa "Sincronizar" para importar.
+                Sin datos en el período seleccionado.{" "}
+                {!syncStatus?.has_data &&
+                  "Pulsa «Sincronizar» para importar el historial."}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-white/10">
@@ -219,7 +256,7 @@ const FitbitHealth: React.FC = () => {
                         className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
                       >
                         <td className="px-4 py-3 font-bold">{d.date}</td>
-                        <td className="px-4 py-3 font-black text-white">
+                        <td className="px-4 py-3 font-black">
                           {d.steps.toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-slate-400">{d.floors}</td>

@@ -201,6 +201,60 @@ def probe_has_gps(
     return root.find(".//tcx:Position", ns) is not None
 
 
+def get_sleep_list(
+    db: Session,
+    user_tokens: models.UserTokens,
+    before_date: str,
+    limit: int = 100,
+) -> list:
+    """Fetch up to `limit` sleep records before a date using the list endpoint (one API call)."""
+    url = (
+        f"https://api.fitbit.com/1.2/user/-/sleep/list.json"
+        f"?beforeDate={before_date}&offset=0&limit={limit}&sort=desc"
+    )
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get("sleep", [])
+
+
+def get_activity_time_series(
+    db: Session,
+    user_tokens: models.UserTokens,
+    resource: str,
+    from_date: str,
+    to_date: str,
+) -> list:
+    """Fetch a daily time series for an activity resource over a date range (one API call).
+
+    Returns list of {"dateTime": "YYYY-MM-DD", "value": "<string>"}.
+    """
+    url = f"https://api.fitbit.com/1/user/-/activities/{resource}/date/{from_date}/{to_date}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get(f"activities-{resource}", [])
+
+
+def get_resting_hr_time_series(
+    db: Session,
+    user_tokens: models.UserTokens,
+    from_date: str,
+    to_date: str,
+) -> dict:
+    """Fetch resting heart rate for a date range. Returns {date_str: resting_hr_int}."""
+    url = f"https://api.fitbit.com/1/user/-/activities/heart/date/{from_date}/{to_date}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return {}
+    result = {}
+    for entry in response.json().get("activities-heart", []):
+        val = entry.get("value")
+        if isinstance(val, dict) and "restingHeartRate" in val:
+            result[entry["dateTime"]] = val["restingHeartRate"]
+    return result
+
+
 def get_sleep_for_date(
     db: Session,
     user_tokens: models.UserTokens,

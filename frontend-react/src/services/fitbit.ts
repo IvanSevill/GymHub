@@ -36,13 +36,28 @@ export interface DailyHealth {
   distance_km: number;
 }
 
+export interface SyncStatus {
+  last_sleep_date: string | null;
+  last_daily_date: string | null;
+  has_data: boolean;
+}
+
+export interface SyncResult {
+  sleep_synced: number;
+  days_synced: number;
+  from_date: string;
+  to_date: string;
+  error?: string;
+}
+
 export const fitbitService = {
-  sync: async (
-    days = 30,
-  ): Promise<{ sleep_synced: number; days_synced: number }> => {
-    const res = await api.post<{ sleep_synced: number; days_synced: number }>(
-      `/fitbit/sync?days=${days}`,
-    );
+  sync: async (): Promise<SyncResult> => {
+    const res = await api.post<SyncResult>("/fitbit/sync");
+    return res.data;
+  },
+
+  getSyncStatus: async (): Promise<SyncStatus> => {
+    const res = await api.get<SyncStatus>("/fitbit/sync-status");
     return res.data;
   },
 
