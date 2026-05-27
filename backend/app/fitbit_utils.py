@@ -1,7 +1,7 @@
 import base64
 import logging
 import os
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -179,6 +179,106 @@ def get_fitbit_route(
             continue
 
     return points
+
+
+def probe_has_gps(
+    db: Session,
+    user_tokens: models.UserTokens,
+    log_id: str,
+) -> bool:
+    """Return True if the Fitbit activity TCX contains at least one GPS Position element."""
+    if not log_id:
+        return False
+    url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return False
+    ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
+    try:
+        root = ET.fromstring(response.text)
+    except ET.ParseError:
+        return False
+    return root.find(".//tcx:Position", ns) is not None
+
+
+def get_sleep_list(
+    db: Session,
+    user_tokens: models.UserTokens,
+    before_date: str,
+    limit: int = 100,
+) -> list:
+    """Fetch up to `limit` sleep records before a date using the list endpoint (one API call)."""
+    url = (
+        f"https://api.fitbit.com/1.2/user/-/sleep/list.json"
+        f"?beforeDate={before_date}&offset=0&limit={limit}&sort=desc"
+    )
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get("sleep", [])
+
+
+def get_activity_time_series(
+    db: Session,
+    user_tokens: models.UserTokens,
+    resource: str,
+    from_date: str,
+    to_date: str,
+) -> list:
+    """Fetch a daily time series for an activity resource over a date range (one API call).
+
+    Returns list of {"dateTime": "YYYY-MM-DD", "value": "<string>"}.
+    """
+    url = f"https://api.fitbit.com/1/user/-/activities/{resource}/date/{from_date}/{to_date}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get(f"activities-{resource}", [])
+
+
+def get_resting_hr_time_series(
+    db: Session,
+    user_tokens: models.UserTokens,
+    from_date: str,
+    to_date: str,
+) -> dict:
+    """Fetch resting heart rate for a date range. Returns {date_str: resting_hr_int}."""
+    url = f"https://api.fitbit.com/1/user/-/activities/heart/date/{from_date}/{to_date}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return {}
+    result = {}
+    for entry in response.json().get("activities-heart", []):
+        val = entry.get("value")
+        if isinstance(val, dict) and "restingHeartRate" in val:
+            result[entry["dateTime"]] = val["restingHeartRate"]
+    return result
+
+
+def get_sleep_for_date(
+    db: Session,
+    user_tokens: models.UserTokens,
+    date_str: str,
+) -> list:
+    """Fetch Fitbit sleep logs for a given date (YYYY-MM-DD). Returns raw sleep list."""
+    url = f"https://api.fitbit.com/1.2/user/-/sleep/date/{date_str}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get("sleep", [])
+
+
+def get_daily_activity(
+    db: Session,
+    user_tokens: models.UserTokens,
+    date_str: str,
+) -> Optional[dict]:
+    """Fetch Fitbit daily activity summary for a given date (YYYY-MM-DD)."""
+    url = f"https://api.fitbit.com/1/user/-/activities/date/{date_str}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return None
+    return response.json().get("summary")
 
 
 def get_fitbit_activity(

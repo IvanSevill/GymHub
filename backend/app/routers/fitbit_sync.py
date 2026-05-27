@@ -126,7 +126,7 @@ async def sync_fitbit_bulk(
 
             log_id = str(activity.get("logId", "")) or None
             azm = fitbit_utils.extract_azm(activity)
-            has_gps = bool(activity.get("hasGps", False))
+            has_gps = fitbit_utils.probe_has_gps(db, user_tokens, log_id or "") if log_id else False
 
             existing_fd = workout.fitbit_data
             if existing_fd:
@@ -244,10 +244,11 @@ async def sync_fitbit_create_missing(
         db.add(workout)
         db.flush()
 
+        new_log_id = str(activity.get("logId", ""))
         azm = fitbit_utils.extract_azm(activity)
         fitbit_data = models.FitbitData(
             workout_id=workout.id,
-            fitbit_log_id=str(activity.get("logId", "")),
+            fitbit_log_id=new_log_id,
             calories=activity.get("calories", 0),
             heart_rate_avg=activity.get("averageHeartRate", 0),
             duration_ms=activity.get("duration", 0),
@@ -257,7 +258,7 @@ async def sync_fitbit_create_missing(
             azm_fat_burn=azm.get("fatBurnMinutes", 0),
             azm_cardio=azm.get("cardioMinutes", 0),
             azm_peak=azm.get("peakMinutes", 0),
-            has_gps=bool(activity.get("hasGps", False)),
+            has_gps=fitbit_utils.probe_has_gps(db, user_tokens, new_log_id),
         )
         db.add(fitbit_data)
         db.flush()
@@ -404,6 +405,49 @@ async def sync_fitbit_to_workout(
         db.commit()
 
     return fitbit_data
+
+
+@router.post("/sync-gps-flags", response_model=dict)
+async def sync_gps_flags(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Retroactively probe GPS for FitbitData records that have a log_id but has_gps=False."""
+    user_tokens = (
+        db.query(models.UserTokens)
+        .filter(models.UserTokens.user_id == current_user.id)
+        .first()
+    )
+    if not user_tokens or not user_tokens.fitbit_access_token:
+        raise HTTPException(status_code=400, detail="Fitbit not connected.")
+
+    skip_names = ("weights", "walk")
+    candidates = (
+        db.query(models.FitbitData)
+        .join(models.Workout, models.FitbitData.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.FitbitData.fitbit_log_id.isnot(None),
+            models.FitbitData.fitbit_log_id != "",
+            models.FitbitData.has_gps.is_(False),
+        )
+        .all()
+    )
+
+    checked, updated = 0, 0
+    for fd in candidates:
+        if fd.activity_name and fd.activity_name.lower() in skip_names:
+            continue
+        checked += 1
+        try:
+            if fitbit_utils.probe_has_gps(db, user_tokens, fd.fitbit_log_id):
+                fd.has_gps = True
+                updated += 1
+        except Exception as e:
+            logger.warning("GPS probe failed for log_id %s: %s", fd.fitbit_log_id, e)
+
+    db.commit()
+    return {"updated": updated, "checked": checked}
 
 
 @router.get("/{workout_id}/route", response_model=list)

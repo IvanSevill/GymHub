@@ -10,7 +10,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from .database import Base, engine  # noqa: E402
-from .routers import analytics, auth_routes, exercises, fitbit_sync, workouts  # noqa: E402
+from .routers import analytics, auth_routes, exercises, fitbit_health, fitbit_sync, workouts  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,6 +57,7 @@ async def global_exception_handler(request, exc):
 # Include routers — fitbit_sync before workouts so specific paths match before /{workout_id}
 app.include_router(auth_routes.router)
 app.include_router(exercises.router)
+app.include_router(fitbit_health.router)
 app.include_router(fitbit_sync.router)
 app.include_router(workouts.router)
 app.include_router(analytics.router)
