@@ -17,6 +17,7 @@ import Workouts from "./pages/Workouts";
 import Calendar from "./pages/Calendar";
 import Settings from "./pages/Settings";
 import Records from "./pages/Records";
+import FitbitHealth from "./pages/FitbitHealth";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import { workoutService } from "./services/workout";
@@ -110,6 +111,14 @@ const AppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <Records />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/salud"
+          element={
+            <ProtectedRoute>
+              <FitbitHealth />
             </ProtectedRoute>
           }
         />

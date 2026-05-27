@@ -1,7 +1,7 @@
 import base64
 import logging
 import os
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -179,6 +179,52 @@ def get_fitbit_route(
             continue
 
     return points
+
+
+def probe_has_gps(
+    db: Session,
+    user_tokens: models.UserTokens,
+    log_id: str,
+) -> bool:
+    """Return True if the Fitbit activity TCX contains at least one GPS Position element."""
+    if not log_id:
+        return False
+    url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return False
+    ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
+    try:
+        root = ET.fromstring(response.text)
+    except ET.ParseError:
+        return False
+    return root.find(".//tcx:Position", ns) is not None
+
+
+def get_sleep_for_date(
+    db: Session,
+    user_tokens: models.UserTokens,
+    date_str: str,
+) -> list:
+    """Fetch Fitbit sleep logs for a given date (YYYY-MM-DD). Returns raw sleep list."""
+    url = f"https://api.fitbit.com/1.2/user/-/sleep/date/{date_str}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return []
+    return response.json().get("sleep", [])
+
+
+def get_daily_activity(
+    db: Session,
+    user_tokens: models.UserTokens,
+    date_str: str,
+) -> Optional[dict]:
+    """Fetch Fitbit daily activity summary for a given date (YYYY-MM-DD)."""
+    url = f"https://api.fitbit.com/1/user/-/activities/date/{date_str}.json"
+    response = _fitbit_get(db, user_tokens, url)
+    if response is None:
+        return None
+    return response.json().get("summary")
 
 
 def get_fitbit_activity(

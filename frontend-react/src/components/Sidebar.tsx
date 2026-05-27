@@ -7,6 +7,7 @@ import {
   Settings,
   X,
   Trophy,
+  Heart,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
@@ -21,6 +22,7 @@ const navItems = [
   { to: "/calendar", icon: <CalendarIcon size={18} />, label: "Calendario" },
   { to: "/workouts", icon: <Dumbbell size={18} />, label: "Entrenamientos" },
   { to: "/records", icon: <Trophy size={18} />, label: "Récords" },
+  { to: "/salud", icon: <Heart size={18} />, label: "Salud" },
 ];
 
 const SidebarContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
