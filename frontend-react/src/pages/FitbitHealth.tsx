@@ -185,13 +185,7 @@ const FitbitHealth: React.FC = () => {
             value={days}
             onChange={setDays}
           />
-          <button
-            onClick={handleSync}
-            disabled={syncing || autoSyncing}
-            className="px-4 py-2 bg-primary text-white font-bold rounded-xl text-sm hover:bg-primary/80 disabled:opacity-50 transition-colors"
-          >
-            {syncing ? "Sincronizando…" : "Sincronizar"}
-          </button>
+          
         </div>
       </div>
 
