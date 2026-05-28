@@ -15,23 +15,11 @@ import {
 import { motion } from "framer-motion";
 import { Moon } from "lucide-react";
 import type { SleepLog } from "../../services/fitbit";
+import { CHART_TOOLTIP, fmtDate, xTickInterval } from "./chartUtils";
 
 interface Props {
   data: SleepLog[];
 }
-
-const TOOLTIP = {
-  contentStyle: {
-    background: "#0f1729",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "14px",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-  },
-  labelStyle: { color: "#94a3b8", fontSize: 11 },
-  itemStyle: { fontWeight: "700", fontSize: "13px" },
-};
-
-const fmtDate = (d: string) => `${d.slice(8)}/${d.slice(5, 7)}`;
 
 const HISTOGRAM_COLORS = ["#ef4444", "#f59e0b", "#f97316", "#10b981"];
 
@@ -97,7 +85,7 @@ const SleepCharts: React.FC<Props> = ({ data }) => {
     [sorted],
   );
 
-  const xInterval = Math.max(0, Math.ceil(sorted.length / 8) - 1);
+  const xInterval = xTickInterval(sorted.length);
 
   if (!sorted.length) {
     return (
@@ -175,7 +163,7 @@ const SleepCharts: React.FC<Props> = ({ data }) => {
                   width={32}
                 />
                 <Tooltip
-                  {...TOOLTIP}
+                  {...CHART_TOOLTIP}
                   formatter={(v, name) => {
                     const n = v as number;
                     if (name === "Horas") return [`${n.toFixed(1)}h`, name];
@@ -249,7 +237,7 @@ const SleepCharts: React.FC<Props> = ({ data }) => {
                   width={24}
                 />
                 <Tooltip
-                  {...TOOLTIP}
+                  {...CHART_TOOLTIP}
                   cursor={{ fill: "rgba(255,255,255,0.02)" }}
                   formatter={(v) => {
                     const n = v as number;
@@ -307,7 +295,7 @@ const SleepCharts: React.FC<Props> = ({ data }) => {
                 width={34}
               />
               <Tooltip
-                {...TOOLTIP}
+                {...CHART_TOOLTIP}
                 cursor={{ fill: "rgba(255,255,255,0.02)" }}
                 formatter={(v, name) => [
                   `${v as number} min`,

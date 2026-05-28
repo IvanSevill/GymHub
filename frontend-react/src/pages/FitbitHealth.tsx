@@ -14,22 +14,8 @@ import { PERIOD_OPTIONS } from "../constants/periods";
 import HealthKpiCards from "../components/health/HealthKpiCards";
 import ActivityCharts from "../components/health/ActivityCharts";
 import SleepCharts from "../components/health/SleepCharts";
-
-const HEALTH_PERIODS = PERIOD_OPTIONS as unknown as {
-  value: string;
-  label: string;
-}[];
-
-function fmtMin(ms: number): string {
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return "—";
-  return iso.slice(11, 16);
-}
+import SleepTable from "../components/health/SleepTable";
+import ActivityTable from "../components/health/ActivityTable";
 
 const FitbitHealth: React.FC = () => {
   const { user } = useAuth();
@@ -160,7 +146,7 @@ const FitbitHealth: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <PeriodSelector
-            options={HEALTH_PERIODS}
+            options={PERIOD_OPTIONS}
             value={days}
             onChange={setDays}
           />
@@ -215,150 +201,9 @@ const FitbitHealth: React.FC = () => {
 
             {tablesOpen && (
               <div className="border-t border-white/10 p-4 space-y-8">
-                {currentSleep.length > 0 && (
-                  <section>
-                    <h3 className="text-white font-black text-sm mb-3">
-                      Sueño
-                    </h3>
-                    <div className="overflow-x-auto rounded-2xl border border-white/10">
-                      <table className="w-full text-sm text-white">
-                        <thead>
-                          <tr className="border-b border-white/10 text-left text-slate-500 text-[10px] uppercase tracking-widest">
-                            <th className="px-4 py-3">Fecha</th>
-                            <th className="px-4 py-3">Inicio</th>
-                            <th className="px-4 py-3">Fin</th>
-                            <th className="px-4 py-3">Duración</th>
-                            <th className="px-4 py-3">En cama</th>
-                            <th className="px-4 py-3">Eficiencia</th>
-                            <th className="px-4 py-3">Profundo</th>
-                            <th className="px-4 py-3">Ligero</th>
-                            <th className="px-4 py-3">REM</th>
-                            <th className="px-4 py-3">Despierto</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {currentSleep.map((s) => (
-                            <tr
-                              key={s.id}
-                              className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                            >
-                              <td className="px-4 py-3 font-bold">{s.date}</td>
-                              <td className="px-4 py-3 text-slate-400">
-                                {fmtTime(s.start_time)}
-                              </td>
-                              <td className="px-4 py-3 text-slate-400">
-                                {fmtTime(s.end_time)}
-                              </td>
-                              <td className="px-4 py-3 font-bold">
-                                {fmtMin(s.duration_ms)}
-                              </td>
-                              <td className="px-4 py-3 text-slate-400">
-                                {s.time_in_bed}m
-                              </td>
-                              <td className="px-4 py-3">
-                                <span
-                                  className={`font-black ${
-                                    s.efficiency >= 85
-                                      ? "text-green-400"
-                                      : s.efficiency >= 70
-                                        ? "text-yellow-400"
-                                        : "text-red-400"
-                                  }`}
-                                >
-                                  {s.efficiency}%
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-blue-400 font-bold">
-                                {s.minutes_deep}m
-                              </td>
-                              <td className="px-4 py-3 text-slate-400">
-                                {s.minutes_light}m
-                              </td>
-                              <td className="px-4 py-3 text-purple-400 font-bold">
-                                {s.minutes_rem}m
-                              </td>
-                              <td className="px-4 py-3 text-slate-500">
-                                {s.minutes_wake}m
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
-                )}
-
+                {currentSleep.length > 0 && <SleepTable data={currentSleep} />}
                 {currentDaily.length > 0 && (
-                  <section>
-                    <h3 className="text-white font-black text-sm mb-3">
-                      Actividad diaria
-                    </h3>
-                    <div className="overflow-x-auto rounded-2xl border border-white/10">
-                      <table className="w-full text-sm text-white">
-                        <thead>
-                          <tr className="border-b border-white/10 text-left text-slate-500 text-[10px] uppercase tracking-widest">
-                            <th className="px-4 py-3">Fecha</th>
-                            <th className="px-4 py-3">Pasos</th>
-                            <th className="px-4 py-3">Pisos</th>
-                            <th className="px-4 py-3">FC reposo</th>
-                            <th className="px-4 py-3">Calorías</th>
-                            <th className="px-4 py-3">Distancia</th>
-                            <th className="px-4 py-3">Sedentario</th>
-                            <th className="px-4 py-3">Ligero</th>
-                            <th className="px-4 py-3">Moderado</th>
-                            <th className="px-4 py-3">Intenso</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {currentDaily.map((d) => (
-                            <tr
-                              key={d.id}
-                              className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                            >
-                              <td className="px-4 py-3 font-bold">{d.date}</td>
-                              <td className="px-4 py-3 font-black">
-                                {d.steps.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-slate-400">
-                                {d.floors}
-                              </td>
-                              <td className="px-4 py-3">
-                                {d.resting_heart_rate > 0 ? (
-                                  <span className="text-red-400 font-bold">
-                                    {d.resting_heart_rate} bpm
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-600">—</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-orange-400">
-                                {d.calories_out > 0
-                                  ? `${d.calories_out.toLocaleString()} kcal`
-                                  : "—"}
-                              </td>
-                              <td className="px-4 py-3 text-slate-400">
-                                {d.distance_km > 0
-                                  ? `${d.distance_km.toFixed(2)} km`
-                                  : "—"}
-                              </td>
-                              <td className="px-4 py-3 text-slate-500">
-                                {d.minutes_sedentary}m
-                              </td>
-                              <td className="px-4 py-3 text-slate-400">
-                                {d.minutes_lightly_active}m
-                              </td>
-                              <td className="px-4 py-3 text-yellow-400">
-                                {d.minutes_fairly_active}m
-                              </td>
-                              <td className="px-4 py-3 text-green-400 font-bold">
-                                {d.minutes_very_active}m
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
+                  <ActivityTable data={currentDaily} />
                 )}
               </div>
             )}

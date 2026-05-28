@@ -97,9 +97,7 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
           </div>
         </div>
         <PeriodSelector
-          options={
-            PERIOD_OPTIONS as unknown as { value: string; label: string }[]
-          }
+          options={PERIOD_OPTIONS}
           value={days}
           onChange={setDays}
         />

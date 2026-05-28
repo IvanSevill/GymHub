@@ -106,9 +106,7 @@ const FrequencyAnalysisCard: React.FC = () => {
         </div>
         <div className="flex flex-wrap gap-2">
           <PeriodSelector
-            options={
-              PERIOD_OPTIONS as unknown as { value: string; label: string }[]
-            }
+            options={PERIOD_OPTIONS}
             value={String(frequencyDays)}
             onChange={(v) => setFrequencyDays(Number(v))}
             activeClass="bg-secondary shadow-lg shadow-secondary/20"

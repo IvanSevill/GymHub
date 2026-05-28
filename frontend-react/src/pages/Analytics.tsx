@@ -75,9 +75,7 @@ const Analytics: React.FC = () => {
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           <PeriodSelector
-            options={
-              GLOBAL_PERIODS as unknown as { value: string; label: string }[]
-            }
+            options={GLOBAL_PERIODS}
             value={globalDays}
             onChange={setGlobalDays}
           />

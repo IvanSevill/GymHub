@@ -17,23 +17,11 @@ import {
 import { motion } from "framer-motion";
 import { Activity } from "lucide-react";
 import type { DailyHealth } from "../../services/fitbit";
+import { CHART_TOOLTIP, fmtDate, xTickInterval } from "./chartUtils";
 
 interface Props {
   data: DailyHealth[];
 }
-
-const TOOLTIP = {
-  contentStyle: {
-    background: "#0f1729",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "14px",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-  },
-  labelStyle: { color: "#94a3b8", fontSize: 11 },
-  itemStyle: { fontWeight: "700", fontSize: "13px" },
-};
-
-const fmtDate = (d: string) => `${d.slice(8)}/${d.slice(5, 7)}`;
 
 const ActivityCharts: React.FC<Props> = ({ data }) => {
   const sorted = useMemo(
@@ -90,7 +78,7 @@ const ActivityCharts: React.FC<Props> = ({ data }) => {
     [sorted],
   );
 
-  const xInterval = Math.max(0, Math.ceil(sorted.length / 8) - 1);
+  const xInterval = xTickInterval(sorted.length);
 
   if (!sorted.length) {
     return (
@@ -161,7 +149,7 @@ const ActivityCharts: React.FC<Props> = ({ data }) => {
                   width={32}
                 />
                 <Tooltip
-                  {...TOOLTIP}
+                  {...CHART_TOOLTIP}
                   cursor={{ stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }}
                   formatter={(v) => [
                     `${(v as number).toLocaleString()} pasos`,
@@ -226,7 +214,7 @@ const ActivityCharts: React.FC<Props> = ({ data }) => {
                   width={30}
                 />
                 <Tooltip
-                  {...TOOLTIP}
+                  {...CHART_TOOLTIP}
                   cursor={{ fill: "rgba(255,255,255,0.02)" }}
                   formatter={(v, name) => [
                     `${(v as number).toFixed(1)}%`,
@@ -322,7 +310,7 @@ const ActivityCharts: React.FC<Props> = ({ data }) => {
                 width={30}
               />
               <Tooltip
-                {...TOOLTIP}
+                {...CHART_TOOLTIP}
                 cursor={{ fill: "rgba(255,255,255,0.02)" }}
                 formatter={(v, name) => {
                   const n = v as number;
