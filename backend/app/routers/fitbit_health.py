@@ -35,6 +35,14 @@ _RESOURCE_FIELD_MAP = {
 }
 
 
+def _apply_upsert(db: Session, existing, model_class, fields: dict) -> None:
+    if existing:
+        for k, v in fields.items():
+            setattr(existing, k, v)
+    else:
+        db.add(model_class(**fields))
+
+
 def _last_synced_date(db: Session, user_id: str, model) -> Optional[str]:
     """Return the most recent date string stored in `model` for this user, or None."""
     result = (
@@ -110,11 +118,7 @@ def _upsert_sleep(db: Session, user_id: str, entry: dict) -> bool:
         .filter(models.SleepLog.fitbit_log_id == log_id)
         .first()
     )
-    if existing:
-        for k, v in fields.items():
-            setattr(existing, k, v)
-    else:
-        db.add(models.SleepLog(**fields))
+    _apply_upsert(db, existing, models.SleepLog, fields)
     return True
 
 
@@ -185,11 +189,7 @@ def _sync_daily_range(
             .first()
         )
         fields = {"user_id": user_id, "date": date_str, **values}
-        if existing:
-            for k, v in fields.items():
-                setattr(existing, k, v)
-        else:
-            db.add(models.DailyHealth(**fields))
+        _apply_upsert(db, existing, models.DailyHealth, fields)
 
     return len(ts)
 
