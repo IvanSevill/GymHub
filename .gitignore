@@ -48,6 +48,11 @@ backend_err.txt
 # Claude Code local settings (machine-specific permissions)
 .claude/
 
+# Debug / generated output
+backend/analysis_output.txt
+backend/dry_run_output.txt
+backend/parser_feedback.json
+
 # Misc
 *.png
 *.jpg

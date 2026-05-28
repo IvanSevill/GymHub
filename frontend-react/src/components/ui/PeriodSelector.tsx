@@ -6,7 +6,7 @@ interface Option {
 }
 
 interface PeriodSelectorProps {
-  options: Option[];
+  options: readonly Option[];
   value: string;
   onChange: (value: string) => void;
   activeClass?: string;

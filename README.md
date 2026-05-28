@@ -1,137 +1,201 @@
+<div align="center">
+
 # GymHub
 
-Personal fitness platform for tracking workouts, planning routines, and visualizing analytics. Integrates with Google Calendar and Fitbit.
+**Plataforma personal de fitness — tracking, análisis y planificación de entrenamientos**
+
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-prod-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
+</div>
 
 ---
 
-## Stack
+## ¿Qué es GymHub?
 
-| Layer | Tech |
+GymHub es una aplicación web para atletas que quieren entender su progreso, no solo registrarlo. Conecta los datos de tus entrenamientos con tu actividad de Fitbit y tu Google Calendar para darte una visión analítica completa de tu rendimiento.
+
+### Funcionalidades principales
+
+| Módulo | Qué hace |
 |---|---|
-| Backend | FastAPI · SQLAlchemy · PostgreSQL (SQLite for dev) |
-| Frontend | React 19 · Vite · Tailwind CSS v4 · Recharts · Framer Motion |
-| Auth | Google OAuth 2.0 · JWT |
-| Integrations | Google Calendar API · Fitbit API |
-| Deploy | Render (backend + frontend + PostgreSQL) |
+| **Entrenamientos** | Registra ejercicios, series, pesos y repeticiones. Historial completo. |
+| **Análisis de rendimiento** | KPIs con comparación de períodos, tendencias de volumen, frecuencia semanal, progresión de cargas por ejercicio. |
+| **Salud (Fitbit)** | Sincronización automática de actividad, sueño, frecuencia cardíaca y zonas activas. |
+| **Calendario** | Integración bidireccional con Google Calendar. Visualiza y planifica entrenamientos. |
+| **Récords** | Histórico de máximos por ejercicio y detección automática de PRs. |
 
 ---
 
-## Local development
+## Stack tecnológico
 
-### Prerequisites
+```
+┌─────────────────────────────────────────────────────┐
+│  Frontend                                           │
+│  React 19 · Vite · TypeScript · Tailwind CSS v4    │
+│  Recharts · Framer Motion · TanStack Query          │
+├─────────────────────────────────────────────────────┤
+│  Backend                                            │
+│  FastAPI · SQLAlchemy · Pydantic · Ruff             │
+├─────────────────────────────────────────────────────┤
+│  Base de datos                                      │
+│  PostgreSQL (producción) · SQLite (local)           │
+├─────────────────────────────────────────────────────┤
+│  Auth & Integraciones                               │
+│  Google OAuth 2.0 · JWT · Fitbit API · Calendar API │
+├─────────────────────────────────────────────────────┤
+│  Deploy                                             │
+│  Render (backend + frontend + PostgreSQL)           │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## Puesta en marcha local
+
+### Requisitos
 
 - Python 3.11+
 - Node 20+
+- Credenciales de Google OAuth ([Google Cloud Console](https://console.cloud.google.com/))
+- Credenciales de Fitbit ([Fitbit Developer](https://dev.fitbit.com/))
 
-### Backend
+### 1. Backend
 
 ```bash
 cd backend
-cp .env.example .env        # fill in your credentials
+cp .env.example .env        # rellena las variables (ver tabla abajo)
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
+# API disponible en http://localhost:8000
+# Docs interactivos en http://localhost:8000/docs
 ```
 
-### Frontend
+### 2. Frontend
 
 ```bash
 cd frontend-react
-cp .env.example .env        # set VITE_API_URL and VITE_GOOGLE_CLIENT_ID
+cp .env.example .env        # rellena VITE_API_URL y VITE_GOOGLE_CLIENT_ID
 npm install
-npm run dev                  # http://localhost:5173
+npm run dev
+# App disponible en http://localhost:5173
 ```
 
 ---
 
-## Environment variables
+## Variables de entorno
 
-### Backend (`backend/.env`)
+### Backend — `backend/.env`
 
-| Variable | Description |
+| Variable | Descripción |
 |---|---|
-| `DATABASE_URL` | SQLAlchemy connection string. Defaults to `sqlite:///./test.db` |
-| `SECRET_KEY` | JWT signing key. Use a random 32-byte hex string in production |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `FITBIT_CLIENT_ID` | Fitbit OAuth app ID |
-| `FITBIT_CLIENT_SECRET` | Fitbit OAuth app secret |
-| `FRONTEND_URL` | Frontend origin added to CORS allowlist (e.g. `https://gymhub-frontend.onrender.com`) |
-| `ROOT_EMAILS` | Comma-separated list of admin email addresses |
+| `DATABASE_URL` | Conexión SQLAlchemy. Por defecto: `sqlite:///./gymhub.db` |
+| `SECRET_KEY` | Clave JWT. En producción usa un hex aleatorio de 32 bytes |
+| `GOOGLE_CLIENT_ID` | Client ID de Google OAuth |
+| `GOOGLE_CLIENT_SECRET` | Client secret de Google OAuth |
+| `FITBIT_CLIENT_ID` | App ID de Fitbit OAuth |
+| `FITBIT_CLIENT_SECRET` | App secret de Fitbit OAuth |
+| `FRONTEND_URL` | Origen del frontend para CORS (ej. `http://localhost:5173`) |
+| `ROOT_EMAILS` | Emails de administrador separados por coma |
 
-### Frontend (`frontend-react/.env`)
+### Frontend — `frontend-react/.env`
 
-| Variable | Description |
+| Variable | Descripción |
 |---|---|
-| `VITE_API_URL` | Backend base URL (e.g. `https://gymhub-backend.onrender.com`) |
-| `VITE_GOOGLE_CLIENT_ID` | Same Google OAuth client ID as the backend |
+| `VITE_API_URL` | URL base del backend (ej. `http://localhost:8000`) |
+| `VITE_GOOGLE_CLIENT_ID` | Mismo Client ID de Google OAuth que el backend |
 
 ---
 
-## Deploy to Render
-
-The repo ships with a `render.yaml` Blueprint. To deploy:
-
-1. Push this repo to GitHub.
-2. In the [Render dashboard](https://dashboard.render.com), click **New → Blueprint** and point it at your repo.
-3. Render will create:
-   - `gymhub-backend` — Python web service (FastAPI)
-   - `gymhub-frontend` — Static site (React/Vite)
-   - `gymhub-db` — PostgreSQL database
-4. After the first deploy, set the secrets marked `sync: false` in the Render dashboard:
-   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-   - `FITBIT_CLIENT_ID`, `FITBIT_CLIENT_SECRET`
-   - `VITE_GOOGLE_CLIENT_ID`
-   - `ROOT_EMAILS`
-5. Update the URLs in `render.yaml` if you use custom domains.
-
-> **Important — Google OAuth redirect URIs**: Add your Render backend URL (`https://gymhub-backend.onrender.com`) to the *Authorized redirect URIs* in the Google Cloud Console, and add your frontend URL to *Authorized JavaScript origins*.
-
----
-
-## Project structure
+## Estructura del proyecto
 
 ```
-.
-├── backend/                FastAPI application
+GymHub/
+├── backend/
 │   ├── app/
-│   │   ├── main.py         App factory, CORS, router registration
-│   │   ├── database.py     SQLAlchemy engine & session
-│   │   ├── models.py       ORM models (User, Workout, Exercise, …)
-│   │   ├── schemas.py      Pydantic request/response schemas
-│   │   ├── auth.py         JWT + Google OAuth helpers
-│   │   ├── calendar_utils.py  Google Calendar read/write
-│   │   ├── fitbit_utils.py    Fitbit token refresh + activity fetch
+│   │   ├── main.py              # Entrada FastAPI, CORS, routers
+│   │   ├── models.py            # ORM: User, Workout, Exercise, ExerciseSet, FitbitData…
+│   │   ├── schemas.py           # Schemas Pydantic
+│   │   ├── auth.py              # JWT + Google OAuth
+│   │   ├── database.py          # Engine SQLAlchemy
+│   │   ├── fitbit_utils.py      # Sincronización Fitbit
+│   │   ├── calendar_utils.py    # Integración Google Calendar
 │   │   └── routers/
-│   │       ├── auth_routes.py
 │   │       ├── workouts.py
 │   │       ├── exercises.py
-│   │       └── analytics.py
+│   │       ├── analytics.py     # KPIs, volumen, frecuencia, progresión
+│   │       ├── fitbit_sync.py
+│   │       ├── fitbit_health.py
+│   │       └── auth_routes.py
 │   ├── requirements.txt
 │   └── .env.example
-├── frontend-react/         React + Vite SPA
+│
+├── frontend-react/
 │   ├── src/
-│   │   ├── pages/          Dashboard, Calendar, Analytics, …
-│   │   ├── components/     Layout, Sidebar
-│   │   ├── services/       Axios API clients
-│   │   └── context/        AuthContext
+│   │   ├── pages/               # Analytics, Dashboard, Calendar, Workouts…
+│   │   ├── components/
+│   │   │   ├── analytics/       # KPICards, FrequencyAnalysisCard, VolumeTrendChart…
+│   │   │   ├── calendar/        # CalendarGrid, RouteMap, modals…
+│   │   │   ├── health/          # ActivityCharts, SleepCharts, HealthKpiCards
+│   │   │   └── ui/              # PeriodSelector, Skeleton, ToastContainer
+│   │   ├── services/            # Clientes Axios por dominio
+│   │   └── context/             # AuthContext, ToastContext
 │   └── .env.example
-└── render.yaml             Render Blueprint (IaC)
+│
+├── docs/                        # Guías y principios de diseño
+│   ├── git-workflow.md
+│   └── data-analysis-design-principles.md
+│
+├── render.yaml                  # Blueprint de deploy en Render
+└── CLAUDE.md                    # Guía para Claude Code
 ```
 
 ---
 
-## Code quality
+## Deploy en Render
+
+El repositorio incluye un `render.yaml` (Blueprint) listo para usar:
+
+1. Sube el repo a GitHub.
+2. En [Render](https://dashboard.render.com) → **New → Blueprint** → apunta al repo.
+3. Render creará automáticamente:
+   - `gymhub-backend` — servicio Python (FastAPI)
+   - `gymhub-frontend` — sitio estático (React/Vite)
+   - `gymhub-db` — base de datos PostgreSQL
+4. Añade los secretos marcados como `sync: false` en el dashboard de Render:
+   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FITBIT_CLIENT_ID`, `FITBIT_CLIENT_SECRET`, `VITE_GOOGLE_CLIENT_ID`, `ROOT_EMAILS`
+
+> **Google OAuth:** Añade la URL del backend a *Authorized redirect URIs* y la del frontend a *Authorized JavaScript origins* en Google Cloud Console.
+
+---
+
+## Desarrollo
+
+### Calidad de código
 
 ```bash
-# Backend — run after every .py edit
+# Tras cada edición de .py
 cd backend && ruff check . && ruff check --fix .
 
-# Frontend — run after every .ts/.tsx edit
-cd frontend-react && npx prettier --write src/
+# Tras cada edición de .ts/.tsx
+cd frontend-react && npx prettier --write <archivo> && npx tsc --noEmit
 ```
+
+### Flujo de trabajo con Git
+
+```
+main        ← producción (solo recibe releases desde develop)
+  └── develop   ← integración (acumula features)
+        └── feat/<nombre>   ← una rama por feature
+```
+
+Las features se trabajan en ramas `feat/`, se abren como PR a `develop` y se mergean con `--no-ff`. El detalle completo está en [`docs/git-workflow.md`](docs/git-workflow.md).
 
 ---
 
-## License
+## Licencia
 
 MIT

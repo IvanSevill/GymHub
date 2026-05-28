@@ -1,71 +1,80 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository. This is the single source of truth — all other docs live in `docs/`.
+
+---
 
 ## Project
 
-**GymHub** — a personal fitness platform for tracking workouts, planning routines, and visualizing analytics. It integrates with Google Calendar and Fitbit.
+**GymHub** — personal fitness platform for tracking workouts, planning routines, and visualizing analytics. Integrates with Google Calendar and Fitbit.
+
+**Owner:** Iván Jesús Sevillano — 3rd-year Software Engineering student (University of Seville / Erasmus at University of Pannonia).
+
+---
 
 ## Repository Structure
 
 ```
-backend/    FastAPI backend
-frontend-react/   React/Vite frontend
+backend/            FastAPI backend (Python)
+frontend-react/     React/Vite frontend (TypeScript)
+docs/               Design docs, workflow guides, principles
 ```
+
+---
 
 ## Commands
 
 ### Backend
 
 ```powershell
-# Install dependencies
 cd backend
-pip install -r requirements.txt
-
-# Run dev server (run from inside the backend/ directory)
-cd backend
-uvicorn app.main:app --reload
-
-# Lint (must run after every .py edit)
-cd backend
-ruff check .
-ruff check --fix .
+pip install -r requirements.txt          # install deps
+uvicorn app.main:app --reload            # dev server
+ruff check .                             # lint — run after EVERY .py edit
+ruff check --fix .                       # auto-fix lint issues
 ```
 
 ### Frontend
 
 ```powershell
-# Install dependencies
 cd frontend-react
-npm install
-
-# Dev server
-npm run dev           # http://localhost:5173
-
-# Build
-npm run build         # tsc then vite build
-
-# Format (must run after every .ts/.tsx/.js/.jsx edit)
-npx prettier --write <file>
+npm install                              # install deps
+npm run dev                              # dev server → http://localhost:5173
+npm run build                            # tsc + vite build
+npx prettier --write <file>             # format — run after EVERY .ts/.tsx edit
+npx tsc --noEmit                         # type check
 ```
+
+---
 
 ## Mandatory Post-Edit Verification
 
-- **Python files**: Run `ruff check .` immediately after every edit. Fix all issues before finishing.
-- **Frontend files**: Run `npx prettier --write <file>` immediately after every edit.
+**Never finish a turn without running these:**
+
+| File type | Command |
+|---|---|
+| `.py` | `cd backend && ruff check .` — fix all issues before concluding |
+| `.ts` / `.tsx` / `.js` / `.jsx` | `npx prettier --write <file>` |
+| After significant frontend changes | `npx tsc --noEmit` |
+
+If a check fails, investigate and fix autonomously — do not leave a failing state.
+
+---
 
 ## Environment Setup
 
-Copy `backend/.env.example` to `backend/.env` and fill in:
-- `DATABASE_URL` — SQLite default: `sqlite:///./test.db`; PostgreSQL for production
+`backend/.env` (copy from `backend/.env.example`):
+- `DATABASE_URL` — `sqlite:///./test.db` for dev, PostgreSQL URL for prod
 - `SECRET_KEY` — JWT signing key
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — for Google OAuth + Calendar
-- `FITBIT_CLIENT_ID` / `FITBIT_CLIENT_SECRET` — for Fitbit integration
-- `FRONTEND_URL` — CORS origin, default `http://localhost:5173`
-- `ROOT_EMAILS` — comma-separated list of admin email addresses
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth + Calendar
+- `FITBIT_CLIENT_ID` / `FITBIT_CLIENT_SECRET` — Fitbit integration
+- `FRONTEND_URL` — CORS origin (default `http://localhost:5173`)
+- `ROOT_EMAILS` — comma-separated admin emails
 
-Frontend requires `frontend-react/.env` with:
+`frontend-react/.env`:
 - `VITE_GOOGLE_CLIENT_ID`
+
+---
 
 ## Architecture
 
@@ -87,18 +96,110 @@ Frontend requires `frontend-react/.env` with:
 - **`services/`** — Axios-based API clients: `api.ts` (base client), `auth.ts`, `workout.ts`, `exercise.ts`, `analytics.ts`.
 - **`pages/`** — Dashboard, Login, Workouts, Calendar, Analytics, Settings, ParserTest, StandardizeExercises.
 - **`components/`** — `Layout.tsx` (wraps all authenticated pages), `Sidebar.tsx`.
+- **`components/analytics/`** — KPICards, WeightProgressCard, FrequencyAnalysisCard, WorkoutFrequencyChart, VolumeTrendChart.
 
-Key libraries: TanStack Query (server state), Recharts (charts), Framer Motion (animations), Tailwind CSS v4, Lucide React (icons).
+Key libraries: TanStack Query (server state), Recharts v3 (charts), Framer Motion (animations), Tailwind CSS v4, Lucide React (icons).
+
+---
+
+## Git Workflow
+
+Full guide: `docs/git-workflow.md`. Summary below.
+
+### Branch model
+
+```
+main        ← production only. Receives merges from develop via release PRs.
+  └── develop   ← integration. Receives feature merges. Always ahead of main.
+        └── feat/<name>   ← one branch per feature, born from develop, dies on merge.
+```
+
+### Feature lifecycle
+
+```powershell
+# 1. Start from develop
+git checkout develop && git pull
+git checkout -b feat/<name>
+
+# 2. Develop, commit with Conventional Commits
+# 3. Push and open PR targeting develop
+git push -u origin feat/<name>
+gh pr create --base develop --title "feat(<scope>): ..."
+
+# 4. Merge with --no-ff (preserves branch lane in git graph) and delete branch
+gh pr merge <n> --merge --delete-branch
+```
+
+**Critical rules:**
+- Always `--no-ff` merges — never fast-forward. Feature branches must appear as a distinct lane in the git graph.
+- After every release (when `develop == main`), create a separation commit on develop before opening any feature:
+  ```powershell
+  git commit --allow-empty -m "chore(develop): begin vX.Y.Z development cycle"
+  git push origin develop
+  ```
+- Never commit directly to `main` or `develop`.
+
+### Release (develop → main)
+
+```powershell
+gh pr create --base main --head develop --title "release: vX.Y.Z — <description>"
+gh pr merge <n> --merge
+git checkout main && git pull
+git tag -a vX.Y.Z -m "release: vX.Y.Z"
+git push origin vX.Y.Z
+# Immediately separate develop from main for the next cycle:
+git checkout develop && git merge main --ff-only
+git commit --allow-empty -m "chore(develop): begin vX.Y.(Z+1) development cycle"
+git push origin develop
+```
+
+---
 
 ## Commit Style
 
-Use **Conventional Commits**: `<type>(<scope>): <short description>`
+**Conventional Commits:** `<type>(<scope>): <short description>`
 
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`, `build`, `revert`
+| Type | When to use |
+|---|---|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `style` | Formatting, no logic change |
+| `refactor` | Restructure without behavior change |
+| `test` | Adding or fixing tests |
+| `chore` | Deps, config, tooling, CI |
+| `perf` | Performance improvement |
+| `revert` | Reverts a previous commit |
 
 Scopes: `backend`, `frontend`, `auth`, `workouts`, `exercises`, `analytics`, `database`, `ui`
 
-Example: `feat(backend): add Fitbit token refresh endpoint`
+Examples:
+```
+feat(analytics): add KPI cards with period comparison
+fix(backend): handle null fitbit duration in summary endpoint
+chore(develop): begin v1.1.0 development cycle
+```
+
+---
+
+## Pull Request Structure
+
+Every PR description must include:
+
+```markdown
+## Summary
+- Bullet list of what changed and why.
+
+## Test plan
+- [ ] Specific thing to verify
+- [ ] Another thing to verify
+```
+
+Additional sections when relevant: **Screenshots** (UI changes), **Related Issues** (`Closes #123`).
+
+Keep PRs small and focused. If a feature is large, split it: backend API first, then frontend.
+
+---
 
 ## Key Conventions
 
@@ -106,4 +207,14 @@ Example: `feat(backend): add Fitbit token refresh endpoint`
 - SOLID principles and Clean Code are mandatory.
 - Never hardcode secrets — always read from `.env` via `python-dotenv` or `import.meta.env`.
 - Use parameterized queries (SQLAlchemy ORM) — never raw string SQL.
-- Feature branches off `main`; no direct commits to `main`.
+- OS: **Windows**, shell: **PowerShell**. Use PowerShell syntax in all scripts.
+- Security: validate input at system boundaries (user input, external APIs). Trust internal code and framework guarantees.
+
+---
+
+## Design Docs
+
+| Doc | Purpose |
+|---|---|
+| `docs/git-workflow.md` | Full git branching guide with diagrams and command reference |
+| `docs/data-analysis-design-principles.md` | 9 analytical chart patterns extracted from the Salud dashboard redesign — use when building analytics views |

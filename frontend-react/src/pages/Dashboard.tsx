@@ -45,8 +45,10 @@ const Dashboard: React.FC = () => {
     ),
   ).size;
 
-  const lastSessionDate = allWorkouts[0]?.start_time
-    ? format(parseISO(allWorkouts[0].start_time), "dd MMM", { locale: es })
+  const now = new Date();
+  const lastPast = allWorkouts.find((w) => parseISO(w.start_time) <= now);
+  const lastSessionDate = lastPast
+    ? format(parseISO(lastPast.start_time), "dd MMM", { locale: es })
     : "—";
 
   const fitbitWorkouts = [...allWorkouts]
@@ -128,18 +130,6 @@ const Dashboard: React.FC = () => {
           <p className="text-slate-500 text-xs font-medium mt-2">
             Inteligencia de entrenamiento basada en datos
           </p>
-        </div>
-        <div
-          className="flex items-center gap-3 px-4 py-2 rounded-2xl"
-          style={{
-            background: "rgba(59,130,246,0.08)",
-            border: "1px solid rgba(59,130,246,0.15)",
-          }}
-        >
-          <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-          <span className="text-xs font-semibold text-accent">
-            Datos en tiempo real
-          </span>
         </div>
       </div>
 
