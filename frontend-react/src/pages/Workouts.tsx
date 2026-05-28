@@ -541,13 +541,13 @@ const Workouts: React.FC = () => {
 
       {showFilters && !loading && workouts.length > 0 && (
         <div className="glass-card p-4 space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between">
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">
               Con datos Fitbit
             </span>
             <button
               onClick={() => setFitbitOnly((v) => !v)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${
+              className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${
                 fitbitOnly ? "bg-primary" : "bg-white/10"
               }`}
             >

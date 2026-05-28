@@ -243,3 +243,16 @@ class VolumeTrendPoint(BaseModel):
     """Total exercise volume (kg) per session date."""
     date: datetime
     volume: float
+
+
+class MuscleBalancePoint(BaseModel):
+    """Volume (kg) for a muscle group in a given ISO week."""
+    week: str
+    muscle: str
+    volume: float
+
+
+class SessionDuration(BaseModel):
+    """Duration (minutes) of a single workout session."""
+    date: datetime
+    duration_min: float
