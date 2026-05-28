@@ -41,6 +41,17 @@ export interface VolumeTrendPoint {
   volume: number;
 }
 
+export interface MuscleBalancePoint {
+  week: string;
+  muscle: string;
+  volume: number;
+}
+
+export interface SessionDuration {
+  date: string;
+  duration_min: number;
+}
+
 export const analyticsService = {
   getWeightProgress: async (
     exerciseId: string,
@@ -94,6 +105,24 @@ export const analyticsService = {
   getVolumeTrend: async (days: number = 90): Promise<VolumeTrendPoint[]> => {
     const response = await api.get<VolumeTrendPoint[]>(
       "/analytics/volume-trend",
+      { params: { days } },
+    );
+    return response.data;
+  },
+  getMuscleBalance: async (
+    days: number = 90,
+  ): Promise<MuscleBalancePoint[]> => {
+    const response = await api.get<MuscleBalancePoint[]>(
+      "/analytics/muscle-balance",
+      { params: { days } },
+    );
+    return response.data;
+  },
+  getSessionDurations: async (
+    days: number = 90,
+  ): Promise<SessionDuration[]> => {
+    const response = await api.get<SessionDuration[]>(
+      "/analytics/session-durations",
       { params: { days } },
     );
     return response.data;
