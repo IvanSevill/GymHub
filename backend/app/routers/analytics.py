@@ -347,6 +347,78 @@ async def get_volume_trend(
     ]
 
 
+@router.get("/muscle-balance", response_model=List[schemas.MuscleBalancePoint])
+async def get_muscle_balance(
+    days: int = Query(90, description="Number of past days to include"),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Volume (kg) per muscle group per ISO week — for stacked bar chart."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (
+        db.query(
+            models.Workout.start_time,
+            models.Muscle.name,
+            models.ExerciseSet.value,
+        )
+        .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
+        .join(models.Exercise, models.ExerciseSet.exercise_id == models.Exercise.id)
+        .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.start_time >= cutoff,
+            models.ExerciseSet.value != "",
+        )
+        .all()
+    )
+    volume_map: dict = {}
+    for start_time, muscle_name, value_str in rows:
+        v = _parse_exercise_value(value_str)
+        if v <= 0:
+            continue
+        key = (start_time.strftime("%G-W%V"), muscle_name)
+        volume_map[key] = volume_map.get(key, 0.0) + v
+    return [
+        {"week": week, "muscle": muscle, "volume": round(v, 1)}
+        for (week, muscle), v in sorted(volume_map.items())
+    ]
+
+
+@router.get("/session-durations", response_model=List[schemas.SessionDuration])
+async def get_session_durations(
+    days: int = Query(90, description="Number of past days to include"),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Duration (minutes) per workout session — for histogram."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (
+        db.query(
+            models.Workout.start_time,
+            models.Workout.end_time,
+            models.FitbitData.duration_ms,
+        )
+        .outerjoin(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.start_time >= cutoff,
+        )
+        .order_by(models.Workout.start_time)
+        .all()
+    )
+    result = []
+    for start_time, end_time, fitbit_ms in rows:
+        if fitbit_ms and fitbit_ms > 0:
+            dur = fitbit_ms / 60000
+        elif end_time and end_time > start_time:
+            dur = (end_time - start_time).total_seconds() / 60
+        else:
+            continue
+        if dur > 0:
+            result.append({"date": start_time, "duration_min": round(dur, 1)})
+    return result
+
+
 @router.get("/exercise-history/{exercise_id}", response_model=List[dict])
 async def get_exercise_history(
     exercise_id: str,
