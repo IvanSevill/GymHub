@@ -11,7 +11,7 @@ import { ToastProvider } from "./context/ToastContext";
 import Layout from "./components/Layout";
 import BackendWakeup from "./components/BackendWakeup";
 import CalendarSetup from "./pages/CalendarSetup";
-import Dashboard from "./pages/Dashboard";
+import Analytics from "./pages/Analytics";
 import Login from "./pages/Login";
 import Workouts from "./pages/Workouts";
 import Calendar from "./pages/Calendar";
@@ -78,7 +78,7 @@ const AppContent: React.FC = () => {
           path="/"
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <Analytics />
             </ProtectedRoute>
           }
         />

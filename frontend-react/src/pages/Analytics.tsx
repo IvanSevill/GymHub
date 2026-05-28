@@ -51,33 +51,35 @@ const Analytics: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      try {
-        const days = Number(globalDays);
-        const [exRes, summaryRes, freqRes, volRes, muscleRes, durRes] =
-          await Promise.all([
-            exerciseService.getExercises(),
-            analyticsService.getSummary(days),
-            analyticsService.getWorkoutFrequency(days),
-            analyticsService.getVolumeTrend(days),
-            analyticsService.getMuscleBalance(days),
-            analyticsService.getSessionDurations(days),
-          ]);
-        setExercises(exRes);
-        setSummary(summaryRes);
-        setFreqData(freqRes);
+      const days = Number(globalDays);
+      const results = await Promise.allSettled([
+        exerciseService.getExercises(),
+        analyticsService.getSummary(days),
+        analyticsService.getWorkoutFrequency(days),
+        analyticsService.getVolumeTrend(days),
+        analyticsService.getMuscleBalance(days),
+        analyticsService.getSessionDurations(days),
+      ]);
+
+      const [exRes, summaryRes, freqRes, volRes, muscleRes, durRes] = results;
+
+      if (exRes.status === "fulfilled") setExercises(exRes.value);
+      if (summaryRes.status === "fulfilled") setSummary(summaryRes.value);
+      if (freqRes.status === "fulfilled") setFreqData(freqRes.value);
+      if (volRes.status === "fulfilled")
         setVolumeData(
-          volRes.map((d) => ({
+          volRes.value.map((d) => ({
             ...d,
             formattedDate: format(parseISO(d.date), "dd MMM", { locale: es }),
           })),
         );
-        setMuscleBalance(muscleRes);
-        setSessionDurations(durRes);
-      } catch {
-        addToast("Error al cargar los datos de análisis", "error");
-      } finally {
-        setLoading(false);
-      }
+      if (muscleRes.status === "fulfilled") setMuscleBalance(muscleRes.value);
+      if (durRes.status === "fulfilled") setSessionDurations(durRes.value);
+
+      if (results.some((r) => r.status === "rejected"))
+        addToast("Error al cargar algunos datos de análisis", "error");
+
+      setLoading(false);
     };
     load();
   }, [globalDays]);
