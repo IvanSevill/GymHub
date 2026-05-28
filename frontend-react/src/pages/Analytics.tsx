@@ -9,6 +9,7 @@ import { useToast } from "../context/ToastContext";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import PeriodSelector from "../components/ui/PeriodSelector";
+import { GLOBAL_PERIODS } from "../constants/periods";
 import KPICards from "../components/analytics/KPICards";
 import WorkoutFrequencyChart from "../components/analytics/WorkoutFrequencyChart";
 import VolumeTrendChart from "../components/analytics/VolumeTrendChart";
@@ -20,14 +21,6 @@ interface VolumeTrendDataPoint {
   volume: number;
   formattedDate: string;
 }
-
-const GLOBAL_PERIODS = [
-  { value: "7", label: "Semana" },
-  { value: "30", label: "Mes" },
-  { value: "90", label: "Trimestre" },
-  { value: "180", label: "Semestre" },
-  { value: "365", label: "Año" },
-];
 
 const Analytics: React.FC = () => {
   const { addToast } = useToast();
@@ -82,22 +75,12 @@ const Analytics: React.FC = () => {
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           <PeriodSelector
-            options={GLOBAL_PERIODS}
+            options={
+              GLOBAL_PERIODS as unknown as { value: string; label: string }[]
+            }
             value={globalDays}
             onChange={setGlobalDays}
           />
-          <div
-            className="flex items-center gap-3 px-4 py-2 rounded-2xl"
-            style={{
-              background: "rgba(59,130,246,0.08)",
-              border: "1px solid rgba(59,130,246,0.15)",
-            }}
-          >
-            <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-            <span className="text-xs font-semibold text-accent">
-              En tiempo real
-            </span>
-          </div>
         </div>
       </div>
 

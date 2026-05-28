@@ -41,7 +41,6 @@ const FitbitHealth: React.FC = () => {
   const [allDaily, setAllDaily] = useState<DailyHealth[]>([]);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [autoSyncing, setAutoSyncing] = useState(false);
   const [tablesOpen, setTablesOpen] = useState(false);
 
@@ -100,26 +99,6 @@ const FitbitHealth: React.FC = () => {
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days, user?.fitbit_connected]);
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const res = await fitbitService.sync();
-      if (res.error) {
-        addToast(res.error, "error");
-        return;
-      }
-      addToast(
-        `Sincronizado: ${res.sleep_synced} noches · ${res.days_synced} días (${res.from_date} → ${res.to_date})`,
-        "success",
-      );
-      await fetchData(Number(days));
-    } catch {
-      addToast("Error al sincronizar Fitbit", "error");
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   // Split into current and previous periods for KPI comparison
   const { currentSleep, prevSleep, currentDaily, prevDaily } = useMemo(() => {
@@ -185,7 +164,6 @@ const FitbitHealth: React.FC = () => {
             value={days}
             onChange={setDays}
           />
-          
         </div>
       </div>
 

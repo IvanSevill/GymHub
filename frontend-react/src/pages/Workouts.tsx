@@ -12,8 +12,11 @@ import {
   MapPin,
   TrendingUp,
   History,
+  Filter,
+  X,
 } from "lucide-react";
 import { workoutService, Workout } from "../services/workout";
+import { exerciseService, Muscle } from "../services/exercise";
 import {
   format,
   parseISO,
@@ -348,10 +351,23 @@ const Workouts: React.FC = () => {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [muscles, setMuscles] = useState<Muscle[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [fitbitOnly, setFitbitOnly] = useState(false);
+  const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
+  const [muscleFilterMode, setMuscleFilterMode] = useState<"and" | "or">("or");
 
   useEffect(() => {
     fetchWorkouts();
+    exerciseService
+      .getMuscles()
+      .then(setMuscles)
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [fitbitOnly, selectedMuscles, muscleFilterMode]);
 
   const fetchWorkouts = async () => {
     try {
@@ -364,8 +380,27 @@ const Workouts: React.FC = () => {
     }
   };
 
-  const upcoming = workouts.filter((w) => isFuture(parseISO(w.start_time)));
-  const history = workouts.filter((w) => !isFuture(parseISO(w.start_time)));
+  const muscleFilterPasses = (workout: Workout): boolean => {
+    if (selectedMuscles.length === 0) return true;
+    const muscleIds = new Set(
+      workout.exercise_sets
+        .map((s) => s.exercise?.muscle?.id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    return muscleFilterMode === "and"
+      ? selectedMuscles.every((id) => muscleIds.has(id))
+      : selectedMuscles.some((id) => muscleIds.has(id));
+  };
+
+  const upcoming = workouts
+    .filter((w) => isFuture(parseISO(w.start_time)))
+    .filter(muscleFilterPasses);
+
+  const history = workouts
+    .filter((w) => !isFuture(parseISO(w.start_time)))
+    .filter(muscleFilterPasses)
+    .filter((w) => (fitbitOnly ? w.fitbit_data != null : true));
+
   const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
   const paginatedHistory = history.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -429,7 +464,10 @@ const Workouts: React.FC = () => {
                 <span className="text-slate-600">
                   {
                     new Set(
-                      workout.exercise_sets
+                      (isUpcoming
+                        ? workout.exercise_sets
+                        : workout.exercise_sets.filter((s) => s.is_completed)
+                      )
                         .map((s) => s.exercise?.name)
                         .filter(Boolean),
                     ).size
@@ -468,6 +506,111 @@ const Workouts: React.FC = () => {
           Historial de sesiones — sincronizado desde Google Calendar
         </p>
       </div>
+
+      {!loading && workouts.length > 0 && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
+              showFilters || fitbitOnly || selectedMuscles.length > 0
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-white/[0.03] border-white/8 text-slate-500 hover:text-white"
+            }`}
+          >
+            <Filter size={11} />
+            Filtros
+            {(fitbitOnly || selectedMuscles.length > 0) && (
+              <span className="px-1.5 py-0.5 rounded-md bg-primary/20 text-primary tabular-nums text-[10px] font-black">
+                {(fitbitOnly ? 1 : 0) + selectedMuscles.length}
+              </span>
+            )}
+          </button>
+          {!showFilters && (fitbitOnly || selectedMuscles.length > 0) && (
+            <button
+              onClick={() => {
+                setFitbitOnly(false);
+                setSelectedMuscles([]);
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/[0.03] border border-white/8 text-[9px] text-slate-500 hover:text-white"
+            >
+              <X size={9} /> Limpiar
+            </button>
+          )}
+        </div>
+      )}
+
+      {showFilters && !loading && workouts.length > 0 && (
+        <div className="glass-card p-4 space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+              Con datos Fitbit
+            </span>
+            <button
+              onClick={() => setFitbitOnly((v) => !v)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                fitbitOnly ? "bg-primary" : "bg-white/10"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                  fitbitOnly ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+
+          {muscles.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                  Por músculo
+                </span>
+                {selectedMuscles.length > 1 && (
+                  <div className="flex bg-black/20 p-0.5 rounded-lg border border-white/5">
+                    {(["or", "and"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setMuscleFilterMode(mode)}
+                        className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest transition-all ${
+                          muscleFilterMode === mode
+                            ? "bg-primary text-white"
+                            : "text-slate-500 hover:text-white"
+                        }`}
+                      >
+                        {mode === "or" ? "O" : "Y"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {muscles.map((m) => {
+                  const active = selectedMuscles.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() =>
+                        setSelectedMuscles((prev) =>
+                          active
+                            ? prev.filter((id) => id !== m.id)
+                            : [...prev, m.id],
+                        )
+                      }
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold capitalize border transition-all ${
+                        active
+                          ? "bg-primary/15 border-primary/40 text-primary"
+                          : "bg-white/[0.03] border-white/8 text-slate-500 hover:text-white hover:border-white/20"
+                      }`}
+                    >
+                      {m.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="grid gap-4">
