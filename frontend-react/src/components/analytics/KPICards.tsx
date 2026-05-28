@@ -23,7 +23,7 @@ const pctChange = (curr: number, prev: number): number | null =>
 const KPICards: React.FC<Props> = ({ summary, loading, days }) => {
   if (loading || !summary) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {Array.from({ length: 4 }).map((_, i) => (
           <SkeletonCard key={i} />
         ))}
@@ -89,7 +89,7 @@ const KPICards: React.FC<Props> = ({ summary, loading, days }) => {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
       {cards.map((card, i) => {
         const pct = showComparison
           ? pctChange(card.value, card.prevValue)
