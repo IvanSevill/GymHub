@@ -29,6 +29,7 @@ interface Props {
 const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
   const [selectedExercise, setSelectedExercise] = useState("");
   const [weightData, setWeightData] = useState<any[]>([]);
+  const [loadingWeights, setLoadingWeights] = useState(false);
   const [days, setDays] = useState("30");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -49,17 +50,29 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
 
   useEffect(() => {
     if (!selectedExercise) return;
+    let cancelled = false;
+    setLoadingWeights(true);
+    setWeightData([]);
     analyticsService
       .getWeightProgress(selectedExercise, Number(days))
-      .then((res) =>
-        setWeightData(
-          res.map((d) => ({
-            ...d,
-            formattedDate: format(parseISO(d.date), "dd MMM", { locale: es }),
-          })),
-        ),
-      )
-      .catch(() => setWeightData([]));
+      .then((res) => {
+        if (!cancelled)
+          setWeightData(
+            res.map((d) => ({
+              ...d,
+              formattedDate: format(parseISO(d.date), "dd MMM", { locale: es }),
+            })),
+          );
+      })
+      .catch(() => {
+        if (!cancelled) setWeightData([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingWeights(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedExercise, days]);
 
   // Close dropdown on outside click
@@ -163,7 +176,7 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
         </div>
       </div>
 
-      {loading ? (
+      {loading || loadingWeights ? (
         <SkeletonChartArea height="h-[300px]" />
       ) : weightData.length === 0 ? (
         <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center border border-dashed border-white/[0.06] rounded-2xl">
