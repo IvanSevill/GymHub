@@ -256,3 +256,46 @@ class SessionDuration(BaseModel):
     """Duration (minutes) of a single workout session."""
     date: datetime
     duration_min: float
+
+
+# Exercise Request Schemas
+class ExerciseRequestUserInfo(BaseModel):
+    """Minimal user info embedded in exercise request responses."""
+    id: str
+    name: str
+    email: str
+    picture_url: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+class ExerciseRequestCreate(BaseModel):
+    """Schema for submitting a new exercise or muscle request."""
+    type: str
+    exercise_name: str
+    muscle_id: Optional[str] = None
+    muscle_name: Optional[str] = None
+
+
+class ExerciseRequestReview(BaseModel):
+    """Schema for rejecting a request with an optional reason."""
+    rejection_reason: Optional[str] = None
+
+
+class ExerciseRequestResponse(BaseModel):
+    """Schema for returning exercise request details."""
+    id: str
+    type: str
+    exercise_name: str
+    muscle_id: Optional[str] = None
+    muscle_name: Optional[str] = None
+    status: str
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+    requested_by: ExerciseRequestUserInfo
+    muscle: Optional[Muscle] = None
+
+    class Config:
+        orm_mode = True
