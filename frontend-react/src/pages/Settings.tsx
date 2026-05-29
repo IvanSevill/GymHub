@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import AdminPanel from "../components/settings/AdminPanel";
+import ExerciseRequestSection from "../components/settings/ExerciseRequestSection";
 import { CALENDAR_CACHE_KEY } from "../App";
 
 const Settings: React.FC = () => {
@@ -362,6 +363,9 @@ const Settings: React.FC = () => {
           )}
         </section>
       </div>
+
+      {/* Exercise requests — non-root only */}
+      {user?.is_root !== 1 && <ExerciseRequestSection />}
 
       {/* Admin panel — root only */}
       {user?.is_root === 1 && <AdminPanel />}

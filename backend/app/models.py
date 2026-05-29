@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 import uuid
@@ -161,3 +163,24 @@ class FitbitData(Base):
     has_gps = Column(Boolean, default=False, nullable=False)
 
     workout = relationship("Workout", back_populates="fitbit_data")
+
+
+class ExerciseRequest(Base):
+    """Pending request from a non-root user to add an exercise or a muscle group."""
+    __tablename__ = "exercise_requests"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    type = Column(String, nullable=False)  # "exercise" | "muscle_with_exercise"
+    exercise_name = Column(String, nullable=False)
+    muscle_id = Column(String, ForeignKey("muscles.id", ondelete="SET NULL"), nullable=True)
+    muscle_name = Column(String, nullable=True)
+    status = Column(String, default="pending")  # "pending" | "approved" | "rejected"
+    rejection_reason = Column(String, nullable=True)
+    requested_by_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    reviewed_by_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    requested_by = relationship("User", foreign_keys=[requested_by_id])
+    reviewed_by = relationship("User", foreign_keys=[reviewed_by_id])
+    muscle = relationship("Muscle", foreign_keys=[muscle_id])

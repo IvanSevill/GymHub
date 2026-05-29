@@ -1,0 +1,142 @@
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from .. import models, schemas
+from ..auth import get_current_root_user, get_current_user
+from ..database import get_db
+
+router = APIRouter(prefix="/exercise-requests", tags=["exercise-requests"])
+
+
+@router.post("", response_model=schemas.ExerciseRequestResponse, status_code=201)
+def create_request(
+    body: schemas.ExerciseRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if body.type == "exercise":
+        if not body.muscle_id:
+            raise HTTPException(400, "muscle_id is required for type 'exercise'")
+        muscle = db.query(models.Muscle).filter(models.Muscle.id == body.muscle_id).first()
+        if not muscle:
+            raise HTTPException(404, "Muscle not found")
+    elif body.type == "muscle_with_exercise":
+        if not body.muscle_name:
+            raise HTTPException(400, "muscle_name is required for type 'muscle_with_exercise'")
+    else:
+        raise HTTPException(400, "Invalid type; must be 'exercise' or 'muscle_with_exercise'")
+
+    req = models.ExerciseRequest(
+        type=body.type,
+        exercise_name=body.exercise_name.strip(),
+        muscle_id=body.muscle_id,
+        muscle_name=body.muscle_name.strip() if body.muscle_name else None,
+        requested_by_id=current_user.id,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+@router.get("/my", response_model=list[schemas.ExerciseRequestResponse])
+def get_my_requests(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return (
+        db.query(models.ExerciseRequest)
+        .filter(models.ExerciseRequest.requested_by_id == current_user.id)
+        .order_by(models.ExerciseRequest.created_at.desc())
+        .all()
+    )
+
+
+@router.get("", response_model=list[schemas.ExerciseRequestResponse])
+def get_all_requests(
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_root_user),
+):
+    q = db.query(models.ExerciseRequest)
+    if status:
+        q = q.filter(models.ExerciseRequest.status == status)
+    return q.order_by(models.ExerciseRequest.created_at.desc()).all()
+
+
+@router.put("/{request_id}/approve", response_model=schemas.ExerciseRequestResponse)
+def approve_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_root_user),
+):
+    req = (
+        db.query(models.ExerciseRequest)
+        .filter(models.ExerciseRequest.id == request_id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(404, "Request not found")
+    if req.status != "pending":
+        raise HTTPException(400, "Request is not pending")
+
+    if req.type == "exercise":
+        muscle = db.query(models.Muscle).filter(models.Muscle.id == req.muscle_id).first()
+        if not muscle:
+            raise HTTPException(404, "Muscle no longer exists")
+        existing = (
+            db.query(models.Exercise).filter(models.Exercise.name == req.exercise_name).first()
+        )
+        if existing:
+            raise HTTPException(409, f"Exercise '{req.exercise_name}' already exists")
+        db.add(models.Exercise(name=req.exercise_name, muscle_id=muscle.id))
+
+    elif req.type == "muscle_with_exercise":
+        muscle = (
+            db.query(models.Muscle).filter(models.Muscle.name == req.muscle_name).first()
+        )
+        if not muscle:
+            muscle = models.Muscle(name=req.muscle_name)
+            db.add(muscle)
+            db.flush()
+        existing = (
+            db.query(models.Exercise).filter(models.Exercise.name == req.exercise_name).first()
+        )
+        if existing:
+            raise HTTPException(409, f"Exercise '{req.exercise_name}' already exists")
+        db.add(models.Exercise(name=req.exercise_name, muscle_id=muscle.id))
+
+    req.status = "approved"
+    req.reviewed_by_id = current_user.id
+    req.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+@router.put("/{request_id}/reject", response_model=schemas.ExerciseRequestResponse)
+def reject_request(
+    request_id: str,
+    body: schemas.ExerciseRequestReview,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_root_user),
+):
+    req = (
+        db.query(models.ExerciseRequest)
+        .filter(models.ExerciseRequest.id == request_id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(404, "Request not found")
+    if req.status != "pending":
+        raise HTTPException(400, "Request is not pending")
+
+    req.status = "rejected"
+    req.rejection_reason = body.rejection_reason
+    req.reviewed_by_id = current_user.id
+    req.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(req)
+    return req
