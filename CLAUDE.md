@@ -110,11 +110,22 @@ Full guide: `docs/git-workflow.md`. Summary below.
 
 ```
 main        ← production only. Receives merges from develop via release PRs.
-  └── develop   ← integration. Receives feature merges. Always ahead of main.
+  └── develop   ← integration. Direct target for fixes and refactors. Always ahead of main.
         └── feat/<name>   ← one branch per feature, born from develop, dies on merge.
 ```
 
-### Feature lifecycle
+### When to use a branch vs. commit directly to develop
+
+| Change type | Where to commit |
+|---|---|
+| `feat` | `feat/<name>` branch → PR into develop |
+| `fix` | Directly on `develop` |
+| `refactor` | Directly on `develop` |
+| `style`, `chore`, `docs`, `test`, `perf` | Directly on `develop` |
+
+Only `feat` commits need a branch and PR. Everything else goes straight to `develop`.
+
+### Feature lifecycle (feat only)
 
 ```powershell
 # 1. Start from develop
@@ -130,14 +141,24 @@ gh pr create --base develop --title "feat(<scope>): ..."
 gh pr merge <n> --merge --delete-branch
 ```
 
+### Fix / refactor lifecycle (direct to develop)
+
+```powershell
+git checkout develop && git pull
+# make changes, then:
+git add <files>
+git commit -m "fix(<scope>): ..." # or refactor/style/chore/etc.
+git push origin develop
+```
+
 **Critical rules:**
-- Always `--no-ff` merges — never fast-forward. Feature branches must appear as a distinct lane in the git graph.
+- Feature branches always use `--no-ff` merges — never fast-forward. They must appear as a distinct lane in the git graph.
 - After every release (when `develop == main`), create a separation commit on develop before opening any feature:
   ```powershell
   git commit --allow-empty -m "chore(develop): begin vX.Y.Z development cycle"
   git push origin develop
   ```
-- Never commit directly to `main` or `develop`.
+- Never commit directly to `main`.
 
 ### Release (develop → main)
 
