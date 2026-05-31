@@ -277,6 +277,86 @@ The most impactful additions (highest insight / lowest implementation cost):
 
 ---
 
+## Pattern 10 — Four-state component lifecycle
+
+**What:** Every chart or data card must handle exactly four states. Missing any one causes silent failures or confusing blank screens.
+
+| State | When | What to render |
+|---|---|---|
+| **loading** | Data fetch in progress | `SkeletonChartArea` / `SkeletonBlock` — same dimensions as the real chart |
+| **success** | Data returned and non-empty | The chart/table |
+| **empty** | Fetch succeeded but returned zero records | Icon + short message + optional CTA (e.g. "Registra entrenamientos para ver datos") |
+| **error** | Fetch threw or returned an error | Icon + message + retry button; never swallow silently |
+
+**Why it matters:** The current codebase swallows all errors (`catch(() => setData([]))`) which makes empty-state and error-state look identical — the user can't tell whether they have no data or the API is down.
+
+**Implementation pattern — shared wrapper:**
+```tsx
+// src/components/ui/ChartStateWrapper.tsx
+type ChartState = "loading" | "success" | "empty" | "error";
+
+interface Props {
+  state: ChartState;
+  emptyMessage?: string;
+  onRetry?: () => void;
+  children: React.ReactNode;
+}
+
+export const ChartStateWrapper: React.FC<Props> = ({ state, emptyMessage, onRetry, children }) => {
+  if (state === "loading") return <SkeletonChartArea />;
+  if (state === "error")
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+        <AlertCircle size={28} className="text-danger/60" />
+        <p className="text-sm text-slate-500">Error al cargar los datos</p>
+        {onRetry && (
+          <button onClick={onRetry} className="text-xs text-primary hover:underline">
+            Reintentar
+          </button>
+        )}
+      </div>
+    );
+  if (state === "empty")
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+        <BarChart2 size={28} className="text-slate-700" />
+        <p className="text-sm text-slate-500">{emptyMessage ?? "Sin datos para este período"}</p>
+      </div>
+    );
+  return <>{children}</>;
+};
+```
+
+**How to derive state in a component:**
+```ts
+const [data, setData] = useState<T[]>([]);
+const [status, setStatus] = useState<"loading" | "success" | "empty" | "error">("loading");
+
+useEffect(() => {
+  setStatus("loading");
+  fetchData()
+    .then((res) => setStatus(res.length === 0 ? "empty" : "success"))
+    .catch(() => setStatus("error"))
+    .finally(() => setLoading(false));
+}, [deps]);
+```
+
+**Empty messages by component:**
+| Component | Empty message |
+|---|---|
+| `FrequencyAnalysisCard` | "No hay ejercicios registrados en este período" |
+| `WeightProgressCard` (no exercise selected) | "Selecciona un ejercicio para ver su progreso" |
+| `WeightProgressCard` (exercise selected, no data) | "Sin datos para este ejercicio en el período" |
+| `WorkoutFrequencyChart` | "Sin entrenamientos en este período" |
+| `VolumeTrendChart` | "Sin datos de volumen en este período" |
+| `DurationHistogram` | "Sin datos de duración en este período" |
+| `MuscleBalanceChart` | "Sin datos en este período" |
+| `KPICards` | Show `—` instead of `0` to signal missing data |
+
+**Applied in:** Pending — see `docs/backlog/refactor-analytics-4-states.md`.
+
+---
+
 ## Recharts component reference (already installed, v3.8.1)
 
 | Use case | Component |
