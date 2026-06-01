@@ -5,6 +5,7 @@ import { NavLink } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ToastContainer from "./ui/ToastContainer";
 import ExerciseModal from "./ExerciseModal";
+import OnboardingTutorial from "./OnboardingTutorial";
 import { ExerciseModalProvider } from "../context/ExerciseModalContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
@@ -76,6 +77,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
         <ToastContainer />
         <ExerciseModal />
+        <OnboardingTutorial />
       </div>
     </ExerciseModalProvider>
   );
