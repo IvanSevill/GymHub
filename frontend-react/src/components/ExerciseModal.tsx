@@ -131,9 +131,9 @@ const ExerciseModal: React.FC = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:h-72">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:h-88">
                     {media?.image_url && (
-                      <div className="relative rounded-2xl overflow-hidden border border-white/8 bg-black flex items-center justify-center h-52 sm:h-full">
+                      <div className="relative rounded-2xl overflow-hidden border border-white/8 bg-black flex items-center justify-center h-56 sm:h-full">
                         {/* Blurred background */}
                         <img
                           src={media.image_url}
