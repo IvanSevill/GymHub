@@ -17,20 +17,31 @@ async def _fetch_youtube_videos(name: str, muscle: Optional[str] = None) -> Tupl
     key = os.getenv("YOUTUBE_API_KEY")
     if not key:
         return None, None
-    query = f"{name} {muscle} ejercicio" if muscle else f"{name} ejercicio"
-    try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(
-                "https://www.googleapis.com/youtube/v3/search",
-                params={"part": "snippet", "q": query, "maxResults": 2, "type": "video", "key": key},
-            )
-        items = r.json().get("items", [])
-        ids = [i["id"]["videoId"] for i in items if "videoId" in i.get("id", {})]
-        base = "https://www.youtube.com/watch?v="
-        return (base + ids[0] if ids else None, base + ids[1] if len(ids) > 1 else None)
-    except Exception as e:
-        logger.warning("YouTube fetch failed for '%s': %s", name, e)
-        return None, None
+    base = "https://www.youtube.com/watch?v="
+    queries = [
+        f"{name} {muscle} ejercicio tutorial" if muscle else f"{name} ejercicio tutorial",
+        f"{name} exercise gym" if muscle else f"{name} gym workout",
+        f"{muscle} ejercicio" if muscle else f"{name} workout",
+    ]
+    ids: List[str] = []
+    for query in queries:
+        if len(ids) >= 2:
+            break
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(
+                    "https://www.googleapis.com/youtube/v3/search",
+                    params={"part": "snippet", "q": query, "maxResults": 5, "type": "video", "key": key},
+                )
+            for item in r.json().get("items", []):
+                vid = item.get("id", {}).get("videoId")
+                if vid and vid not in ids:
+                    ids.append(vid)
+                if len(ids) >= 2:
+                    break
+        except Exception as e:
+            logger.warning("YouTube fetch failed for '%s': %s", query, e)
+    return (base + ids[0] if ids else None, base + ids[1] if len(ids) > 1 else None)
 
 
 async def _fetch_pexels_image(name: str, muscle: Optional[str] = None) -> Optional[str]:
@@ -391,10 +402,13 @@ async def get_exercise_media(
     needs_save = False
     muscle_name = exercise.muscle.name if exercise.muscle else None
 
-    if exercise.video_url_1 is None:
+    # Fetch videos if either is missing (handles case where v1 cached but v2 was null)
+    if exercise.video_url_1 is None or exercise.video_url_2 is None:
         v1, v2 = await _fetch_youtube_videos(exercise.name, muscle_name)
-        exercise.video_url_1 = v1
-        exercise.video_url_2 = v2
+        if v1:
+            exercise.video_url_1 = v1
+        if v2:
+            exercise.video_url_2 = v2
         needs_save = True
 
     if exercise.image_url is None:
