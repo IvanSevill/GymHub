@@ -552,8 +552,8 @@ const Workouts: React.FC = () => {
               }`}
             >
               <span
-                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                  fitbitOnly ? "translate-x-5" : "translate-x-0.5"
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                  fitbitOnly ? "left-5" : "left-0.5"
                 }`}
               />
             </button>
@@ -638,6 +638,30 @@ const Workouts: React.FC = () => {
         </div>
       ) : (
         <>
+          {/* ── Filter empty state ── */}
+          {upcoming.length === 0 && history.length === 0 && (
+            <div className="glass-card py-16 text-center">
+              <div className="w-12 h-12 bg-white/[0.03] rounded-2xl flex items-center justify-center mx-auto mb-4 text-slate-600">
+                <Filter size={22} />
+              </div>
+              <h3 className="text-base font-black text-white tracking-tight mb-1">
+                Sin resultados
+              </h3>
+              <p className="text-slate-500 text-xs mb-5">
+                Ningún entrenamiento coincide con los filtros activos.
+              </p>
+              <button
+                onClick={() => {
+                  setFitbitOnly(false);
+                  setSelectedMuscles([]);
+                }}
+                className="btn-secondary text-xs px-5 py-2 rounded-xl"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
+
           {/* ── Upcoming section ── */}
           {upcoming.length > 0 && (
             <div className="space-y-3">
