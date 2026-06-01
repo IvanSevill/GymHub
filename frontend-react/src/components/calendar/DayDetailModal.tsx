@@ -97,6 +97,7 @@ const DayDetailModal: React.FC<Props> = ({
   const handleSaveTime = async () => {
     if (!selectedDay) return;
     await saveTime(selectedDay.workouts, onUpdateTime);
+    handleClose();
   };
 
   // Auto-open time editor when the selected day has future workouts
