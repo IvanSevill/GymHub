@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 interface UseDropdownResult {
   isOpen: boolean;
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  dropdownRef: React.RefObject<HTMLDivElement>;
+  dropdownRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function useDropdown(): UseDropdownResult {
