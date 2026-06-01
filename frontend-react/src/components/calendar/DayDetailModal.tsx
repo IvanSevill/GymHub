@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { format, parseISO, isFuture } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -132,6 +132,17 @@ const DayDetailModal: React.FC<Props> = ({
       setIsSavingTime(false);
     }
   };
+
+  // Auto-open time editor when the selected day has only future workouts
+  useEffect(() => {
+    if (!selectedDay) return;
+    const futureWorkouts = selectedDay.workouts.filter((w) =>
+      isFuture(parseISO(w.start_time)),
+    );
+    if (futureWorkouts.length > 0 && !timeEditId && !editingWorkoutId) {
+      startTimeEdit(futureWorkouts[0]);
+    }
+  }, [selectedDay?.workouts.map((w) => w.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isInTimeEdit = (wId: string) => timeEditId === wId;
 
