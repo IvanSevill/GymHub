@@ -32,33 +32,34 @@ const CalendarHeader: React.FC<Props> = ({
   onUploadCardio,
 }) => (
   <div className="flex justify-between items-center bg-white/[0.02] border border-white/[0.06] px-4 py-2 rounded-3xl shrink-0">
-    <div className="flex items-center gap-4">
-      <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary border border-primary/20">
+    <div className="flex items-center gap-3">
+      <div className="hidden sm:flex w-10 h-10 bg-primary/10 rounded-xl items-center justify-center text-primary border border-primary/20 shrink-0">
         <CalIcon size={20} />
       </div>
       <div>
-        <h1 className="text-xl font-black text-white uppercase tracking-tighter">
+        <h1 className="hidden sm:block text-xl font-black text-white uppercase tracking-tighter">
           Calendario
         </h1>
-        <p className="text-[8px] font-semibold text-slate-500 uppercase tracking-[0.2em]">
+        <p className="text-[10px] sm:text-[8px] font-bold sm:font-semibold text-white sm:text-slate-500 uppercase tracking-[0.15em] capitalize">
           {format(currentDate, "MMMM yyyy", { locale: es })}
         </p>
       </div>
     </div>
-    <div className="flex items-center gap-2">
+
+    <div className="flex items-center gap-1 sm:gap-2">
       <button
         onClick={onUploadCardio}
         title="Subir cardio de Fitbit a Google Calendar"
         className="p-2 hover:bg-primary/10 rounded-xl transition-all text-slate-500 hover:text-primary border border-transparent hover:border-primary/20"
       >
-        <Upload size={16} />
+        <Upload size={15} />
       </button>
       <button
         onClick={onCreateEvent}
         title="Nuevo evento futuro"
         className="p-2 hover:bg-primary/10 rounded-xl transition-all text-slate-500 hover:text-primary border border-transparent hover:border-primary/20"
       >
-        <Plus size={18} />
+        <Plus size={16} />
       </button>
       <button
         onClick={onSync}
@@ -66,26 +67,26 @@ const CalendarHeader: React.FC<Props> = ({
         title="Sincronizar con Google Calendar y Fitbit"
         className="p-2 hover:bg-primary/10 rounded-xl transition-all text-slate-500 hover:text-primary border border-transparent hover:border-primary/20 disabled:opacity-40"
       >
-        <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
+        <RefreshCw size={15} className={isSyncing ? "animate-spin" : ""} />
       </button>
       <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 items-center gap-0.5">
         <button
           onClick={onPrev}
-          className="p-2 hover:bg-white/5 rounded-lg transition-all text-slate-400 hover:text-white"
+          className="p-1.5 hover:bg-white/5 rounded-lg transition-all text-slate-400 hover:text-white"
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft size={15} />
         </button>
         <button
           onClick={onToday}
-          className="px-3 py-1.5 text-[10px] font-black text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all uppercase tracking-widest"
+          className="hidden sm:block px-3 py-1.5 text-[10px] font-black text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all uppercase tracking-widest"
         >
           Hoy
         </button>
         <button
           onClick={onNext}
-          className="p-2 hover:bg-white/5 rounded-lg transition-all text-slate-400 hover:text-white"
+          className="p-1.5 hover:bg-white/5 rounded-lg transition-all text-slate-400 hover:text-white"
         >
-          <ChevronRight size={16} />
+          <ChevronRight size={15} />
         </button>
       </div>
     </div>
