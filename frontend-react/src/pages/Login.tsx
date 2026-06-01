@@ -38,8 +38,6 @@ const Login: React.FC = () => {
     },
     flow: "auth-code",
     scope: "openid email profile https://www.googleapis.com/auth/calendar",
-    access_type: "offline",
-    prompt: "consent",
     onNonOAuthError: (error) => console.error("Non-OAuth Error:", error),
   });
 
