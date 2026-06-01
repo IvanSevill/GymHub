@@ -34,10 +34,13 @@ export function useTimeEdit() {
     if (!w) return;
 
     const base = parseISO(w.start_time);
+    // Build a local-time ISO string (no UTC conversion) to match the format
+    // the backend expects and how other times are stored in the DB.
+    // Using toISOString() here would subtract the UTC offset (e.g. -2h in UTC+2).
     const makeISO = (h: number, m: number) => {
-      const d = new Date(base);
-      d.setHours(h, m, 0, 0);
-      return d.toISOString().replace(/\.\d{3}Z$/, "");
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const dateStr = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
+      return `${dateStr}T${pad(h)}:${pad(m)}:00`;
     };
 
     setIsSavingTime(true);
