@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Plus,
   RefreshCw,
+  Upload,
   Calendar as CalIcon,
 } from "lucide-react";
 
@@ -17,6 +18,7 @@ interface Props {
   onToday: () => void;
   onSync: () => void;
   onCreateEvent: () => void;
+  onUploadCardio: () => void;
 }
 
 const CalendarHeader: React.FC<Props> = ({
@@ -27,6 +29,7 @@ const CalendarHeader: React.FC<Props> = ({
   onToday,
   onSync,
   onCreateEvent,
+  onUploadCardio,
 }) => (
   <div className="flex justify-between items-center bg-white/[0.02] border border-white/[0.06] px-4 py-2 rounded-3xl shrink-0">
     <div className="flex items-center gap-4">
@@ -43,6 +46,13 @@ const CalendarHeader: React.FC<Props> = ({
       </div>
     </div>
     <div className="flex items-center gap-2">
+      <button
+        onClick={onUploadCardio}
+        title="Subir cardio de Fitbit a Google Calendar"
+        className="p-2 hover:bg-primary/10 rounded-xl transition-all text-slate-500 hover:text-primary border border-transparent hover:border-primary/20"
+      >
+        <Upload size={16} />
+      </button>
       <button
         onClick={onCreateEvent}
         title="Nuevo evento futuro"
