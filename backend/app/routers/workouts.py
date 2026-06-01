@@ -804,3 +804,112 @@ async def sync_all_from_calendar(
     if deleted_count > 0:
         msg += f" (deleted {deleted_count} orphaned workouts)"
     return {"message": msg}
+
+
+@router.get("/cardio-pending", response_model=List[dict])
+async def list_cardio_pending(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """List Fitbit cardio workouts not yet pushed to Google Calendar."""
+    workouts_q = (
+        db.query(models.Workout)
+        .join(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.Workout.google_event_id.is_(None),
+            models.FitbitData.activity_name.isnot(None),
+            models.FitbitData.activity_name != "Weights",
+        )
+        .options(joinedload(models.Workout.fitbit_data))
+        .order_by(models.Workout.start_time.desc())
+        .all()
+    )
+    return [
+        {
+            "id": w.id,
+            "title": w.title,
+            "start_time": w.start_time.isoformat(),
+            "end_time": w.end_time.isoformat(),
+            "activity_name": w.fitbit_data.activity_name,
+            "duration_ms": w.fitbit_data.duration_ms,
+            "calories": w.fitbit_data.calories,
+            "heart_rate_avg": w.fitbit_data.heart_rate_avg,
+            "distance_km": w.fitbit_data.distance_km,
+        }
+        for w in workouts_q
+    ]
+
+
+@router.post("/sync-cardio-to-calendar", response_model=dict)
+async def sync_cardio_to_calendar(
+    body: schemas.SyncCardioRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Push selected Fitbit cardio workouts to Google Calendar."""
+    user_tokens = (
+        db.query(models.UserTokens)
+        .filter(models.UserTokens.user_id == current_user.id)
+        .first()
+    )
+    if not user_tokens or not user_tokens.google_access_token:
+        raise HTTPException(status_code=401, detail="Google credentials missing — please re-authenticate")
+
+    creds = get_google_credentials(user_tokens, db)
+    if not creds:
+        raise HTTPException(status_code=401, detail="Google credentials expired — please re-authenticate")
+
+    calendar_id = user_tokens.selected_calendar_id or "primary"
+    service = build("calendar", "v3", credentials=creds)
+
+    synced = failed = already_synced = 0
+
+    for workout_id in body.workout_ids:
+        workout = (
+            db.query(models.Workout)
+            .options(joinedload(models.Workout.fitbit_data))
+            .filter(
+                models.Workout.id == workout_id,
+                models.Workout.user_id == current_user.id,
+            )
+            .first()
+        )
+        if not workout or not workout.fitbit_data:
+            failed += 1
+            continue
+
+        if workout.google_event_id:
+            already_synced += 1
+            continue
+
+        f = workout.fitbit_data
+        duration_min = f.duration_ms // 60_000
+        description = (
+            "[GymHub]\nActividad sincronizada automáticamente desde Fitbit\n\n"
+            "[Fitbit]\n"
+            f"Calorias: {f.calories} kcal\n"
+            f"FC Media: {f.heart_rate_avg} bpm\n"
+            f"Duracion: {duration_min} min\n"
+            f"Actividad: {f.activity_name}\n"
+        )
+        if f.distance_km:
+            description += f"Distancia: {f.distance_km:.2f} km\n"
+
+        event_body = {
+            "summary": f.activity_name,
+            "description": description.strip(),
+            "start": {"dateTime": workout.start_time.isoformat() + "Z"},
+            "end": {"dateTime": workout.end_time.isoformat() + "Z"},
+        }
+
+        try:
+            event = service.events().insert(calendarId=calendar_id, body=event_body).execute()
+            workout.google_event_id = event["id"]
+            db.commit()
+            synced += 1
+        except Exception as e:
+            logger.error("Failed to create calendar event for workout %s: %s", workout_id, e)
+            failed += 1
+
+    return {"synced": synced, "failed": failed, "already_synced": already_synced}

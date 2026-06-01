@@ -264,6 +264,12 @@ class SessionDuration(BaseModel):
     duration_min: float
 
 
+# Cardio sync schemas
+class SyncCardioRequest(BaseModel):
+    """List of workout IDs to push to Google Calendar as cardio events."""
+    workout_ids: List[str]
+
+
 # Exercise Request Schemas
 class ExerciseRequestUserInfo(BaseModel):
     """Minimal user info embedded in exercise request responses."""

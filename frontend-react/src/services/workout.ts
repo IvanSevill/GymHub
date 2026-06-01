@@ -51,6 +51,24 @@ export interface WorkoutCreate {
   }[];
 }
 
+export interface CardioPendingWorkout {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  activity_name: string;
+  duration_ms: number;
+  calories: number;
+  heart_rate_avg: number;
+  distance_km: number;
+}
+
+export interface SyncCardioResult {
+  synced: number;
+  failed: number;
+  already_synced: number;
+}
+
 export const workoutService = {
   getWorkouts: async (
     startDate?: string,
@@ -151,6 +169,21 @@ export const workoutService = {
     message: string;
   }> => {
     const response = await api.post("/exercises/reset-and-resync");
+    return response.data;
+  },
+  getCardioPending: async (): Promise<CardioPendingWorkout[]> => {
+    const response = await api.get<CardioPendingWorkout[]>(
+      "/workouts/cardio-pending",
+    );
+    return response.data;
+  },
+  syncCardioToCalendar: async (
+    workoutIds: string[],
+  ): Promise<SyncCardioResult> => {
+    const response = await api.post<SyncCardioResult>(
+      "/workouts/sync-cardio-to-calendar",
+      { workout_ids: workoutIds },
+    );
     return response.data;
   },
 };
