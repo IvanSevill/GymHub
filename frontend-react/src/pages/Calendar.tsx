@@ -236,6 +236,28 @@ const Calendar: React.FC = () => {
     }
   };
 
+  const handleUpdateTime = async (
+    workoutId: string,
+    startTime: string,
+    endTime: string,
+  ) => {
+    const workout = workouts.find((w) => w.id === workoutId);
+    if (!workout) return;
+    await workoutService.updateWorkout(workoutId, {
+      start_time: startTime,
+      end_time: endTime,
+      title: workout.title,
+      exercise_sets: workout.exercise_sets.map((s) => ({
+        exercise_id: s.exercise_id,
+        value: s.value,
+        measurement: s.measurement,
+        is_completed: s.is_completed,
+      })),
+    });
+    await fetchWorkouts();
+    addToast("Horario actualizado", "success");
+  };
+
   const closeModal = () => {
     setSelectedDayWorkouts(null);
     setEditingWorkoutId(null);
@@ -290,6 +312,7 @@ const Calendar: React.FC = () => {
         onSaveEdit={saveEdit}
         onDraftChange={setDraftSets}
         onDelete={handleDeleteWorkout}
+        onUpdateTime={handleUpdateTime}
       />
     </div>
   );
