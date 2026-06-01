@@ -12,6 +12,12 @@ export interface Exercise {
   muscle?: Muscle;
 }
 
+export interface ExerciseMedia {
+  video_url_1: string | null;
+  video_url_2: string | null;
+  image_url: string | null;
+}
+
 export const exerciseService = {
   getMuscles: async (): Promise<Muscle[]> => {
     const response = await api.get<Muscle[]>("/muscles");
@@ -52,5 +58,11 @@ export const exerciseService = {
   },
   deleteExercise: async (exerciseId: string): Promise<void> => {
     await api.delete(`/exercises/${exerciseId}`);
+  },
+  getExerciseMedia: async (exerciseId: string): Promise<ExerciseMedia> => {
+    const response = await api.get<ExerciseMedia>(
+      `/exercises/${exerciseId}/media`,
+    );
+    return response.data;
   },
 };

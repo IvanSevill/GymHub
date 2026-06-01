@@ -80,6 +80,9 @@ class Exercise(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, unique=True, nullable=False)
     muscle_id = Column(String, ForeignKey("muscles.id", ondelete="CASCADE"), nullable=False)
+    video_url_1 = Column(String, nullable=True)
+    video_url_2 = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
 
     muscle = relationship("Muscle", back_populates="exercises")
     sets = relationship("ExerciseSet", back_populates="exercise", cascade="all, delete-orphan")

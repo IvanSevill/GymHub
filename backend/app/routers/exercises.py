@@ -1,9 +1,67 @@
+import logging
+import os
+from typing import Any, Dict, List, Optional, Tuple
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
-from .. import models, schemas, database, auth
+
+from .. import auth, database, models, schemas
+
+logger = logging.getLogger(__name__)
+
+
+async def _fetch_youtube_videos(name: str, muscle: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+    key = os.getenv("YOUTUBE_API_KEY")
+    if not key:
+        return None, None
+    query = f"{name} {muscle} ejercicio" if muscle else f"{name} ejercicio"
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(
+                "https://www.googleapis.com/youtube/v3/search",
+                params={"part": "snippet", "q": query, "maxResults": 2, "type": "video", "key": key},
+            )
+        items = r.json().get("items", [])
+        ids = [i["id"]["videoId"] for i in items if "videoId" in i.get("id", {})]
+        base = "https://www.youtube.com/watch?v="
+        return (base + ids[0] if ids else None, base + ids[1] if len(ids) > 1 else None)
+    except Exception as e:
+        logger.warning("YouTube fetch failed for '%s': %s", name, e)
+        return None, None
+
+
+async def _fetch_pexels_image(name: str, muscle: Optional[str] = None) -> Optional[str]:
+    key = os.getenv("PEXELS_API_KEY")
+    if not key:
+        return None
+    queries = [
+        f"gym fitness ejercicio {name} {muscle}" if muscle else f"gym fitness ejercicio {name}",
+        f"gym fitness {muscle} exercise" if muscle else "gym fitness exercise",
+    ]
+    for query in queries:
+        if not query:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(
+                    "https://api.pexels.com/v1/search",
+                    params={"query": query, "per_page": 1, "orientation": "landscape"},
+                    headers={"Authorization": key},
+                )
+            data = r.json()
+            if r.status_code != 200:
+                logger.warning("Pexels API error %d: %s", r.status_code, data)
+                continue
+            photos = data.get("photos", [])
+            logger.info("Pexels query=%r → %d results", query, len(photos))
+            if photos:
+                return photos[0]["src"]["medium"]
+        except Exception as e:
+            logger.warning("Pexels fetch failed for '%s': %s", query, e)
+    return None
 
 # FastAPI router for exercise-related endpoints
 router = APIRouter(tags=["exercises"])
@@ -317,6 +375,41 @@ async def reset_exercises_and_force_resync(
         "deleted_exercises": deleted_exercises,
         "message": "Ejercicios eliminados. Sincroniza para reimportar desde Google Calendar.",
     }
+
+
+@router.get("/exercises/{exercise_id}/media", response_model=schemas.ExerciseMedia)
+async def get_exercise_media(
+    exercise_id: str,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Return cached media URLs for an exercise, fetching from YouTube/Google if not yet stored."""
+    exercise = db.query(models.Exercise).filter(models.Exercise.id == exercise_id).first()
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+
+    needs_save = False
+    muscle_name = exercise.muscle.name if exercise.muscle else None
+
+    if exercise.video_url_1 is None:
+        v1, v2 = await _fetch_youtube_videos(exercise.name, muscle_name)
+        exercise.video_url_1 = v1
+        exercise.video_url_2 = v2
+        needs_save = True
+
+    if exercise.image_url is None:
+        img = await _fetch_pexels_image(exercise.name, muscle_name)
+        exercise.image_url = img
+        needs_save = True
+
+    if needs_save:
+        db.commit()
+
+    return schemas.ExerciseMedia(
+        video_url_1=exercise.video_url_1,
+        video_url_2=exercise.video_url_2,
+        image_url=exercise.image_url,
+    )
 
 
 @router.post("/exercises/standardize")
