@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { workoutService, Workout } from "../services/workout";
 import { exerciseService, Muscle } from "../services/exercise";
-import { isFuture, parseISO } from "date-fns";
+import { isFuture } from "date-fns";
+import { parseWorkoutTime } from "../utils/dateUtils";
 import { AnimatePresence } from "framer-motion";
 import { useToast } from "../context/ToastContext";
 import { SkeletonWorkoutRow } from "../components/ui/Skeleton";
@@ -94,14 +95,14 @@ const Workouts: React.FC = () => {
   };
 
   const upcoming = filterByMuscle(
-    workouts.filter((w) => isFuture(parseISO(w.start_time))),
+    workouts.filter((w) => isFuture(parseWorkoutTime(w.start_time))),
     selectedMuscles,
     muscleFilterMode,
   );
 
   const history = filterByFitbit(
     filterByMuscle(
-      workouts.filter((w) => !isFuture(parseISO(w.start_time))),
+      workouts.filter((w) => !isFuture(parseWorkoutTime(w.start_time))),
       selectedMuscles,
       muscleFilterMode,
     ),

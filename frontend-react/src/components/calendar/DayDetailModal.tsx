@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { format, parseISO, isFuture } from "date-fns";
+import { format, isFuture } from "date-fns";
+import { parseWorkoutTime } from "../../utils/dateUtils";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -85,7 +86,7 @@ const DayDetailModal: React.FC<Props> = ({
   const handleCancelTimeEdit = () => {
     if (timeEditId && selectedDay) {
       const w = selectedDay.workouts.find((x) => x.id === timeEditId);
-      if (w && isFuture(parseISO(w.start_time))) {
+      if (w && isFuture(parseWorkoutTime(w.start_time))) {
         handleClose();
         return;
       }
@@ -102,7 +103,7 @@ const DayDetailModal: React.FC<Props> = ({
   useEffect(() => {
     if (!selectedDay) return;
     const futureWorkouts = selectedDay.workouts.filter((w) =>
-      isFuture(parseISO(w.start_time)),
+      isFuture(parseWorkoutTime(w.start_time)),
     );
     if (futureWorkouts.length > 0 && !timeEditId && !editingWorkoutId) {
       startTimeEdit(futureWorkouts[0]);
@@ -163,7 +164,7 @@ const DayDetailModal: React.FC<Props> = ({
 
               <div className="flex items-center gap-1">
                 {selectedDay.workouts.map((w) => {
-                  const future = isFuture(parseISO(w.start_time));
+                  const future = isFuture(parseWorkoutTime(w.start_time));
                   const notEditing =
                     editingWorkoutId !== w.id && timeEditId !== w.id;
                   return (
@@ -215,7 +216,7 @@ const DayDetailModal: React.FC<Props> = ({
             {/* Workout bodies */}
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
               {selectedDay.workouts.map((workout, wIdx) => {
-                const future = isFuture(parseISO(workout.start_time));
+                const future = isFuture(parseWorkoutTime(workout.start_time));
                 const cardio = isCardioWorkout(workout);
                 const isEditing = editingWorkoutId === workout.id;
                 const isTimeEditing = isInTimeEdit(workout.id);
@@ -225,7 +226,7 @@ const DayDetailModal: React.FC<Props> = ({
                     {selectedDay.workouts.length > 1 && (
                       <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3">
                         {workout.title} ·{" "}
-                        {format(parseISO(workout.start_time), "HH:mm")}
+                        {format(parseWorkoutTime(workout.start_time), "HH:mm")}
                       </p>
                     )}
 

@@ -1,11 +1,12 @@
 import React from "react";
 import { Zap } from "lucide-react";
-import { isFuture, parseISO } from "date-fns";
+import { isFuture } from "date-fns";
+import { parseWorkoutTime } from "../../utils/dateUtils";
 import type { Workout } from "../../services/workout";
 import { isCardioWorkout } from "./helpers";
 
 const WorkoutIndicator: React.FC<{ workout: Workout }> = ({ workout }) => {
-  const future = isFuture(parseISO(workout.start_time));
+  const future = isFuture(parseWorkoutTime(workout.start_time));
   const cardio = isCardioWorkout(workout);
   const hasFitbit = !!workout.fitbit_data;
   const hasSets = workout.exercise_sets.length > 0;

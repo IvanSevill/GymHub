@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { parseISO } from "date-fns";
 import type { Workout } from "../../../services/workout";
 import type { TimeEdit } from "../types";
+import { parseWorkoutTime } from "../../../utils/dateUtils";
 
 export function useTimeEdit() {
   const [timeEditId, setTimeEditId] = useState<string | null>(null);
@@ -9,8 +9,8 @@ export function useTimeEdit() {
   const [isSavingTime, setIsSavingTime] = useState(false);
 
   const startTimeEdit = (w: Workout) => {
-    const start = parseISO(w.start_time);
-    const end = parseISO(w.end_time);
+    const start = parseWorkoutTime(w.start_time);
+    const end = parseWorkoutTime(w.end_time);
     setTimeEdit({
       startH: start.getHours(),
       startM: start.getMinutes(),
@@ -33,14 +33,20 @@ export function useTimeEdit() {
     const w = workouts.find((x) => x.id === timeEditId);
     if (!w) return;
 
-    const base = parseISO(w.start_time);
-    // Build a local-time ISO string (no UTC conversion) to match the format
-    // the backend expects and how other times are stored in the DB.
-    // Using toISOString() here would subtract the UTC offset (e.g. -2h in UTC+2).
+    // Use local date parts from the correctly-parsed (UTC-aware) base date.
+    // Then build a new Date in local space so toISOString() gives the right UTC.
+    const base = parseWorkoutTime(w.start_time);
     const makeISO = (h: number, m: number) => {
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const dateStr = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
-      return `${dateStr}T${pad(h)}:${pad(m)}:00`;
+      const d = new Date(
+        base.getFullYear(),
+        base.getMonth(),
+        base.getDate(),
+        h,
+        m,
+        0,
+        0,
+      );
+      return d.toISOString().slice(0, 19); // UTC, no Z, no ms — matches backend format
     };
 
     setIsSavingTime(true);

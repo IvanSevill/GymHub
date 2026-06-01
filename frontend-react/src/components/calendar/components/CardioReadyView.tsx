@@ -9,7 +9,8 @@ import {
   Timer,
   Upload,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
+import { parseWorkoutTime } from "../../../utils/dateUtils";
 import { es } from "date-fns/locale";
 import type { CardioPendingWorkout } from "../../../services/workout";
 import { fmtDuration } from "../helpers";
@@ -77,7 +78,9 @@ const CardioReadyView: React.FC<Props> = ({
                   {w.activity_name}
                 </span>
                 <span className="text-[10px] text-slate-500">
-                  {format(parseISO(w.start_time), "d MMM", { locale: es })}
+                  {format(parseWorkoutTime(w.start_time), "d MMM", {
+                    locale: es,
+                  })}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2 mt-1.5">

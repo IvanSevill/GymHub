@@ -1,19 +1,14 @@
 import React from "react";
 import { Clock } from "lucide-react";
-import {
-  format,
-  parseISO,
-  formatDistanceToNow,
-  isToday,
-  isTomorrow,
-} from "date-fns";
+import { format, formatDistanceToNow, isToday, isTomorrow } from "date-fns";
 import { es } from "date-fns/locale";
+import { parseWorkoutTime } from "../../utils/dateUtils";
 import { Workout } from "../../services/workout";
 import { isCardioWorkout } from "../calendar/helpers";
 import WorkoutCardIcon from "./WorkoutCardIcon";
 
 const relativeDate = (dateStr: string): string => {
-  const d = parseISO(dateStr);
+  const d = parseWorkoutTime(dateStr);
   if (isToday(d)) return "Hoy";
   if (isTomorrow(d)) return "Mañana";
   return formatDistanceToNow(d, { locale: es, addSuffix: true });
@@ -58,7 +53,7 @@ const WorkoutCardHeader: React.FC<WorkoutCardHeaderProps> = ({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-medium text-slate-500">
           <span className="flex items-center gap-1.5">
             <Clock size={11} className="text-primary" />
-            {format(parseISO(workout.start_time), "PPP · HH:mm", {
+            {format(parseWorkoutTime(workout.start_time), "PPP · HH:mm", {
               locale: es,
             })}
           </span>

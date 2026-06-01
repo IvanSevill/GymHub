@@ -8,8 +8,8 @@ import {
   startOfWeek,
   endOfWeek,
   isSameDay,
-  parseISO,
 } from "date-fns";
+import { parseWorkoutTime } from "../utils/dateUtils";
 import { workoutService, WorkoutCreate } from "../services/workout";
 import { useToast } from "../context/ToastContext";
 import CalendarHeader from "../components/calendar/CalendarHeader";
@@ -48,7 +48,7 @@ const Calendar: React.FC = () => {
       return {
         date: prev.date,
         workouts: fresh.filter((w) =>
-          isSameDay(parseISO(w.start_time), prev.date),
+          isSameDay(parseWorkoutTime(w.start_time), prev.date),
         ),
       };
     });
@@ -88,7 +88,7 @@ const Calendar: React.FC = () => {
     setSelectedDayWorkouts((prev) => {
       if (!prev) return null;
       const remaining = fresh.filter((w) =>
-        isSameDay(parseISO(w.start_time), prev.date),
+        isSameDay(parseWorkoutTime(w.start_time), prev.date),
       );
       return remaining.length > 0
         ? { date: prev.date, workouts: remaining }

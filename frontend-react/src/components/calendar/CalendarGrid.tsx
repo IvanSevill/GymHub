@@ -1,5 +1,6 @@
 import React from "react";
-import { format, isToday, isSameDay, parseISO } from "date-fns";
+import { format, isToday, isSameDay } from "date-fns";
+import { parseWorkoutTime } from "../../utils/dateUtils";
 import { motion } from "framer-motion";
 import { SkeletonBlock } from "../ui/Skeleton";
 import type { Workout } from "../../services/workout";
@@ -39,7 +40,7 @@ const CalendarGrid: React.FC<Props> = ({
           ))
         : daysInGrid.map((day, i) => {
             const dayWorkouts = workouts.filter((w) =>
-              isSameDay(parseISO(w.start_time), day),
+              isSameDay(parseWorkoutTime(w.start_time), day),
             );
             const outside = day.getMonth() !== currentDate.getMonth();
             return (

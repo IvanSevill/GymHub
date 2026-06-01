@@ -3,7 +3,8 @@ import { Clock, CalendarDays, Hash, Trophy } from "lucide-react";
 import { analyticsService, MaxLift } from "../services/analytics";
 import { workoutService, Workout } from "../services/workout";
 import { exerciseService, Exercise } from "../services/exercise";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
+import { parseWorkoutTime } from "../utils/dateUtils";
 import { es } from "date-fns/locale";
 import { motion } from "framer-motion";
 import { SkeletonCard } from "../components/ui/Skeleton";
@@ -45,9 +46,11 @@ const Dashboard: React.FC = () => {
   ).size;
 
   const now = new Date();
-  const lastPast = allWorkouts.find((w) => parseISO(w.start_time) <= now);
+  const lastPast = allWorkouts.find(
+    (w) => parseWorkoutTime(w.start_time) <= now,
+  );
   const lastSessionDate = lastPast
-    ? format(parseISO(lastPast.start_time), "dd MMM", { locale: es })
+    ? format(parseWorkoutTime(lastPast.start_time), "dd MMM", { locale: es })
     : "—";
 
   const fitbitWorkouts = [...allWorkouts]
@@ -57,14 +60,14 @@ const Dashboard: React.FC = () => {
   const caloriesData = fitbitWorkouts
     .filter((w) => (w.fitbit_data?.calories ?? 0) > 0)
     .map((w) => ({
-      date: format(parseISO(w.start_time), "dd MMM", { locale: es }),
+      date: format(parseWorkoutTime(w.start_time), "dd MMM", { locale: es }),
       calories: w.fitbit_data!.calories,
     }));
 
   const heartRateData = fitbitWorkouts
     .filter((w) => (w.fitbit_data?.heart_rate_avg ?? 0) > 0)
     .map((w) => ({
-      date: format(parseISO(w.start_time), "dd MMM", { locale: es }),
+      date: format(parseWorkoutTime(w.start_time), "dd MMM", { locale: es }),
       fc: w.fitbit_data!.heart_rate_avg,
     }));
 
@@ -77,7 +80,7 @@ const Dashboard: React.FC = () => {
         0,
     )
     .map((w) => ({
-      date: format(parseISO(w.start_time), "dd MMM", { locale: es }),
+      date: format(parseWorkoutTime(w.start_time), "dd MMM", { locale: es }),
       [AZM_ZONES[0].key]: w.fitbit_data!.azm_fat_burn ?? 0,
       [AZM_ZONES[1].key]: w.fitbit_data!.azm_cardio ?? 0,
       [AZM_ZONES[2].key]: w.fitbit_data!.azm_peak ?? 0,
