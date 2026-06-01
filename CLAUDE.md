@@ -1,24 +1,12 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working in this repository. This is the single source of truth — all other docs live in `docs/`.
+Behavioral guidance for Claude Code. Reference docs live in `docs/`.
 
 ---
 
 ## Project
 
 **GymHub** — personal fitness platform for tracking workouts, planning routines, and visualizing analytics. Integrates with Google Calendar and Fitbit.
-
-**Owner:** Iván Jesús Sevillano — 3rd-year Software Engineering student (University of Seville / Erasmus at University of Pannonia).
-
----
-
-## Repository Structure
-
-```
-backend/            FastAPI backend (Python)
-frontend-react/     React/Vite frontend (TypeScript)
-docs/               Design docs, workflow guides, principles
-```
 
 ---
 
@@ -28,21 +16,21 @@ docs/               Design docs, workflow guides, principles
 
 ```powershell
 cd backend
-pip install -r requirements.txt          # install deps
-uvicorn app.main:app --reload            # dev server
-ruff check .                             # lint — run after EVERY .py edit
-ruff check --fix .                       # auto-fix lint issues
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+ruff check .
+ruff check --fix .
 ```
 
 ### Frontend
 
 ```powershell
 cd frontend-react
-npm install                              # install deps
-npm run dev                              # dev server → http://localhost:5173
-npm run build                            # tsc + vite build
-npx prettier --write <file>             # format — run after EVERY .ts/.tsx edit
-npx tsc --noEmit                         # type check
+npm install
+npm run dev
+npm run build
+npx prettier --write <file>
+npx tsc --noEmit
 ```
 
 ---
@@ -61,118 +49,33 @@ If a check fails, investigate and fix autonomously — do not leave a failing st
 
 ---
 
-## Environment Setup
-
-`backend/.env` (copy from `backend/.env.example`):
-- `DATABASE_URL` — `sqlite:///./test.db` for dev, PostgreSQL URL for prod
-- `SECRET_KEY` — JWT signing key
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth + Calendar
-- `FITBIT_CLIENT_ID` / `FITBIT_CLIENT_SECRET` — Fitbit integration
-- `FRONTEND_URL` — CORS origin (default `http://localhost:5173`)
-- `ROOT_EMAILS` — comma-separated admin emails
-
-`frontend-react/.env`:
-- `VITE_GOOGLE_CLIENT_ID`
-
----
-
-## Architecture
-
-### Backend (`backend/app/`)
-
-- **`main.py`** — FastAPI app, CORS middleware, global exception handler, router registration.
-- **`database.py`** — SQLAlchemy engine (SQLite dev / PostgreSQL prod), `get_db` session dependency.
-- **`models.py`** — ORM models: `User`, `UserTokens` (Google + Fitbit tokens), `Workout`, `Muscle`, `Exercise`, `ExerciseSet`, `FitbitData`. All PKs are UUID strings.
-- **`schemas.py`** — Pydantic request/response schemas.
-- **`auth.py`** — JWT creation/verification, `get_current_user` / `get_root_user` FastAPI dependencies, Google OAuth flow.
-- **`calendar_utils.py`** — Parse and generate Google Calendar event descriptions for workouts.
-- **`fitbit_utils.py`** — Fitbit OAuth token refresh and activity data fetching.
-- **`routers/`** — `auth_routes.py`, `workouts.py`, `exercises.py`, `analytics.py`.
-
-### Frontend (`frontend-react/src/`)
-
-- **`App.tsx`** — React Router setup with `ProtectedRoute` (redirects to `/login` if unauthenticated).
-- **`context/AuthContext.tsx`** — Auth state: JWT stored in `localStorage`, `useAuth()` hook.
-- **`services/`** — Axios-based API clients: `api.ts` (base client), `auth.ts`, `workout.ts`, `exercise.ts`, `analytics.ts`.
-- **`pages/`** — Dashboard, Login, Workouts, Calendar, Analytics, Settings, ParserTest, StandardizeExercises.
-- **`components/`** — `Layout.tsx` (wraps all authenticated pages), `Sidebar.tsx`.
-- **`components/analytics/`** — KPICards, WeightProgressCard, FrequencyAnalysisCard, WorkoutFrequencyChart, VolumeTrendChart.
-
-Key libraries: TanStack Query (server state), Recharts v3 (charts), Framer Motion (animations), Tailwind CSS v4, Lucide React (icons).
-
----
-
 ## Git Workflow
 
-Full guide: `docs/git-workflow.md`. Summary below.
+Full guide: `docs/git-workflow.md`.
 
-### Branch model
+### Rules
 
-```
-main        ← production only. Receives merges from develop via release PRs.
-  └── develop   ← integration. Direct target for fixes and refactors. Always ahead of main.
-        └── feat/<name>   ← one branch per feature, born from develop, dies on merge.
-```
+- Every change — regardless of type or size — goes through a PR into `develop`. No direct commits, ever.
+- Branch prefix follows the commit type: `feat/`, `fix/`, `refactor/`, `chore/`, `docs/`, `perf/`, `style/`.
+- Merges use `--no-ff` to preserve branch history. Never squash or rebase.
+- Branches are deleted after merge.
+- `main` only receives release merges from `develop`, tagged with a version.
+- After each release, a separation commit is made on `develop` to start the next cycle.
 
-### When to use a branch vs. commit directly to develop
+---
 
-| Change type | Where to commit |
+## Versioning
+
+Follows **Semantic Versioning** (`MAJOR.MINOR.PATCH`) with this project-specific rule:
+
+| Change | Version bump |
 |---|---|
-| `feat` | `feat/<name>` branch → PR into develop |
-| `fix` | Directly on `develop` |
-| `refactor` | Directly on `develop` |
-| `style`, `chore`, `docs`, `test`, `perf` | Directly on `develop` |
+| New feature | `1.X.Y` → `1.X.Y+1` (patch) |
+| Bug fix / chore / docs | `1.X.Y` → `1.X.Y+1` (patch) |
+| Significant refactor | `1.X.Y` → `1.X+1.0` (minor, patch resets to 0) |
+| Breaking change | `1.X.Y` → `2.0.0` (major) |
 
-Only `feat` commits need a branch and PR. Everything else goes straight to `develop`.
-
-### Feature lifecycle (feat only)
-
-```powershell
-# 1. Start from develop
-git checkout develop && git pull
-git checkout -b feat/<name>
-
-# 2. Develop, commit with Conventional Commits
-# 3. Push and open PR targeting develop
-git push -u origin feat/<name>
-gh pr create --base develop --title "feat(<scope>): ..."
-
-# 4. Merge with --no-ff (preserves branch lane in git graph) and delete branch
-gh pr merge <n> --merge --delete-branch
-```
-
-### Fix / refactor lifecycle (direct to develop)
-
-```powershell
-git checkout develop && git pull
-# make changes, then:
-git add <files>
-git commit -m "fix(<scope>): ..." # or refactor/style/chore/etc.
-git push origin develop
-```
-
-**Critical rules:**
-- Feature branches always use `--no-ff` merges — never fast-forward. They must appear as a distinct lane in the git graph.
-- After every release (when `develop == main`), create a separation commit on develop before opening any feature:
-  ```powershell
-  git commit --allow-empty -m "chore(develop): begin vX.Y.Z development cycle"
-  git push origin develop
-  ```
-- Never commit directly to `main`.
-
-### Release (develop → main)
-
-```powershell
-gh pr create --base main --head develop --title "release: vX.Y.Z — <description>"
-gh pr merge <n> --merge
-git checkout main && git pull
-git tag -a vX.Y.Z -m "release: vX.Y.Z"
-git push origin vX.Y.Z
-# Immediately separate develop from main for the next cycle:
-git checkout develop && git merge main --ff-only
-git commit --allow-empty -m "chore(develop): begin vX.Y.(Z+1) development cycle"
-git push origin develop
-```
+A refactor qualifies as **significant** when it restructures a core area of the codebase (e.g. rewrites a full page, replaces a shared pattern across multiple components, or changes a backend module's architecture). A single-file cleanup does not qualify.
 
 ---
 
@@ -192,14 +95,7 @@ git push origin develop
 | `perf` | Performance improvement |
 | `revert` | Reverts a previous commit |
 
-Scopes: `backend`, `frontend`, `auth`, `workouts`, `exercises`, `analytics`, `database`, `ui`
-
-Examples:
-```
-feat(analytics): add KPI cards with period comparison
-fix(backend): handle null fitbit duration in summary endpoint
-chore(develop): begin v1.1.0 development cycle
-```
+Scopes: `backend`, `frontend`, `auth`, `workouts`, `exercises`, `analytics`, `calendar`, `health`, `database`, `ui`
 
 ---
 
@@ -229,13 +125,23 @@ Keep PRs small and focused. If a feature is large, split it: backend API first, 
 - Never hardcode secrets — always read from `.env` via `python-dotenv` or `import.meta.env`.
 - Use parameterized queries (SQLAlchemy ORM) — never raw string SQL.
 - OS: **Windows**, shell: **PowerShell**. Use PowerShell syntax in all scripts.
-- Security: validate input at system boundaries (user input, external APIs). Trust internal code and framework guarantees.
+- Validate input at system boundaries (user input, external APIs). Trust internal code and framework guarantees.
+- External image URLs rendered in `<img src>` must be validated to start with `https://` before use.
+- **4-state component lifecycle (mandatory):** every component that loads data from the server must handle `loading`, `success`, `empty`, and `error`. See `docs/UI/`.
 
 ---
 
-## Design Docs
+## End-of-Session Checklist
+
+- Update `docs/architecture.md` to reflect any new files, routes, components, or routers added during the session.
+
+---
+
+## Reference Docs
 
 | Doc | Purpose |
 |---|---|
-| `docs/git-workflow.md` | Full git branching guide with diagrams and command reference |
-| `docs/data-analysis-design-principles.md` | 9 analytical chart patterns extracted from the Salud dashboard redesign — use when building analytics views |
+| `docs/architecture.md` | Repository structure, backend modules, frontend pages and components |
+| `docs/environment.md` | All environment variables for backend and frontend |
+| `docs/UI/` | UI/UX development principles — consult before building any interface component |
+| `docs/new-implementations/` | Brainstorming and full specs for pending features and refactors |

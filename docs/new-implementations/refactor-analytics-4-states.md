@@ -18,22 +18,11 @@ Además, `FrequencyAnalysisCard` no tiene empty state explícito, y `WeightProgr
 
 ## Patrón a implementar
 
-Ver **Pattern 10** en `docs/data-analysis-design-principles.md` para el patrón completo con código.
+Ver `docs/UI/` para el patrón completo con código (`states-principles.md` y `data-analysis-design-principles.md`).
 
 ### Componente compartido a crear
 
-`frontend-react/src/components/ui/ChartStateWrapper.tsx`
-
-```tsx
-type ChartState = "loading" | "success" | "empty" | "error";
-
-interface Props {
-  state: ChartState;
-  emptyMessage?: string;
-  onRetry?: () => void;
-  children: React.ReactNode;
-}
-```
+`frontend-react/src/components/ui/ChartStateWrapper.tsx` — implementación completa en `docs/UI/states-principles.md`.
 
 ### Cambios por componente
 
@@ -46,18 +35,6 @@ interface Props {
 | `MuscleBalanceChart` | Ya tiene empty | Añadir error state visible |
 | `DurationHistogram` | Ya tiene empty | Añadir error state visible |
 | `KPICards` | Mostrar `—` en lugar de `0` | Añadir error state visible |
-
-### Estado de error estándar
-
-```tsx
-<div className="flex flex-col items-center gap-3 py-12 text-center">
-  <AlertCircle size={28} className="text-danger/60" />
-  <p className="text-sm text-slate-500">Error al cargar los datos</p>
-  <button onClick={onRetry} className="text-xs text-primary hover:underline">
-    Reintentar
-  </button>
-</div>
-```
 
 ## Estrategia de implementación
 

@@ -63,7 +63,7 @@ IA: [llama a get_analytics_summary(days=60)]
 
 ## Notas de implementación
 
-- Usar `claude-sonnet-4-6` como modelo base (buen balance coste/capacidad para tool use)
+- Usar `claude-sonnet-4-6` como modelo (buen balance coste/capacidad para tool use)
 - Implementar prompt caching para el system prompt con el contexto del usuario
 - Límite de tokens de contexto de conversación para evitar costes excesivos
 - El servidor MCP puede ser interno (en el mismo proceso FastAPI) o un proceso separado
