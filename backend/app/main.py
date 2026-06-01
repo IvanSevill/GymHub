@@ -25,12 +25,6 @@ with engine.connect() as conn:
             conn.commit()
         except Exception:
             conn.rollback()
-    # Clear cached image URLs that are null or not from gstatic (old broken links)
-    try:
-        conn.execute(text("UPDATE exercises SET image_url = NULL WHERE image_url IS NOT NULL AND image_url NOT LIKE '%gstatic.com%'"))
-        conn.commit()
-    except Exception:
-        conn.rollback()
 
 app = FastAPI(title="GymHub Backend v2")
 
