@@ -138,6 +138,9 @@ const SidebarContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             className="text-slate-600 group-hover:text-primary transition-colors shrink-0"
           />
         </NavLink>
+        <p className="text-center text-[9px] text-slate-700 font-mono mt-2 tracking-widest">
+          v{__APP_VERSION__}
+        </p>
       </div>
     </div>
   );
