@@ -32,7 +32,7 @@ async def create_calendar(
     creds = get_google_credentials(user_tokens, db)
     if not creds:
         raise HTTPException(status_code=401, detail="Google credentials expired — please re-authenticate")
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
     try:
         new_cal = service.calendars().insert(body={"summary": name.strip()}).execute()
         return {"id": new_cal["id"], "summary": new_cal["summary"]}
@@ -62,7 +62,7 @@ async def list_calendars(
             status_code=401, detail="Google credentials expired — please re-authenticate"
         )
 
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
     try:
         calendars = service.calendarList().list().execute().get("items", [])
         logger.debug("Found %d calendars for user %s", len(calendars), current_user.email)
@@ -429,7 +429,7 @@ async def delete_workout(
         if user_tokens and user_tokens.selected_calendar_id:
             creds = get_google_credentials(user_tokens, db)
             if creds:
-                service = build("calendar", "v3", credentials=creds)
+                service = build("calendar", "v3", credentials=creds, cache_discovery=False)
                 try:
                     calendar_id = user_tokens.selected_calendar_id or "primary"
                     service.events().delete(
@@ -465,7 +465,7 @@ async def test_parse_calendar_events(
     if not creds:
         raise HTTPException(status_code=400, detail="Could not refresh Google credentials.")
 
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
     calendar_id = user_tokens.selected_calendar_id or "primary"
     time_min = (datetime.utcnow() - timedelta(days=90)).isoformat() + "Z"
 
@@ -545,7 +545,7 @@ async def sync_all_from_calendar(
             detail="Could not refresh Google credentials. Please reconnect your Google account.",
         )
 
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
     calendar_id = user_tokens.selected_calendar_id or "primary"
 
     all_events = []

@@ -54,7 +54,7 @@ def update_google_calendar_event(
         logger.warning("No valid Google credentials for calendar sync.")
         return None
 
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
     active_exercise_ids = [es.exercise_id for es in workout.exercise_sets if es.exercise_id]
     if active_exercise_ids:

@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts";
-import { BarChart2 } from "lucide-react";
+import { BarChart2, AlertCircle } from "lucide-react";
 import PeriodSelector from "../ui/PeriodSelector";
 import { PERIOD_OPTIONS } from "../../constants/periods";
 import { analyticsService, ExerciseFrequency } from "../../services/analytics";
@@ -34,14 +34,20 @@ const FrequencyAnalysisCard: React.FC = () => {
   const [frequencyDays, setFrequencyDays] = useState(30);
   const [viewType, setViewType] = useState<"muscle" | "exercise">("muscle");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const load = (days: number) => {
+    setLoading(true);
+    setError(false);
+    analyticsService
+      .getExerciseFrequency(undefined, days)
+      .then(setFrequency)
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    setLoading(true);
-    analyticsService
-      .getExerciseFrequency(undefined, frequencyDays)
-      .then(setFrequency)
-      .catch(() => setFrequency([]))
-      .finally(() => setLoading(false));
+    load(frequencyDays);
   }, [frequencyDays]);
 
   const chartData =
@@ -125,6 +131,26 @@ const FrequencyAnalysisCard: React.FC = () => {
 
       {loading ? (
         <SkeletonChartArea height="h-[400px]" />
+      ) : error ? (
+        <div className="h-[400px] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-red-500/20 rounded-2xl">
+          <AlertCircle size={28} className="text-red-500/50" />
+          <p className="text-slate-500 text-sm">
+            Error al cargar la frecuencia de ejercicios.
+          </p>
+          <button
+            onClick={() => load(frequencyDays)}
+            className="text-xs text-primary hover:underline font-semibold"
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : chartData.length === 0 ? (
+        <div className="h-[400px] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-white/[0.06] rounded-2xl">
+          <BarChart2 size={28} className="text-slate-700" />
+          <p className="text-slate-500 text-sm">
+            Sin ejercicios registrados en este período.
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="h-[400px] w-full mt-4">
