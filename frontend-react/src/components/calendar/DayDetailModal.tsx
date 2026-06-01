@@ -10,12 +10,31 @@ import {
   Trash2,
   Activity,
   Calendar as CalIcon,
+  Clock,
 } from "lucide-react";
 import type { Workout } from "../../services/workout";
 import type { DraftSet } from "./types";
-import { CardioBody, WeightsBody, FutureBody } from "./WorkoutBodies";
+import {
+  CardioBody,
+  FutureBody,
+  MuscleLabel,
+  WeightsBody,
+} from "./WorkoutBodies";
 import EditBody from "./EditBody";
-import { isCardioWorkout } from "./helpers";
+import WheelPicker from "./WheelPicker";
+import { groupWorkoutSets, isCardioWorkout } from "./helpers";
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, i) =>
+  String(i).padStart(2, "0"),
+);
+
+interface TimeEdit {
+  startH: number;
+  startM: number;
+  endH: number;
+  endM: number;
+}
 
 interface Props {
   selectedDay: { date: Date; workouts: Workout[] } | null;
@@ -28,6 +47,11 @@ interface Props {
   onSaveEdit: (workout: Workout) => void;
   onDraftChange: (sets: DraftSet[]) => void;
   onDelete: (workoutId: string) => Promise<void>;
+  onUpdateTime: (
+    workoutId: string,
+    startTime: string,
+    endTime: string,
+  ) => Promise<void>;
 }
 
 const DayDetailModal: React.FC<Props> = ({
@@ -41,9 +65,13 @@ const DayDetailModal: React.FC<Props> = ({
   onSaveEdit,
   onDraftChange,
   onDelete,
+  onUpdateTime,
 }) => {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [timeEditId, setTimeEditId] = useState<string | null>(null);
+  const [timeEdit, setTimeEdit] = useState<TimeEdit | null>(null);
+  const [isSavingTime, setIsSavingTime] = useState(false);
 
   const handleDelete = async () => {
     if (!deleteConfirmId) return;
@@ -58,8 +86,54 @@ const DayDetailModal: React.FC<Props> = ({
 
   const handleClose = () => {
     setDeleteConfirmId(null);
+    setTimeEditId(null);
+    setTimeEdit(null);
     onClose();
   };
+
+  const startTimeEdit = (w: Workout) => {
+    const start = parseISO(w.start_time);
+    const end = parseISO(w.end_time);
+    setTimeEdit({
+      startH: start.getHours(),
+      startM: start.getMinutes(),
+      endH: end.getHours(),
+      endM: end.getMinutes(),
+    });
+    setTimeEditId(w.id);
+  };
+
+  const cancelTimeEdit = () => {
+    setTimeEditId(null);
+    setTimeEdit(null);
+  };
+
+  const saveTime = async () => {
+    if (!timeEditId || !timeEdit || !selectedDay) return;
+    const w = selectedDay.workouts.find((x) => x.id === timeEditId);
+    if (!w) return;
+
+    const base = parseISO(w.start_time);
+    const makeISO = (h: number, m: number) => {
+      const d = new Date(base);
+      d.setHours(h, m, 0, 0);
+      return d.toISOString().replace(/\.\d{3}Z$/, "");
+    };
+
+    setIsSavingTime(true);
+    try {
+      await onUpdateTime(
+        timeEditId,
+        makeISO(timeEdit.startH, timeEdit.startM),
+        makeISO(timeEdit.endH, timeEdit.endM),
+      );
+      cancelTimeEdit();
+    } finally {
+      setIsSavingTime(false);
+    }
+  };
+
+  const isInTimeEdit = (wId: string) => timeEditId === wId;
 
   return (
     <AnimatePresence>
@@ -88,20 +162,14 @@ const DayDetailModal: React.FC<Props> = ({
                   {selectedDay.workouts[0]?.title || "Sesión"}
                 </h3>
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span
-                    className="flex items-center gap-1"
-                    title="Ejercicios y series · base de datos local"
-                  >
+                  <span className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
                     <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">
                       BD
                     </span>
                   </span>
                   {selectedDay.workouts.some((w) => w.google_event_id) && (
-                    <span
-                      className="flex items-center gap-1"
-                      title="Sincronizado con Google Calendar"
-                    >
+                    <span className="flex items-center gap-1">
                       <CalIcon size={9} className="text-slate-500" />
                       <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">
                         Calendar
@@ -109,10 +177,7 @@ const DayDetailModal: React.FC<Props> = ({
                     </span>
                   )}
                   {selectedDay.workouts.some((w) => w.fitbit_data) && (
-                    <span
-                      className="flex items-center gap-1"
-                      title="Métricas Fitbit adjuntas"
-                    >
+                    <span className="flex items-center gap-1">
                       <Activity size={9} className="text-blue-400/70" />
                       <span className="text-[8px] font-bold text-blue-400/70 uppercase tracking-widest">
                         Fitbit
@@ -121,37 +186,55 @@ const DayDetailModal: React.FC<Props> = ({
                   )}
                 </div>
               </div>
+
               <div className="flex items-center gap-1">
-                {selectedDay.workouts.map((w) => (
-                  <React.Fragment key={w.id}>
-                    {!isCardioWorkout(w) && editingWorkoutId !== w.id && (
-                      <button
-                        onClick={() => onEnterEdit(w)}
-                        className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-500 hover:text-primary"
-                        title="Editar"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                    )}
-                    {editingWorkoutId !== w.id && (
-                      <button
-                        onClick={() =>
-                          setDeleteConfirmId(
-                            deleteConfirmId === w.id ? null : w.id,
-                          )
-                        }
-                        className={`p-2 rounded-xl transition-colors ${
-                          deleteConfirmId === w.id
-                            ? "bg-danger/15 text-danger"
-                            : "hover:bg-white/5 text-slate-500 hover:text-danger"
-                        }`}
-                        title="Eliminar"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )}
-                  </React.Fragment>
-                ))}
+                {selectedDay.workouts.map((w) => {
+                  const future = isFuture(parseISO(w.start_time));
+                  const notEditing =
+                    editingWorkoutId !== w.id && timeEditId !== w.id;
+                  return (
+                    <React.Fragment key={w.id}>
+                      {/* Pencil — only for past workouts that are not cardio */}
+                      {!future && !isCardioWorkout(w) && notEditing && (
+                        <button
+                          onClick={() => onEnterEdit(w)}
+                          className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-500 hover:text-primary"
+                          title="Editar ejercicios"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                      )}
+                      {/* Clock — only for future workouts */}
+                      {future && notEditing && (
+                        <button
+                          onClick={() => startTimeEdit(w)}
+                          className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-500 hover:text-primary"
+                          title="Editar horario"
+                        >
+                          <Clock size={15} />
+                        </button>
+                      )}
+                      {/* Trash — always shown when not editing */}
+                      {notEditing && (
+                        <button
+                          onClick={() =>
+                            setDeleteConfirmId(
+                              deleteConfirmId === w.id ? null : w.id,
+                            )
+                          }
+                          className={`p-2 rounded-xl transition-colors ${
+                            deleteConfirmId === w.id
+                              ? "bg-danger/15 text-danger"
+                              : "hover:bg-white/5 text-slate-500 hover:text-danger"
+                          }`}
+                          title="Eliminar"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
                 <button
                   onClick={handleClose}
                   className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-500 hover:text-white ml-1"
@@ -167,6 +250,8 @@ const DayDetailModal: React.FC<Props> = ({
                 const future = isFuture(parseISO(workout.start_time));
                 const cardio = isCardioWorkout(workout);
                 const isEditing = editingWorkoutId === workout.id;
+                const isTimeEditing = isInTimeEdit(workout.id);
+
                 return (
                   <div key={wIdx}>
                     {selectedDay.workouts.length > 1 && (
@@ -175,7 +260,14 @@ const DayDetailModal: React.FC<Props> = ({
                         {format(parseISO(workout.start_time), "HH:mm")}
                       </p>
                     )}
-                    {isEditing ? (
+
+                    {isTimeEditing && timeEdit ? (
+                      <TimeEditView
+                        workout={workout}
+                        timeEdit={timeEdit}
+                        onChange={setTimeEdit}
+                      />
+                    ) : isEditing ? (
                       <EditBody
                         draftSets={draftSets}
                         onChange={onDraftChange}
@@ -192,7 +284,7 @@ const DayDetailModal: React.FC<Props> = ({
               })}
             </div>
 
-            {/* Footer actions */}
+            {/* Footer */}
             <div className="px-6 py-4 border-t border-white/5 bg-black/20 rounded-b-[2.5rem]">
               {deleteConfirmId ? (
                 <div className="space-y-3">
@@ -226,6 +318,28 @@ const DayDetailModal: React.FC<Props> = ({
                       Eliminar
                     </button>
                   </div>
+                </div>
+              ) : timeEditId ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={cancelTimeEdit}
+                    disabled={isSavingTime}
+                    className="flex-1 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-40"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={saveTime}
+                    disabled={isSavingTime}
+                    className="flex-1 py-3 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                  >
+                    {isSavingTime ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Check size={13} />
+                    )}
+                    Guardar hora
+                  </button>
                 </div>
               ) : editingWorkoutId ? (
                 <div className="flex gap-2">
@@ -267,6 +381,99 @@ const DayDetailModal: React.FC<Props> = ({
         </div>
       )}
     </AnimatePresence>
+  );
+};
+
+/* ── Time edit view ─────────────────────────────────────────── */
+
+interface TimeEditViewProps {
+  workout: Workout;
+  timeEdit: TimeEdit;
+  onChange: (t: TimeEdit) => void;
+}
+
+const TimeEditView: React.FC<TimeEditViewProps> = ({
+  workout,
+  timeEdit,
+  onChange,
+}) => {
+  const muscleGroups = groupWorkoutSets(workout.exercise_sets);
+
+  return (
+    <div className="space-y-6">
+      {/* Two-wheel time pickers */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Start time */}
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+            Inicio
+          </p>
+          <div
+            className="flex items-center gap-1 rounded-2xl px-2 py-1"
+            style={{ background: "rgba(255,255,255,0.03)" }}
+          >
+            <WheelPicker
+              items={HOURS}
+              selectedIndex={timeEdit.startH}
+              onChange={(h) => onChange({ ...timeEdit, startH: h })}
+            />
+            <span className="text-2xl font-black text-slate-600 pb-0.5">:</span>
+            <WheelPicker
+              items={MINUTES}
+              selectedIndex={timeEdit.startM}
+              onChange={(m) => onChange({ ...timeEdit, startM: m })}
+            />
+          </div>
+        </div>
+
+        {/* End time */}
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+            Fin
+          </p>
+          <div
+            className="flex items-center gap-1 rounded-2xl px-2 py-1"
+            style={{ background: "rgba(255,255,255,0.03)" }}
+          >
+            <WheelPicker
+              items={HOURS}
+              selectedIndex={timeEdit.endH}
+              onChange={(h) => onChange({ ...timeEdit, endH: h })}
+            />
+            <span className="text-2xl font-black text-slate-600 pb-0.5">:</span>
+            <WheelPicker
+              items={MINUTES}
+              selectedIndex={timeEdit.endM}
+              onChange={(m) => onChange({ ...timeEdit, endM: m })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Muscle groups — read only */}
+      {muscleGroups.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">
+            Grupos musculares
+          </p>
+          {muscleGroups.map((mg) => (
+            <div key={mg.name}>
+              <MuscleLabel name={mg.name} />
+              <div className="mt-1 flex flex-wrap gap-1.5 px-1">
+                {mg.exercises.map((eg) => (
+                  <span
+                    key={eg.name}
+                    className="px-2.5 py-1 rounded-xl bg-white/[0.04] border border-white/8 text-[10px] font-semibold text-slate-400 capitalize"
+                  >
+                    {eg.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
