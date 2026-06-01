@@ -2,6 +2,11 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Activity, Flame, Moon, Clock } from "lucide-react";
 import type { SleepLog, DailyHealth } from "../../services/fitbit";
+import {
+  SLEEP_QUALITY,
+  TARGET_SLEEP_HOURS,
+  SIGNIFICANT_CHANGE_THRESHOLD,
+} from "./chartUtils";
 
 interface Props {
   currentDaily: DailyHealth[];
@@ -18,6 +23,57 @@ function avg(values: number[]): number {
 function pctChange(current: number, prev: number): number | null {
   if (!prev || !current) return null;
   return ((current - prev) / prev) * 100;
+}
+
+interface HealthMetrics {
+  curSteps: number;
+  prevSteps: number;
+  curCalories: number;
+  prevCalories: number;
+  curEff: number;
+  prevEff: number;
+  curHours: number;
+  prevHours: number;
+  maxSteps: number;
+}
+
+function useHealthMetrics(
+  currentDaily: DailyHealth[],
+  prevDaily: DailyHealth[],
+  currentSleep: SleepLog[],
+  prevSleep: SleepLog[],
+): HealthMetrics {
+  const curSteps = avg(currentDaily.map((d) => d.steps));
+  const prevSteps = avg(prevDaily.map((d) => d.steps));
+
+  const curCalories = avg(
+    currentDaily.filter((d) => d.calories_out > 0).map((d) => d.calories_out),
+  );
+  const prevCalories = avg(
+    prevDaily.filter((d) => d.calories_out > 0).map((d) => d.calories_out),
+  );
+
+  const curEff = avg(currentSleep.map((s) => s.efficiency));
+  const prevEff = avg(prevSleep.map((s) => s.efficiency));
+
+  const curHours = avg(currentSleep.map((s) => s.duration_ms / 3_600_000));
+  const prevHours = avg(prevSleep.map((s) => s.duration_ms / 3_600_000));
+
+  const maxSteps = currentDaily.length
+    ? Math.max(...currentDaily.map((d) => d.steps))
+    : 0;
+
+  return {
+    curSteps,
+    prevSteps,
+    curCalories,
+    prevCalories,
+    curEff,
+    prevEff,
+    curHours,
+    prevHours,
+    maxSteps,
+  };
 }
 
 interface CardDef {
@@ -48,14 +104,23 @@ const KpiCard: React.FC<CardDef & { delay: number }> = ({
 }) => {
   let changeEl: React.ReactNode = null;
   if (change !== null) {
-    const good = higherIsBetter ? change > 2 : change < -2;
-    const bad = higherIsBetter ? change < -2 : change > 2;
+    const good = higherIsBetter
+      ? change > SIGNIFICANT_CHANGE_THRESHOLD
+      : change < -SIGNIFICANT_CHANGE_THRESHOLD;
+    const bad = higherIsBetter
+      ? change < -SIGNIFICANT_CHANGE_THRESHOLD
+      : change > SIGNIFICANT_CHANGE_THRESHOLD;
     const colorClass = good
       ? "text-green-400"
       : bad
         ? "text-red-400"
         : "text-slate-500";
-    const arrow = change > 2 ? "↑" : change < -2 ? "↓" : "→";
+    const arrow =
+      change > SIGNIFICANT_CHANGE_THRESHOLD
+        ? "↑"
+        : change < -SIGNIFICANT_CHANGE_THRESHOLD
+          ? "↓"
+          : "→";
     changeEl = (
       <p className={`text-[10px] font-bold ${colorClass}`}>
         {arrow} {Math.abs(change).toFixed(1)}%{" "}
@@ -92,25 +157,17 @@ const HealthKpiCards: React.FC<Props> = ({
   currentSleep,
   prevSleep,
 }) => {
-  const curSteps = avg(currentDaily.map((d) => d.steps));
-  const prevSteps = avg(prevDaily.map((d) => d.steps));
-
-  const curCalories = avg(
-    currentDaily.filter((d) => d.calories_out > 0).map((d) => d.calories_out),
-  );
-  const prevCalories = avg(
-    prevDaily.filter((d) => d.calories_out > 0).map((d) => d.calories_out),
-  );
-
-  const curEff = avg(currentSleep.map((s) => s.efficiency));
-  const prevEff = avg(prevSleep.map((s) => s.efficiency));
-
-  const curHours = avg(currentSleep.map((s) => s.duration_ms / 3_600_000));
-  const prevHours = avg(prevSleep.map((s) => s.duration_ms / 3_600_000));
-
-  const maxSteps = currentDaily.length
-    ? Math.max(...currentDaily.map((d) => d.steps))
-    : 0;
+  const {
+    curSteps,
+    prevSteps,
+    curCalories,
+    prevCalories,
+    curEff,
+    prevEff,
+    curHours,
+    prevHours,
+    maxSteps,
+  } = useHealthMetrics(currentDaily, prevDaily, currentSleep, prevSleep);
 
   const cards: (CardDef & { delay: number })[] = [
     {
@@ -150,9 +207,9 @@ const HealthKpiCards: React.FC<Props> = ({
       label: "Efic. sueño",
       value: curEff > 0 ? `${curEff.toFixed(1)}%` : "—",
       subValue:
-        curEff >= 85
+        curEff >= SLEEP_QUALITY.EXCELLENT
           ? "Excelente"
-          : curEff >= 70
+          : curEff >= SLEEP_QUALITY.ACCEPTABLE
             ? "Aceptable"
             : curEff > 0
               ? "Mejorable"
@@ -170,10 +227,10 @@ const HealthKpiCards: React.FC<Props> = ({
       label: "Horas de sueño",
       value: curHours > 0 ? `${curHours.toFixed(1)}h` : "—",
       subValue:
-        curHours >= 7
+        curHours >= TARGET_SLEEP_HOURS
           ? "Objetivo cumplido"
           : curHours > 0
-            ? `Falta ${(7 - curHours).toFixed(1)}h`
+            ? `Falta ${(TARGET_SLEEP_HOURS - curHours).toFixed(1)}h`
             : undefined,
       change: pctChange(curHours, prevHours),
       higherIsBetter: true,

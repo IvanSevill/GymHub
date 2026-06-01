@@ -9,6 +9,10 @@ export const CHART_TOOLTIP = {
   itemStyle: { fontWeight: "700", fontSize: "13px" },
 };
 
+export const SLEEP_QUALITY = { EXCELLENT: 85, ACCEPTABLE: 70 } as const;
+export const TARGET_SLEEP_HOURS = 7;
+export const SIGNIFICANT_CHANGE_THRESHOLD = 2;
+
 export const fmtDate = (d: string): string => `${d.slice(8)}/${d.slice(5, 7)}`;
 
 export const xTickInterval = (dataLength: number): number =>
