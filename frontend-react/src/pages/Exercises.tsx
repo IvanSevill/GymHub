@@ -1,55 +1,25 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Dumbbell, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
-import { exerciseService } from "../services/exercise";
 import type { Exercise } from "../services/exercise";
-import { analyticsService, MaxLift } from "../services/analytics";
 import { SkeletonBlock } from "../components/ui/Skeleton";
-import { useToast } from "../context/ToastContext";
 import { useExerciseModal } from "../context/ExerciseModalContext";
-
-const MEASUREMENT_LABELS: Record<string, string> = {
-  kg: "kg",
-  reps: "reps",
-  s: "seg",
-  min: "min",
-};
+import { useExerciseData } from "../components/exercises/hooks/useExerciseData";
+import FilterButton from "../components/exercises/FilterButton";
+import { MEASUREMENT_LABELS } from "../constants/measurements";
 
 const Exercises: React.FC = () => {
-  const { addToast } = useToast();
   const { openExerciseModal } = useExerciseModal();
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [prsMap, setPrsMap] = useState<Record<string, MaxLift>>({});
-  const [selectedMuscleId, setSelectedMuscleId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([
-      exerciseService.getExercises(),
-      analyticsService.getMaxLifts(),
-    ])
-      .then(([exs, lifts]) => {
-        setExercises(exs.sort((a, b) => a.name.localeCompare(b.name)));
-        const map: Record<string, MaxLift> = {};
-        lifts.forEach((l) => {
-          map[l.exercise_id] = l;
-        });
-        setPrsMap(map);
-      })
-      .catch(() => addToast("Error al cargar los ejercicios", "error"))
-      .finally(() => setLoading(false));
-  }, []);
+  const { exercises, prsMap, selectedMuscleId, setSelectedMuscleId, loading } =
+    useExerciseData();
 
   const derivedMuscles = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string }>();
-    exercises.forEach((ex) => {
-      if (ex.muscle && !seen.has(ex.muscle.id)) {
-        seen.set(ex.muscle.id, ex.muscle);
-      }
-    });
-    return Array.from(seen.values()).sort((a, b) =>
-      a.name.localeCompare(b.name),
+    const map = new Map(
+      exercises
+        .filter((ex) => ex.muscle)
+        .map((ex) => [ex.muscle!.id, ex.muscle!]),
     );
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [exercises]);
 
   const filtered = useMemo(
@@ -93,28 +63,18 @@ const Exercises: React.FC = () => {
 
       {!loading && derivedMuscles.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          <button
+          <FilterButton
+            label="Todos"
+            active={selectedMuscleId === null}
             onClick={() => setSelectedMuscleId(null)}
-            className={`px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest border transition-all ${
-              selectedMuscleId === null
-                ? "bg-primary/15 border-primary/40 text-primary"
-                : "bg-white/5 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-300"
-            }`}
-          >
-            Todos
-          </button>
+          />
           {derivedMuscles.map((m) => (
-            <button
+            <FilterButton
               key={m.id}
+              label={m.name}
+              active={selectedMuscleId === m.id}
               onClick={() => setSelectedMuscleId(m.id)}
-              className={`px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest border transition-all capitalize ${
-                selectedMuscleId === m.id
-                  ? "bg-primary/15 border-primary/40 text-primary"
-                  : "bg-white/5 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-300"
-              }`}
-            >
-              {m.name}
-            </button>
+            />
           ))}
         </div>
       )}
