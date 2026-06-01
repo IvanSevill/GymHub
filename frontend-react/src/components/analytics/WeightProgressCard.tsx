@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { TrendingUp, ChevronDown } from "lucide-react";
+import { TrendingUp, ChevronDown, AlertCircle } from "lucide-react";
 import PeriodSelector from "../ui/PeriodSelector";
 import { PERIOD_OPTIONS } from "../../constants/periods";
 import { analyticsService } from "../../services/analytics";
@@ -29,6 +29,8 @@ interface Props {
 const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
   const [selectedExercise, setSelectedExercise] = useState("");
   const [weightData, setWeightData] = useState<any[]>([]);
+  const [loadingWeights, setLoadingWeights] = useState(false);
+  const [weightError, setWeightError] = useState(false);
   const [days, setDays] = useState("30");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -49,17 +51,30 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
 
   useEffect(() => {
     if (!selectedExercise) return;
+    let cancelled = false;
+    setLoadingWeights(true);
+    setWeightData([]);
+    setWeightError(false);
     analyticsService
       .getWeightProgress(selectedExercise, Number(days))
-      .then((res) =>
-        setWeightData(
-          res.map((d) => ({
-            ...d,
-            formattedDate: format(parseISO(d.date), "dd MMM", { locale: es }),
-          })),
-        ),
-      )
-      .catch(() => setWeightData([]));
+      .then((res) => {
+        if (!cancelled)
+          setWeightData(
+            res.map((d) => ({
+              ...d,
+              formattedDate: format(parseISO(d.date), "dd MMM", { locale: es }),
+            })),
+          );
+      })
+      .catch(() => {
+        if (!cancelled) setWeightError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingWeights(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedExercise, days]);
 
   // Close dropdown on outside click
@@ -163,8 +178,29 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
         </div>
       </div>
 
-      {loading ? (
+      {!selectedExercise && !loading ? (
+        <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center border border-dashed border-white/[0.06] rounded-2xl">
+          <TrendingUp size={36} className="text-slate-700" />
+          <p className="text-slate-500 text-sm">
+            Selecciona un ejercicio para ver su progreso.
+          </p>
+        </div>
+      ) : loading || loadingWeights ? (
         <SkeletonChartArea height="h-[300px]" />
+      ) : weightError ? (
+        <div className="h-[300px] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-red-500/20 rounded-2xl">
+          <AlertCircle size={28} className="text-red-500/50" />
+          <p className="text-slate-500 text-sm">Error al cargar los datos.</p>
+          <button
+            onClick={() => {
+              setWeightError(false);
+              setLoadingWeights(true);
+            }}
+            className="text-xs text-primary hover:underline font-semibold"
+          >
+            Reintentar
+          </button>
+        </div>
       ) : weightData.length === 0 ? (
         <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center border border-dashed border-white/[0.06] rounded-2xl">
           <TrendingUp size={36} className="text-slate-700" />

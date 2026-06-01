@@ -6,8 +6,8 @@ import {
   BarChart2,
   Settings,
   X,
-  Trophy,
   Heart,
+  History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
@@ -20,8 +20,8 @@ interface SidebarProps {
 const navItems = [
   { to: "/", icon: <BarChart2 size={18} />, label: "Análisis" },
   { to: "/calendar", icon: <CalendarIcon size={18} />, label: "Calendario" },
-  { to: "/workouts", icon: <Dumbbell size={18} />, label: "Entrenamientos" },
-  { to: "/records", icon: <Trophy size={18} />, label: "Récords" },
+  { to: "/workouts", icon: <History size={18} />, label: "Historial" },
+  { to: "/ejercicios", icon: <Dumbbell size={18} />, label: "Ejercicios" },
   { to: "/salud", icon: <Heart size={18} />, label: "Salud" },
 ];
 
@@ -138,6 +138,9 @@ const SidebarContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             className="text-slate-600 group-hover:text-primary transition-colors shrink-0"
           />
         </NavLink>
+        <p className="text-center text-[9px] text-slate-700 font-mono mt-2 tracking-widest">
+          v{__APP_VERSION__}
+        </p>
       </div>
     </div>
   );

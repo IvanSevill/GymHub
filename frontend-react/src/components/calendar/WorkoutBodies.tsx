@@ -13,6 +13,7 @@ import type { Workout, ExerciseSet } from "../../services/workout";
 import { fmtDuration, groupWorkoutSets } from "./helpers";
 import type { ExerciseGroup, FitbitData } from "./types";
 import RouteMap from "./RouteMap";
+import { useExerciseModal } from "../../context/ExerciseModalContext";
 
 export const MuscleLabel: React.FC<{ name: string }> = ({ name }) => (
   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1 capitalize">
@@ -117,28 +118,56 @@ const SetChip: React.FC<{ set: ExerciseSet; completed: boolean }> = ({
   );
 };
 
-const ExerciseRow: React.FC<{ group: ExerciseGroup }> = ({ group }) => (
-  <div className="flex items-start justify-between gap-3 px-3 py-2.5 rounded-xl border bg-white/[0.02] border-primary/15 transition-all">
-    <p className="text-xs font-black text-white capitalize shrink-0">
-      {group.name}
-    </p>
-    <div className="flex flex-wrap gap-1 justify-end">
-      {group.sets.map((s, i) => (
-        <SetChip key={i} set={s} completed />
-      ))}
+const ExerciseRow: React.FC<{ group: ExerciseGroup; muscleName: string }> = ({
+  group,
+  muscleName,
+}) => {
+  const { openExerciseModal } = useExerciseModal();
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-2.5 rounded-xl border bg-white/[0.02] border-primary/15 transition-all">
+      <button
+        onClick={() =>
+          openExerciseModal({
+            id: group.sets[0]?.exercise_id ?? "",
+            name: group.name,
+            muscleName,
+          })
+        }
+        className="text-xs font-black text-white capitalize shrink-0 hover:text-primary transition-colors cursor-pointer"
+      >
+        {group.name}
+      </button>
+      <div className="flex flex-wrap gap-1 justify-end">
+        {group.sets.map((s, i) => (
+          <SetChip key={i} set={s} completed />
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
-const PlannedExerciseRow: React.FC<{ group: ExerciseGroup }> = ({ group }) => {
+const PlannedExerciseRow: React.FC<{
+  group: ExerciseGroup;
+  muscleName: string;
+}> = ({ group, muscleName }) => {
+  const { openExerciseModal } = useExerciseModal();
   const ref = group.sets.find((s) => s.value && s.value !== "0");
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-white/[0.04] bg-white/[0.01]">
       <div className="flex items-center gap-2">
         <div className="w-1.5 h-1.5 rounded-full border border-primary/40 shrink-0" />
-        <p className="text-xs font-bold text-slate-300 capitalize">
+        <button
+          onClick={() =>
+            openExerciseModal({
+              id: group.sets[0]?.exercise_id ?? "",
+              name: group.name,
+              muscleName,
+            })
+          }
+          className="text-xs font-bold text-slate-300 capitalize hover:text-primary transition-colors cursor-pointer"
+        >
           {group.name}
-        </p>
+        </button>
       </div>
       {ref && (
         <span className="text-[10px] font-bold text-slate-500 tabular-nums">
@@ -229,7 +258,7 @@ export const WeightsBody: React.FC<{ workout: Workout }> = ({ workout }) => {
           <div key={mg.name} className="space-y-1.5">
             <MuscleLabel name={mg.name} />
             {mg.exercises.map((eg) => (
-              <ExerciseRow key={eg.name} group={eg} />
+              <ExerciseRow key={eg.name} group={eg} muscleName={mg.name} />
             ))}
           </div>
         ))
@@ -266,7 +295,11 @@ export const FutureBody: React.FC<{ workout: Workout }> = ({ workout }) => {
           <div key={mg.name} className="space-y-1.5">
             <MuscleLabel name={mg.name} />
             {mg.exercises.map((eg) => (
-              <PlannedExerciseRow key={eg.name} group={eg} />
+              <PlannedExerciseRow
+                key={eg.name}
+                group={eg}
+                muscleName={mg.name}
+              />
             ))}
           </div>
         ))

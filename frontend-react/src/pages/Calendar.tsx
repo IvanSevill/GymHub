@@ -20,6 +20,7 @@ import CreateEventModal, {
   EventPayload,
 } from "../components/calendar/CreateEventModal";
 import DayDetailModal from "../components/calendar/DayDetailModal";
+import CardioUploadModal from "../components/calendar/CardioUploadModal";
 import type { DraftSet } from "../components/calendar/types";
 
 const Calendar: React.FC = () => {
@@ -41,6 +42,7 @@ const Calendar: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [isUploadingCardio, setIsUploadingCardio] = useState(false);
 
   const daysInGrid = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
@@ -250,6 +252,7 @@ const Calendar: React.FC = () => {
         onToday={() => setCurrentDate(new Date())}
         onSync={handleSync}
         onCreateEvent={() => setIsCreatingEvent(true)}
+        onUploadCardio={() => setIsUploadingCardio(true)}
       />
 
       <CalendarGrid
@@ -268,6 +271,12 @@ const Calendar: React.FC = () => {
         isOpen={isCreatingEvent}
         onClose={() => setIsCreatingEvent(false)}
         onSubmit={handleCreateEvent}
+      />
+
+      <CardioUploadModal
+        isOpen={isUploadingCardio}
+        onClose={() => setIsUploadingCardio(false)}
+        onSynced={fetchWorkouts}
       />
 
       <DayDetailModal

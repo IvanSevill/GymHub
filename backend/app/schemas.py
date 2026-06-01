@@ -43,6 +43,12 @@ class Exercise(ExerciseBase):
     class Config:
         orm_mode = True
 
+class ExerciseMedia(BaseModel):
+    """Cached media URLs for an exercise (YouTube videos + Google image)."""
+    video_url_1: Optional[str] = None
+    video_url_2: Optional[str] = None
+    image_url: Optional[str] = None
+
 # ExerciseSet Schemas
 class ExerciseSetBase(BaseModel):
     exercise_id: str = Field(..., description="ID of the exercise performed in this set")
@@ -256,6 +262,12 @@ class SessionDuration(BaseModel):
     """Duration (minutes) of a single workout session."""
     date: datetime
     duration_min: float
+
+
+# Cardio sync schemas
+class SyncCardioRequest(BaseModel):
+    """List of workout IDs to push to Google Calendar as cardio events."""
+    workout_ids: List[str]
 
 
 # Exercise Request Schemas

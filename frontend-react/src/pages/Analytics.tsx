@@ -49,6 +49,8 @@ const Analytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const load = async () => {
       setLoading(true);
       const days = Number(globalDays);
@@ -60,6 +62,8 @@ const Analytics: React.FC = () => {
         analyticsService.getMuscleBalance(days),
         analyticsService.getSessionDurations(days),
       ]);
+
+      if (cancelled) return;
 
       const [exRes, summaryRes, freqRes, volRes, muscleRes, durRes] = results;
 
@@ -81,8 +85,12 @@ const Analytics: React.FC = () => {
 
       setLoading(false);
     };
+
     load();
-  }, [globalDays]);
+    return () => {
+      cancelled = true;
+    };
+  }, [globalDays]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-10 pb-20">

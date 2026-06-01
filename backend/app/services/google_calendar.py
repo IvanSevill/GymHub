@@ -25,16 +25,18 @@ def get_google_credentials(user_tokens: models.UserTokens, db: Session) -> Optio
         client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
     )
 
-    if not creds.valid and creds.refresh_token:
+    # We don't store token expiry, so creds.valid is always True (expired=False when
+    # expiry=None). Always try to refresh proactively if a refresh_token is available.
+    if creds.refresh_token:
         try:
             creds.refresh(GoogleAuthRequest())
             user_tokens.google_access_token = creds.token
             db.commit()
         except Exception as e:
             logger.warning("Failed to refresh Google token: %s", e)
-            return None
-    elif not creds.valid and not creds.refresh_token:
-        logger.warning("Google token is invalid and no refresh token available.")
+            # Fall back to the stored access token — it may still be within its 1h window
+    elif not creds.token:
+        logger.warning("No Google access token and no refresh token available.")
         return None
 
     return creds
@@ -52,7 +54,7 @@ def update_google_calendar_event(
         logger.warning("No valid Google credentials for calendar sync.")
         return None
 
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
     active_exercise_ids = [es.exercise_id for es in workout.exercise_sets if es.exercise_id]
     if active_exercise_ids:

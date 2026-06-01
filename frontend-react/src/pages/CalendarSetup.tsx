@@ -153,13 +153,32 @@ const CalendarSetup: React.FC<Props> = ({
                 key="error"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-3 px-5 py-4 rounded-2xl border border-red-500/20 bg-red-500/5"
+                className="space-y-3"
               >
-                <AlertTriangle size={16} className="text-red-400 shrink-0" />
-                <p className="text-sm text-red-400">
-                  No se pudieron cargar los calendarios. Comprueba tu conexión
-                  con Google Calendar.
-                </p>
+                <div className="flex items-start gap-3 px-5 py-4 rounded-2xl border border-red-500/20 bg-red-500/5">
+                  <AlertTriangle
+                    size={16}
+                    className="text-red-400 shrink-0 mt-0.5"
+                  />
+                  <div className="space-y-1">
+                    <p className="text-sm text-red-400">
+                      No se pudieron cargar los calendarios.
+                    </p>
+                    <p className="text-[11px] text-red-400/70">
+                      Tu sesión de Google puede haber caducado.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("token");
+                    window.location.href = "/login";
+                  }}
+                  className="w-full py-3 rounded-2xl text-sm font-semibold text-slate-300 transition-all"
+                  style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                >
+                  Volver a iniciar sesión
+                </button>
               </motion.div>
             )}
 
