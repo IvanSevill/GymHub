@@ -28,10 +28,10 @@ async def create_calendar(
         .first()
     )
     if not user_tokens or not user_tokens.google_access_token:
-        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+        raise HTTPException(status_code=401, detail="Google credentials missing — please re-authenticate")
     creds = get_google_credentials(user_tokens, db)
     if not creds:
-        raise HTTPException(status_code=400, detail="Could not refresh Google credentials")
+        raise HTTPException(status_code=401, detail="Google credentials expired — please re-authenticate")
     service = build("calendar", "v3", credentials=creds)
     try:
         new_cal = service.calendars().insert(body={"summary": name.strip()}).execute()
@@ -51,18 +51,16 @@ async def list_calendars(
         .filter(models.UserTokens.user_id == current_user.id)
         .first()
     )
-    if not user_tokens:
+    if not user_tokens or not user_tokens.google_access_token:
         raise HTTPException(
-            status_code=400, detail="Google Calendar not connected (no tokens)"
-        )
-    if not user_tokens.google_access_token:
-        raise HTTPException(
-            status_code=400, detail="Google Calendar not connected (no access token)"
+            status_code=401, detail="Google credentials missing — please re-authenticate"
         )
 
     creds = get_google_credentials(user_tokens, db)
     if not creds:
-        raise HTTPException(status_code=400, detail="Could not refresh Google credentials.")
+        raise HTTPException(
+            status_code=401, detail="Google credentials expired — please re-authenticate"
+        )
 
     service = build("calendar", "v3", credentials=creds)
     try:
@@ -77,6 +75,14 @@ async def list_calendars(
             }
             for c in calendars
         ]
+    except HttpError as e:
+        if e.status_code in (401, 403):
+            logger.warning("Google API auth error for %s: %s", current_user.email, e)
+            raise HTTPException(
+                status_code=401, detail="Google Calendar access denied — please re-authenticate"
+            )
+        logger.error("Google Calendar API error for %s: %s", current_user.email, e)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch calendars: {str(e)}")
     except Exception as e:
         logger.error("Error fetching calendars from Google API: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to fetch calendars: {str(e)}")
