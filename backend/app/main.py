@@ -9,6 +9,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 from .database import Base, engine  # noqa: E402
 from .routers import analytics, auth_routes, exercise_requests, exercises, fitbit_health, fitbit_sync, workouts  # noqa: E402
 
@@ -16,6 +17,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
+
+with engine.connect() as conn:
+    for col in ("video_url_1", "video_url_2", "image_url"):
+        try:
+            conn.execute(text(f"ALTER TABLE exercises ADD COLUMN {col} TEXT"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+    # Clear cached image URLs that are null or not from gstatic (old broken links)
+    try:
+        conn.execute(text("UPDATE exercises SET image_url = NULL WHERE image_url IS NOT NULL AND image_url NOT LIKE '%gstatic.com%'"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
 app = FastAPI(title="GymHub Backend v2")
 

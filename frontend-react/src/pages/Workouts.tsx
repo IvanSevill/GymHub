@@ -30,6 +30,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../context/ToastContext";
 import { SkeletonWorkoutRow } from "../components/ui/Skeleton";
 import { useNavigate } from "react-router-dom";
+import { useExerciseModal } from "../context/ExerciseModalContext";
 import {
   isCardioWorkout,
   fmtDuration,
@@ -207,6 +208,7 @@ const CardioCard: React.FC<{ workout: Workout }> = ({ workout }) => {
 
 /* ── Completed exercise list (bodyweight-aware) ───────────────── */
 const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
+  const { openExerciseModal } = useExerciseModal();
   const nonCardioSets = workout.exercise_sets.filter(
     (s) => s.exercise?.name !== "cardio",
   );
@@ -242,9 +244,18 @@ const ExerciseList: React.FC<{ workout: Workout }> = ({ workout }) => {
           <div className="space-y-1.5">
             {mg.exercises.map((eg) => (
               <div key={eg.name} className="flex items-center gap-3 flex-wrap">
-                <span className="text-sm font-semibold text-white capitalize min-w-0 shrink-0">
+                <button
+                  onClick={() =>
+                    openExerciseModal({
+                      id: eg.sets[0]?.exercise_id ?? "",
+                      name: eg.name,
+                      muscleName: mg.name,
+                    })
+                  }
+                  className="text-sm font-semibold text-white capitalize min-w-0 shrink-0 hover:text-primary transition-colors cursor-pointer"
+                >
                   {eg.name}
-                </span>
+                </button>
                 <div className="flex flex-wrap gap-1">
                   {eg.completedSets.map((s, i) => {
                     const hasValue = s.value && s.value !== "0";

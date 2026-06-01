@@ -43,6 +43,12 @@ class Exercise(ExerciseBase):
     class Config:
         orm_mode = True
 
+class ExerciseMedia(BaseModel):
+    """Cached media URLs for an exercise (YouTube videos + Google image)."""
+    video_url_1: Optional[str] = None
+    video_url_2: Optional[str] = None
+    image_url: Optional[str] = None
+
 # ExerciseSet Schemas
 class ExerciseSetBase(BaseModel):
     exercise_id: str = Field(..., description="ID of the exercise performed in this set")
