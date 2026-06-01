@@ -1,5 +1,42 @@
 import type { ExerciseSet } from "../../services/workout";
-import type { DraftSet, ExerciseGroup, MuscleGroup } from "./types";
+import type {
+  DraftSet,
+  ExerciseGroup,
+  MuscleGroup,
+  WeeklyAssignment,
+} from "./types";
+
+export const MS_PER_DAY = 86400000;
+export const CALENDAR_GRID_SIZE = 42;
+
+export const HOURS = Array.from({ length: 24 }, (_, i) =>
+  String(i).padStart(2, "0"),
+);
+export const MINUTES = Array.from({ length: 60 }, (_, i) =>
+  String(i).padStart(2, "0"),
+);
+
+export const DEFAULT_EVENT_TIME = "10:00";
+
+export function makeDefaultSplit(
+  offsets: number[],
+): Record<number, WeeklyAssignment> {
+  return Object.fromEntries(
+    offsets.map((offset, i) => [
+      i,
+      { date: daysFromNow(offset), time: DEFAULT_EVENT_TIME },
+    ]),
+  );
+}
+
+function daysFromNow(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export const isCardioWorkout = (w: {
   fitbit_data?: { activity_name?: string } | null;

@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { format, parseISO, isFuture } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   Check,
-  Loader2,
-  Pencil,
   Trash2,
+  Pencil,
   Activity,
   Calendar as CalIcon,
   Clock,
@@ -22,19 +21,10 @@ import {
 } from "./WorkoutBodies";
 import EditBody from "./EditBody";
 import WheelPicker from "./WheelPicker";
-import { groupWorkoutSets, isCardioWorkout } from "./helpers";
-
-const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const MINUTES = Array.from({ length: 60 }, (_, i) =>
-  String(i).padStart(2, "0"),
-);
-
-interface TimeEdit {
-  startH: number;
-  startM: number;
-  endH: number;
-  endM: number;
-}
+import { groupWorkoutSets, isCardioWorkout, HOURS, MINUTES } from "./helpers";
+import { useTimeEdit } from "./hooks/useTimeEdit";
+import { useDeleteConfirmation } from "./hooks/useDeleteConfirmation";
+import ModalFooter from "./components/ModalFooter";
 
 interface Props {
   selectedDay: { date: Date; workouts: Workout[] } | null;
@@ -67,43 +57,32 @@ const DayDetailModal: React.FC<Props> = ({
   onDelete,
   onUpdateTime,
 }) => {
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [timeEditId, setTimeEditId] = useState<string | null>(null);
-  const [timeEdit, setTimeEdit] = useState<TimeEdit | null>(null);
-  const [isSavingTime, setIsSavingTime] = useState(false);
+  const {
+    deleteConfirmId,
+    isDeleting,
+    toggleConfirm,
+    confirmDelete,
+    clear: clearDelete,
+  } = useDeleteConfirmation();
 
-  const handleDelete = async () => {
-    if (!deleteConfirmId) return;
-    setIsDeleting(true);
-    try {
-      await onDelete(deleteConfirmId);
-      setDeleteConfirmId(null);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+  const {
+    timeEditId,
+    timeEdit,
+    isSavingTime,
+    startTimeEdit,
+    clear: clearTimeEdit,
+    save: saveTime,
+    setTimeEdit,
+    isActive: isInTimeEdit,
+  } = useTimeEdit();
 
   const handleClose = () => {
-    setDeleteConfirmId(null);
-    setTimeEditId(null);
-    setTimeEdit(null);
+    clearDelete();
+    clearTimeEdit();
     onClose();
   };
 
-  const startTimeEdit = (w: Workout) => {
-    const start = parseISO(w.start_time);
-    const end = parseISO(w.end_time);
-    setTimeEdit({
-      startH: start.getHours(),
-      startM: start.getMinutes(),
-      endH: end.getHours(),
-      endM: end.getMinutes(),
-    });
-    setTimeEditId(w.id);
-  };
-
-  const cancelTimeEdit = () => {
+  const handleCancelTimeEdit = () => {
     if (timeEditId && selectedDay) {
       const w = selectedDay.workouts.find((x) => x.id === timeEditId);
       if (w && isFuture(parseISO(w.start_time))) {
@@ -111,36 +90,15 @@ const DayDetailModal: React.FC<Props> = ({
         return;
       }
     }
-    setTimeEditId(null);
-    setTimeEdit(null);
+    clearTimeEdit();
   };
 
-  const saveTime = async () => {
-    if (!timeEditId || !timeEdit || !selectedDay) return;
-    const w = selectedDay.workouts.find((x) => x.id === timeEditId);
-    if (!w) return;
-
-    const base = parseISO(w.start_time);
-    const makeISO = (h: number, m: number) => {
-      const d = new Date(base);
-      d.setHours(h, m, 0, 0);
-      return d.toISOString().replace(/\.\d{3}Z$/, "");
-    };
-
-    setIsSavingTime(true);
-    try {
-      await onUpdateTime(
-        timeEditId,
-        makeISO(timeEdit.startH, timeEdit.startM),
-        makeISO(timeEdit.endH, timeEdit.endM),
-      );
-      cancelTimeEdit();
-    } finally {
-      setIsSavingTime(false);
-    }
+  const handleSaveTime = async () => {
+    if (!selectedDay) return;
+    await saveTime(selectedDay.workouts, onUpdateTime);
   };
 
-  // Auto-open time editor when the selected day has only future workouts
+  // Auto-open time editor when the selected day has future workouts
   useEffect(() => {
     if (!selectedDay) return;
     const futureWorkouts = selectedDay.workouts.filter((w) =>
@@ -150,8 +108,6 @@ const DayDetailModal: React.FC<Props> = ({
       startTimeEdit(futureWorkouts[0]);
     }
   }, [selectedDay?.workouts.map((w) => w.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const isInTimeEdit = (wId: string) => timeEditId === wId;
 
   return (
     <AnimatePresence>
@@ -212,7 +168,6 @@ const DayDetailModal: React.FC<Props> = ({
                     editingWorkoutId !== w.id && timeEditId !== w.id;
                   return (
                     <React.Fragment key={w.id}>
-                      {/* Pencil — only for past workouts that are not cardio */}
                       {!future && !isCardioWorkout(w) && notEditing && (
                         <button
                           onClick={() => onEnterEdit(w)}
@@ -222,7 +177,6 @@ const DayDetailModal: React.FC<Props> = ({
                           <Pencil size={15} />
                         </button>
                       )}
-                      {/* Clock — only for future workouts */}
                       {future && notEditing && (
                         <button
                           onClick={() => startTimeEdit(w)}
@@ -232,14 +186,9 @@ const DayDetailModal: React.FC<Props> = ({
                           <Clock size={15} />
                         </button>
                       )}
-                      {/* Trash — always shown when not editing */}
                       {notEditing && (
                         <button
-                          onClick={() =>
-                            setDeleteConfirmId(
-                              deleteConfirmId === w.id ? null : w.id,
-                            )
-                          }
+                          onClick={() => toggleConfirm(w.id)}
                           className={`p-2 rounded-xl transition-colors ${
                             deleteConfirmId === w.id
                               ? "bg-danger/15 text-danger"
@@ -256,6 +205,7 @@ const DayDetailModal: React.FC<Props> = ({
                 <button
                   onClick={handleClose}
                   className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-500 hover:text-white ml-1"
+                  title="Cerrar"
                 >
                   <X size={18} />
                 </button>
@@ -315,77 +265,36 @@ const DayDetailModal: React.FC<Props> = ({
                       </span>
                     )}
                   </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setDeleteConfirmId(null)}
-                      disabled={isDeleting}
-                      className="flex-1 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-40"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={handleDelete}
-                      disabled={isDeleting}
-                      className="flex-1 py-3 rounded-2xl bg-danger text-white font-black text-[10px] uppercase tracking-widest hover:bg-danger/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-                    >
-                      {isDeleting ? (
-                        <Loader2 size={13} className="animate-spin" />
-                      ) : (
-                        <Trash2 size={13} />
-                      )}
-                      Eliminar
-                    </button>
-                  </div>
+                  <ModalFooter
+                    onCancel={clearDelete}
+                    onConfirm={() => confirmDelete(onDelete)}
+                    confirmLabel="Eliminar"
+                    confirmIcon={<Trash2 size={13} />}
+                    variant="danger"
+                    isLoading={isDeleting}
+                  />
                 </div>
               ) : timeEditId ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={cancelTimeEdit}
-                    disabled={isSavingTime}
-                    className="flex-1 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-40"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={saveTime}
-                    disabled={isSavingTime}
-                    className="flex-1 py-3 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-                  >
-                    {isSavingTime ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <Check size={13} />
-                    )}
-                    Guardar hora
-                  </button>
-                </div>
+                <ModalFooter
+                  onCancel={handleCancelTimeEdit}
+                  onConfirm={handleSaveTime}
+                  confirmLabel="Guardar hora"
+                  confirmIcon={<Check size={13} />}
+                  isLoading={isSavingTime}
+                />
               ) : editingWorkoutId ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={onCancelEdit}
-                    disabled={isSaving}
-                    className="flex-1 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-40"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => {
-                      const w = selectedDay.workouts.find(
-                        (w) => w.id === editingWorkoutId,
-                      );
-                      if (w) onSaveEdit(w);
-                    }}
-                    disabled={isSaving}
-                    className="flex-1 py-3 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-                  >
-                    {isSaving ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <Check size={13} />
-                    )}
-                    Guardar
-                  </button>
-                </div>
+                <ModalFooter
+                  onCancel={onCancelEdit}
+                  onConfirm={() => {
+                    const w = selectedDay.workouts.find(
+                      (w) => w.id === editingWorkoutId,
+                    );
+                    if (w) onSaveEdit(w);
+                  }}
+                  confirmLabel="Guardar"
+                  confirmIcon={<Check size={13} />}
+                  isLoading={isSaving}
+                />
               ) : (
                 <button
                   onClick={handleClose}
@@ -404,6 +313,8 @@ const DayDetailModal: React.FC<Props> = ({
 
 /* ── Time edit view ─────────────────────────────────────────── */
 
+import type { TimeEdit } from "./types";
+
 interface TimeEditViewProps {
   workout: Workout;
   timeEdit: TimeEdit;
@@ -419,9 +330,7 @@ const TimeEditView: React.FC<TimeEditViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Two-wheel time pickers */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Start time */}
         <div className="flex flex-col items-center gap-2">
           <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
             Inicio
@@ -444,7 +353,6 @@ const TimeEditView: React.FC<TimeEditViewProps> = ({
           </div>
         </div>
 
-        {/* End time */}
         <div className="flex flex-col items-center gap-2">
           <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
             Fin
@@ -468,7 +376,6 @@ const TimeEditView: React.FC<TimeEditViewProps> = ({
         </div>
       </div>
 
-      {/* Muscle groups — read only */}
       {muscleGroups.length > 0 && (
         <div className="space-y-3">
           <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">
