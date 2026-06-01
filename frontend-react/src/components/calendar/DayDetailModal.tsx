@@ -104,6 +104,13 @@ const DayDetailModal: React.FC<Props> = ({
   };
 
   const cancelTimeEdit = () => {
+    if (timeEditId && selectedDay) {
+      const w = selectedDay.workouts.find((x) => x.id === timeEditId);
+      if (w && isFuture(parseISO(w.start_time))) {
+        handleClose();
+        return;
+      }
+    }
     setTimeEditId(null);
     setTimeEdit(null);
   };
