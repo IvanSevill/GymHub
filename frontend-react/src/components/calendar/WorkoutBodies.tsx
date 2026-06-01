@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
+import { parseWorkoutTime } from "../../utils/dateUtils";
 import {
   Zap,
   Flame,
@@ -194,7 +195,7 @@ export const CardioBody: React.FC<{ workout: Workout }> = ({ workout }) => {
             {f.activity_name}
           </p>
           <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-            {format(parseISO(workout.start_time), "HH:mm")} ·{" "}
+            {format(parseWorkoutTime(workout.start_time), "HH:mm")} ·{" "}
             {fmtDuration(f.duration_ms)}
           </p>
         </div>
@@ -281,8 +282,8 @@ export const FutureBody: React.FC<{ workout: Workout }> = ({ workout }) => {
             Sesión planeada
           </p>
           <p className="text-[9px] text-slate-400 font-bold mt-0.5">
-            {format(parseISO(workout.start_time), "HH:mm")} ·{" "}
-            {format(parseISO(workout.end_time), "HH:mm")}
+            {format(parseWorkoutTime(workout.start_time), "HH:mm")} ·{" "}
+            {format(parseWorkoutTime(workout.end_time), "HH:mm")}
           </p>
         </div>
       </div>

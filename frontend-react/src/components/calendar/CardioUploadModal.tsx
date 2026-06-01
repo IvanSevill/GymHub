@@ -1,29 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  AlertCircle,
-  CheckSquare,
-  Flame,
-  Heart,
-  Loader2,
-  MapPin,
-  Square,
-  Timer,
-  Upload,
-  X,
-  Zap,
-} from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
-import {
-  workoutService,
-  CardioPendingWorkout,
-  SyncCardioResult,
-} from "../../services/workout";
+import { AlertCircle, Upload, X, Zap } from "lucide-react";
 import { SkeletonBlock } from "../ui/Skeleton";
-import { fmtDuration } from "./helpers";
-
-type ModalState = "loading" | "ready" | "empty" | "error" | "syncing" | "done";
+import type { SyncCardioResult } from "../../services/workout";
+import { useCardioSync } from "./hooks/useCardioSync";
+import CardioReadyView from "./components/CardioReadyView";
 
 interface Props {
   isOpen: boolean;
@@ -32,24 +13,16 @@ interface Props {
 }
 
 const CardioUploadModal: React.FC<Props> = ({ isOpen, onClose, onSynced }) => {
-  const [state, setState] = useState<ModalState>("loading");
-  const [workouts, setWorkouts] = useState<CardioPendingWorkout[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [result, setResult] = useState<SyncCardioResult | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setState("loading");
-    setSelected(new Set());
-    setResult(null);
-    workoutService
-      .getCardioPending()
-      .then((data) => {
-        setWorkouts(data);
-        setState(data.length === 0 ? "empty" : "ready");
-      })
-      .catch(() => setState("error"));
-  }, [isOpen]);
+  const {
+    state,
+    workouts,
+    selected,
+    result,
+    toggleAll,
+    toggle,
+    handleSync,
+    retry,
+  } = useCardioSync(isOpen, onSynced);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -59,36 +32,6 @@ const CardioUploadModal: React.FC<Props> = ({ isOpen, onClose, onSynced }) => {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [isOpen, onClose]);
-
-  const toggleAll = () => {
-    if (selected.size === workouts.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(workouts.map((w) => w.id)));
-    }
-  };
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSync = async () => {
-    if (selected.size === 0) return;
-    setState("syncing");
-    try {
-      const res = await workoutService.syncCardioToCalendar([...selected]);
-      setResult(res);
-      setState("done");
-      if (res.synced > 0) onSynced();
-    } catch {
-      setState("error");
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -131,6 +74,7 @@ const CardioUploadModal: React.FC<Props> = ({ isOpen, onClose, onSynced }) => {
                 </div>
                 <button
                   onClick={onClose}
+                  aria-label="Cerrar"
                   className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all shrink-0"
                 >
                   <X size={14} />
@@ -154,16 +98,7 @@ const CardioUploadModal: React.FC<Props> = ({ isOpen, onClose, onSynced }) => {
                       Error al cargar las actividades
                     </p>
                     <button
-                      onClick={() => {
-                        setState("loading");
-                        workoutService
-                          .getCardioPending()
-                          .then((data) => {
-                            setWorkouts(data);
-                            setState(data.length === 0 ? "empty" : "ready");
-                          })
-                          .catch(() => setState("error"));
-                      }}
+                      onClick={retry}
                       className="text-xs text-primary hover:underline font-semibold"
                     >
                       Reintentar
@@ -185,161 +120,18 @@ const CardioUploadModal: React.FC<Props> = ({ isOpen, onClose, onSynced }) => {
                 )}
 
                 {(state === "ready" || state === "syncing") && (
-                  <div className="space-y-2">
-                    {/* Select all */}
-                    <button
-                      onClick={toggleAll}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition-colors"
-                    >
-                      {selected.size === workouts.length ? (
-                        <CheckSquare size={14} className="text-primary" />
-                      ) : (
-                        <Square size={14} />
-                      )}
-                      Seleccionar todo ({workouts.length})
-                    </button>
-
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {workouts.map((w) => {
-                        const isSelected = selected.has(w.id);
-                        return (
-                          <button
-                            key={w.id}
-                            onClick={() => toggle(w.id)}
-                            disabled={state === "syncing"}
-                            className="w-full flex items-start gap-3 p-3 rounded-2xl text-left transition-all border disabled:opacity-50"
-                            style={{
-                              background: isSelected
-                                ? "rgba(249,115,22,0.06)"
-                                : "rgba(255,255,255,0.03)",
-                              borderColor: isSelected
-                                ? "rgba(249,115,22,0.3)"
-                                : "rgba(255,255,255,0.07)",
-                            }}
-                          >
-                            <div className="mt-0.5 shrink-0 text-primary">
-                              {isSelected ? (
-                                <CheckSquare size={14} />
-                              ) : (
-                                <Square size={14} className="text-slate-600" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-white">
-                                  {w.activity_name}
-                                </span>
-                                <span className="text-[10px] text-slate-500">
-                                  {format(parseISO(w.start_time), "d MMM", {
-                                    locale: es,
-                                  })}
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap gap-2 mt-1.5">
-                                {w.duration_ms > 0 && (
-                                  <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                                    <Timer size={9} />
-                                    {fmtDuration(w.duration_ms)}
-                                  </span>
-                                )}
-                                {w.calories > 0 && (
-                                  <span className="flex items-center gap-1 text-[10px] text-orange-400/80">
-                                    <Flame size={9} />
-                                    {w.calories} kcal
-                                  </span>
-                                )}
-                                {w.heart_rate_avg > 0 && (
-                                  <span className="flex items-center gap-1 text-[10px] text-red-400/80">
-                                    <Heart size={9} />
-                                    {w.heart_rate_avg} bpm
-                                  </span>
-                                )}
-                                {w.distance_km > 0 && (
-                                  <span className="flex items-center gap-1 text-[10px] text-blue-400/80">
-                                    <MapPin size={9} />
-                                    {w.distance_km.toFixed(1)} km
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      onClick={handleSync}
-                      disabled={selected.size === 0 || state === "syncing"}
-                      className="w-full mt-2 flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold text-white transition-all disabled:opacity-40"
-                      style={{ background: "rgba(249,115,22,0.9)" }}
-                    >
-                      {state === "syncing" ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          Subiendo…
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={14} />
-                          Subir{" "}
-                          {selected.size > 0
-                            ? `${selected.size} actividad${selected.size !== 1 ? "es" : ""}`
-                            : "seleccionadas"}
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  <CardioReadyView
+                    workouts={workouts}
+                    selected={selected}
+                    state={state}
+                    onToggleAll={toggleAll}
+                    onToggle={toggle}
+                    onSync={handleSync}
+                  />
                 )}
 
                 {state === "done" && result && (
-                  <div className="space-y-4 text-center py-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto border border-primary/20">
-                      <Upload size={20} className="text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-white font-black text-base">
-                        Sincronización completada
-                      </p>
-                      <div className="flex justify-center gap-6 mt-3">
-                        {result.synced > 0 && (
-                          <div className="text-center">
-                            <p className="text-2xl font-black text-primary">
-                              {result.synced}
-                            </p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-widest">
-                              Subidas
-                            </p>
-                          </div>
-                        )}
-                        {result.failed > 0 && (
-                          <div className="text-center">
-                            <p className="text-2xl font-black text-red-400">
-                              {result.failed}
-                            </p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-widest">
-                              Fallidas
-                            </p>
-                          </div>
-                        )}
-                        {result.already_synced > 0 && (
-                          <div className="text-center">
-                            <p className="text-2xl font-black text-slate-400">
-                              {result.already_synced}
-                            </p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-widest">
-                              Ya subidas
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={onClose}
-                      className="btn-secondary text-xs px-6 py-2.5 rounded-xl"
-                    >
-                      Cerrar
-                    </button>
-                  </div>
+                  <DoneView result={result} onClose={onClose} />
                 )}
               </div>
             </div>
@@ -349,5 +141,57 @@ const CardioUploadModal: React.FC<Props> = ({ isOpen, onClose, onSynced }) => {
     </AnimatePresence>
   );
 };
+
+/* ── Done view ─────────────────────────────────────────────────── */
+
+const DoneView: React.FC<{ result: SyncCardioResult; onClose: () => void }> = ({
+  result,
+  onClose,
+}) => (
+  <div className="space-y-4 text-center py-4">
+    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto border border-primary/20">
+      <Upload size={20} className="text-primary" />
+    </div>
+    <div>
+      <p className="text-white font-black text-base">
+        Sincronización completada
+      </p>
+      <div className="flex justify-center gap-6 mt-3">
+        {result.synced > 0 && (
+          <div className="text-center">
+            <p className="text-2xl font-black text-primary">{result.synced}</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+              Subidas
+            </p>
+          </div>
+        )}
+        {result.failed > 0 && (
+          <div className="text-center">
+            <p className="text-2xl font-black text-red-400">{result.failed}</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+              Fallidas
+            </p>
+          </div>
+        )}
+        {result.already_synced > 0 && (
+          <div className="text-center">
+            <p className="text-2xl font-black text-slate-400">
+              {result.already_synced}
+            </p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+              Ya subidas
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+    <button
+      onClick={onClose}
+      className="btn-secondary text-xs px-6 py-2.5 rounded-xl"
+    >
+      Cerrar
+    </button>
+  </div>
+);
 
 export default CardioUploadModal;

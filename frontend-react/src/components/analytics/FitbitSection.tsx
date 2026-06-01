@@ -12,6 +12,11 @@ import {
   Legend,
 } from "recharts";
 import { Flame, Heart, Zap } from "lucide-react";
+import {
+  CHART_TOOLTIP_CONFIG,
+  AXIS_TICK_STYLE,
+} from "../../constants/chartStyles";
+import { AZM_ZONES } from "../../constants/colors";
 
 interface FitbitEntry {
   date: string;
@@ -25,12 +30,6 @@ interface HeartRateEntry extends FitbitEntry {
   fc: number;
 }
 
-export const AZM_ZONES = [
-  { key: "Quema grasa" as const, fill: "#f59e0b" },
-  { key: "Cardio" as const, fill: "#f97316" },
-  { key: "Pico" as const, fill: "#ef4444" },
-] as const;
-
 type AzmKey = (typeof AZM_ZONES)[number]["key"];
 
 type AzmEntry = FitbitEntry & Record<AzmKey, number>;
@@ -40,17 +39,6 @@ interface Props {
   heartRateData: HeartRateEntry[];
   azmData: AzmEntry[];
 }
-
-const tooltipStyle = {
-  contentStyle: {
-    background: "#0f1729",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "14px",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-  },
-  labelStyle: { color: "#94a3b8", fontSize: 11 },
-  itemStyle: { fontWeight: "700", fontSize: "13px" },
-};
 
 const FitbitSection: React.FC<Props> = ({
   caloriesData,
@@ -96,16 +84,22 @@ const FitbitSection: React.FC<Props> = ({
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#475569", fontSize: 10 }}
+                  tick={{
+                    fill: AXIS_TICK_STYLE.fill,
+                    fontSize: AXIS_TICK_STYLE.fontSize,
+                  }}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#475569", fontSize: 10 }}
+                  tick={{
+                    fill: AXIS_TICK_STYLE.fill,
+                    fontSize: AXIS_TICK_STYLE.fontSize,
+                  }}
                 />
                 <Tooltip
                   cursor={{ fill: "rgba(255,255,255,0.02)" }}
-                  {...tooltipStyle}
+                  {...CHART_TOOLTIP_CONFIG}
                 />
                 <Bar
                   dataKey="calories"
@@ -146,15 +140,21 @@ const FitbitSection: React.FC<Props> = ({
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#475569", fontSize: 10 }}
+                  tick={{
+                    fill: AXIS_TICK_STYLE.fill,
+                    fontSize: AXIS_TICK_STYLE.fontSize,
+                  }}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#475569", fontSize: 10 }}
+                  tick={{
+                    fill: AXIS_TICK_STYLE.fill,
+                    fontSize: AXIS_TICK_STYLE.fontSize,
+                  }}
                   domain={["auto", "auto"]}
                 />
-                <Tooltip {...tooltipStyle} />
+                <Tooltip {...CHART_TOOLTIP_CONFIG} />
                 <Line
                   type="monotone"
                   dataKey="fc"
@@ -197,16 +197,22 @@ const FitbitSection: React.FC<Props> = ({
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#475569", fontSize: 10 }}
+                  tick={{
+                    fill: AXIS_TICK_STYLE.fill,
+                    fontSize: AXIS_TICK_STYLE.fontSize,
+                  }}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#475569", fontSize: 10 }}
+                  tick={{
+                    fill: AXIS_TICK_STYLE.fill,
+                    fontSize: AXIS_TICK_STYLE.fontSize,
+                  }}
                 />
                 <Tooltip
                   cursor={{ fill: "rgba(255,255,255,0.02)" }}
-                  {...tooltipStyle}
+                  {...CHART_TOOLTIP_CONFIG}
                 />
                 <Legend
                   wrapperStyle={{

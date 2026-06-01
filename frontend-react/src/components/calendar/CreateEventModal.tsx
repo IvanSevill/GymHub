@@ -5,6 +5,8 @@ import { addHours, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { exerciseService } from "../../services/exercise";
 import type { Muscle } from "../../services/exercise";
+import type { WeeklyAssignment } from "./types";
+import { makeDefaultSplit } from "./helpers";
 
 export interface EventPayload {
   title: string;
@@ -36,33 +38,15 @@ const SPLITS: Record<SplitType, { label: string }[]> = {
 };
 
 const DEFAULT_TIME = "10:00";
-
-interface WeeklyAssignment {
-  date: string;
-  time: string;
-}
+const SPLIT_OFFSETS: Record<SplitType, number[]> = {
+  3: [1, 3, 5],
+  4: [1, 2, 4, 5],
+};
 
 function daysFromNow(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() + n);
   return format(d, "yyyy-MM-dd");
-}
-
-function makeDefault3Day(): Record<number, WeeklyAssignment> {
-  return {
-    0: { date: daysFromNow(1), time: DEFAULT_TIME },
-    1: { date: daysFromNow(3), time: DEFAULT_TIME },
-    2: { date: daysFromNow(5), time: DEFAULT_TIME },
-  };
-}
-
-function makeDefault4Day(): Record<number, WeeklyAssignment> {
-  return {
-    0: { date: daysFromNow(1), time: DEFAULT_TIME },
-    1: { date: daysFromNow(2), time: DEFAULT_TIME },
-    2: { date: daysFromNow(4), time: DEFAULT_TIME },
-    3: { date: daysFromNow(5), time: DEFAULT_TIME },
-  };
 }
 
 function buildEventTimes(
@@ -83,6 +67,57 @@ function fmtDate(dateStr: string): string {
   const [y, mo, d] = dateStr.split("-").map(Number);
   return format(new Date(y, mo - 1, d), "eee d MMM", { locale: es });
 }
+
+function validateSingleForm(
+  selectedMuscles: string[],
+  singleStart: string,
+  singleEnd: string,
+): string | null {
+  if (selectedMuscles.length === 0)
+    return "Selecciona al menos un grupo muscular";
+  if (singleEnd <= singleStart)
+    return "La hora de fin debe ser posterior al inicio";
+  return null;
+}
+
+function buildSingleEventTitle(
+  muscles: Muscle[],
+  selectedIds: string[],
+): string {
+  return selectedIds
+    .map((id) => muscles.find((m) => m.id === id)?.name ?? "")
+    .filter(Boolean)
+    .map((n) => n.charAt(0).toUpperCase() + n.slice(1))
+    .join(" - ");
+}
+
+function buildSingleEvent(
+  title: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+): EventPayload {
+  return {
+    title,
+    start: format(new Date(`${date}T${startTime}`), "yyyy-MM-dd'T'HH:mm:ss"),
+    end: format(new Date(`${date}T${endTime}`), "yyyy-MM-dd'T'HH:mm:ss"),
+  };
+}
+
+function buildWeeklyEvents(
+  splitType: SplitType,
+  assignments: Record<number, WeeklyAssignment>,
+): EventPayload[] {
+  return SPLITS[splitType].map((day, i) => ({
+    title: day.label,
+    ...buildEventTimes(
+      assignments[i]?.date ?? daysFromNow(i + 1),
+      assignments[i]?.time ?? DEFAULT_TIME,
+    ),
+  }));
+}
+
+// ── Date picker ─────────────────────────────────────────────────────────────
 
 interface DatePickerProps {
   value: string;
@@ -110,6 +145,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
       <button
         type="button"
         onClick={open}
+        aria-label="Seleccionar fecha"
         className="flex items-center gap-2 w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white hover:border-primary/40 transition-colors cursor-pointer"
       >
         <CalendarDays size={14} className="text-slate-400 shrink-0" />
@@ -344,8 +380,9 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
   const [singleEnd, setSingleEnd] = useState("11:00");
 
   const [splitType, setSplitType] = useState<SplitType>(3);
-  const [assignments, setAssignments] =
-    useState<Record<number, WeeklyAssignment>>(makeDefault3Day);
+  const [assignments, setAssignments] = useState<
+    Record<number, WeeklyAssignment>
+  >(() => makeDefaultSplit(SPLIT_OFFSETS[3]));
 
   useEffect(() => {
     if (!isOpen) return;
@@ -356,7 +393,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
   }, [isOpen]);
 
   useEffect(() => {
-    setAssignments(splitType === 3 ? makeDefault3Day() : makeDefault4Day());
+    setAssignments(makeDefaultSplit(SPLIT_OFFSETS[splitType]));
   }, [splitType]);
 
   const reset = () => {
@@ -366,7 +403,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
     setSingleStart(DEFAULT_TIME);
     setSingleEnd("11:00");
     setSplitType(3);
-    setAssignments(makeDefault3Day());
+    setAssignments(makeDefaultSplit(SPLIT_OFFSETS[3]));
     setError("");
   };
 
@@ -380,40 +417,15 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
     let events: EventPayload[];
 
     if (mode === "single") {
-      if (selectedMuscles.length === 0) {
-        setError("Selecciona al menos un grupo muscular");
+      const err = validateSingleForm(selectedMuscles, singleStart, singleEnd);
+      if (err) {
+        setError(err);
         return;
       }
-      if (singleEnd <= singleStart) {
-        setError("La hora de fin debe ser posterior al inicio");
-        return;
-      }
-      const title = selectedMuscles
-        .map((id) => muscles.find((m) => m.id === id)?.name ?? "")
-        .filter(Boolean)
-        .map((n) => n.charAt(0).toUpperCase() + n.slice(1))
-        .join(" - ");
-      const start = new Date(`${singleDate}T${singleStart}`);
-      const end = new Date(`${singleDate}T${singleEnd}`);
-      events = [
-        {
-          title,
-          start: format(start, "yyyy-MM-dd'T'HH:mm:ss"),
-          end: format(end, "yyyy-MM-dd'T'HH:mm:ss"),
-        },
-      ];
+      const title = buildSingleEventTitle(muscles, selectedMuscles);
+      events = [buildSingleEvent(title, singleDate, singleStart, singleEnd)];
     } else {
-      const split = SPLITS[splitType];
-      events = split.map((day, i) => {
-        const asgn = assignments[i] ?? {
-          date: daysFromNow(i + 1),
-          time: DEFAULT_TIME,
-        };
-        return {
-          title: day.label,
-          ...buildEventTimes(asgn.date, asgn.time),
-        };
-      });
+      events = buildWeeklyEvents(splitType, assignments);
     }
 
     setIsSubmitting(true);
@@ -431,6 +443,11 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
     setSelectedMuscles((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+
+  const setModeAndClear = (m: Mode) => {
+    setMode(m);
+    setError("");
+  };
 
   return (
     <AnimatePresence>
@@ -461,6 +478,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
               </div>
               <button
                 onClick={handleClose}
+                aria-label="Cerrar"
                 className="p-2 hover:bg-white/5 rounded-xl text-slate-500 hover:text-white transition-colors"
               >
                 <X size={18} />
@@ -471,10 +489,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
             <div className="px-6 pt-5">
               <div className="flex gap-1 p-1 bg-black/30 rounded-2xl border border-white/[0.05]">
                 <button
-                  onClick={() => {
-                    setMode("single");
-                    setError("");
-                  }}
+                  onClick={() => setModeAndClear("single")}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
                     mode === "single"
                       ? "bg-primary text-white shadow-lg shadow-primary/20"
@@ -485,10 +500,7 @@ const CreateEventModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
                   Evento único
                 </button>
                 <button
-                  onClick={() => {
-                    setMode("weekly");
-                    setError("");
-                  }}
+                  onClick={() => setModeAndClear("weekly")}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
                     mode === "weekly"
                       ? "bg-primary text-white shadow-lg shadow-primary/20"

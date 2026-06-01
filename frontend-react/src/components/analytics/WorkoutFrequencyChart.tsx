@@ -13,6 +13,8 @@ import { Activity } from "lucide-react";
 import { motion } from "framer-motion";
 import { SkeletonChartArea } from "../ui/Skeleton";
 import { WorkoutFrequencyPoint } from "../../services/analytics";
+import { CHART_TOOLTIP_CONFIG, AXIS_TICK_STYLE } from "../../constants/chartStyles";
+import { formatWeek } from "../../utils/chartFormatters";
 
 interface Props {
   data: WorkoutFrequencyPoint[];
@@ -78,38 +80,28 @@ const WorkoutFrequencyChart: React.FC<Props> = ({ data, loading }) => {
               />
               <XAxis
                 dataKey="week"
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
                 interval={xInterval}
-                tickFormatter={(w: string) => {
-                  const parts = w.split("-W");
-                  return parts.length === 2 ? `S${parts[1]}` : w;
-                }}
+                tickFormatter={formatWeek}
               />
               <YAxis
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
                 allowDecimals={false}
                 width={20}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0f1729",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                }}
-                labelStyle={{ color: "#94a3b8", fontSize: 11 }}
+                {...CHART_TOOLTIP_CONFIG}
                 itemStyle={{
+                  ...CHART_TOOLTIP_CONFIG.itemStyle,
                   color: "#3b82f6",
-                  fontWeight: "700",
-                  fontSize: "13px",
                 }}
                 formatter={(v: unknown) => [`${v} entrenos`, ""]}
               />

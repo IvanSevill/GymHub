@@ -1,6 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { workoutService, Workout, WorkoutCreate } from "../services/workout";
-import { exerciseService, Exercise } from "../services/exercise";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import {
   startOfMonth,
   endOfMonth,
@@ -10,8 +8,9 @@ import {
   startOfWeek,
   endOfWeek,
   isSameDay,
-  parseISO,
 } from "date-fns";
+import { parseWorkoutTime } from "../utils/dateUtils";
+import { workoutService, WorkoutCreate } from "../services/workout";
 import { useToast } from "../context/ToastContext";
 import CalendarHeader from "../components/calendar/CalendarHeader";
 import CalendarGrid from "../components/calendar/CalendarGrid";
@@ -21,28 +20,49 @@ import CreateEventModal, {
 } from "../components/calendar/CreateEventModal";
 import DayDetailModal from "../components/calendar/DayDetailModal";
 import CardioUploadModal from "../components/calendar/CardioUploadModal";
-import type { DraftSet } from "../components/calendar/types";
+import { useCalendarWorkouts } from "../components/calendar/hooks/useCalendarWorkouts";
+import { useWorkoutEdit } from "../components/calendar/hooks/useWorkoutEdit";
+import { useCalendarModals } from "../components/calendar/hooks/useCalendarModals";
+import { MS_PER_DAY, CALENDAR_GRID_SIZE } from "../components/calendar/helpers";
 
 const Calendar: React.FC = () => {
   const { addToast } = useToast();
-
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDayWorkouts, setSelectedDayWorkouts] = useState<{
-    date: Date;
-    workouts: Workout[];
-  } | null>(null);
-
-  const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
-  const [draftSets, setDraftSets] = useState<DraftSet[]>([]);
-  const [muscleExercises, setMuscleExercises] = useState<
-    Record<string, Exercise[]>
-  >({});
-  const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
-  const [isUploadingCardio, setIsUploadingCardio] = useState(false);
+
+  const { workouts, loading, fetchWorkouts } = useCalendarWorkouts();
+  const {
+    selectedDayWorkouts,
+    setSelectedDayWorkouts,
+    isCreatingEvent,
+    setIsCreatingEvent,
+    isUploadingCardio,
+    setIsUploadingCardio,
+  } = useCalendarModals();
+
+  // Refreshes the workout list and keeps the open day-modal in sync
+  const refreshAll = useCallback(async () => {
+    const fresh = await fetchWorkouts();
+    setSelectedDayWorkouts((prev) => {
+      if (!prev) return null;
+      return {
+        date: prev.date,
+        workouts: fresh.filter((w) =>
+          isSameDay(parseWorkoutTime(w.start_time), prev.date),
+        ),
+      };
+    });
+  }, [fetchWorkouts, setSelectedDayWorkouts]);
+
+  const {
+    editingWorkoutId,
+    draftSets,
+    isSaving,
+    enterEditMode,
+    cancelEdit,
+    saveEdit,
+    setDraftSets,
+  } = useWorkoutEdit(refreshAll);
 
   const daysInGrid = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
@@ -51,135 +71,24 @@ const Calendar: React.FC = () => {
     const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
     const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
     const result = [...days];
-    while (result.length < 42) {
-      const last = result[result.length - 1];
-      result.push(new Date(last.getTime() + 86400000));
+    // Pad to a fixed 6×7 grid
+    while (result.length < CALENDAR_GRID_SIZE) {
+      result.push(new Date(result[result.length - 1].getTime() + MS_PER_DAY));
     }
     return result;
   }, [currentDate]);
 
   useEffect(() => {
     fetchWorkouts();
-  }, [currentDate]);
-
-  const fetchWorkouts = async () => {
-    setLoading(true);
-    try {
-      const fresh = await workoutService.getWorkouts();
-      setWorkouts(fresh);
-      setSelectedDayWorkouts((prev) => {
-        if (!prev) return null;
-        return {
-          date: prev.date,
-          workouts: fresh.filter((w) =>
-            isSameDay(parseISO(w.start_time), prev.date),
-          ),
-        };
-      });
-    } catch {
-      addToast("Error al cargar los entrenamientos", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const enterEditMode = async (workout: Workout) => {
-    const existingByExId: Record<string, DraftSet[]> = {};
-    const draft: DraftSet[] = workout.exercise_sets.map((s) => {
-      const d: DraftSet = {
-        exercise_id: s.exercise_id,
-        exercise_name: s.exercise?.name ?? "",
-        muscle_name: s.exercise?.muscle?.name ?? "",
-        muscle_id: s.exercise?.muscle?.id ?? "",
-        value: s.value,
-        measurement: s.measurement,
-        is_completed: s.is_completed,
-      };
-      if (!existingByExId[d.exercise_id]) existingByExId[d.exercise_id] = [];
-      existingByExId[d.exercise_id].push(d);
-      return d;
-    });
-
-    const muscleIds = [
-      ...new Set(draft.map((s) => s.muscle_id).filter(Boolean)),
-    ];
-    const cache: Record<string, Exercise[]> = { ...muscleExercises };
-    await Promise.all(
-      muscleIds.map(async (mid) => {
-        if (!cache[mid]) cache[mid] = await exerciseService.getExercises(mid);
-      }),
-    );
-    setMuscleExercises(cache);
-
-    const muscleIdToName: Record<string, string> = {};
-    for (const d of draft) {
-      if (d.muscle_id && d.muscle_name)
-        muscleIdToName[d.muscle_id] = d.muscle_name;
-    }
-
-    for (const mid of muscleIds) {
-      const muscleName = muscleIdToName[mid];
-      if (!muscleName) continue;
-      for (const ex of cache[mid] ?? []) {
-        if (!existingByExId[ex.id]) {
-          draft.push({
-            exercise_id: ex.id,
-            exercise_name: ex.name,
-            muscle_name: muscleName,
-            muscle_id: mid,
-            value: "",
-            measurement: "kg",
-            is_completed: false,
-          });
-        }
-      }
-    }
-
-    setDraftSets(draft);
-    setEditingWorkoutId(workout.id);
-  };
-
-  const cancelEdit = () => {
-    setEditingWorkoutId(null);
-    setDraftSets([]);
-  };
-
-  const saveEdit = async (workout: Workout) => {
-    setIsSaving(true);
-    try {
-      const setsToSave = draftSets.filter(
-        (s) => s.is_completed || (s.value !== "" && s.value !== "0"),
-      );
-      await workoutService.updateWorkout(workout.id, {
-        start_time: workout.start_time,
-        end_time: workout.end_time,
-        title: workout.title,
-        exercise_sets: setsToSave.map((s) => ({
-          exercise_id: s.exercise_id,
-          value: s.value || "0",
-          measurement: s.measurement,
-          is_completed: s.is_completed,
-        })),
-      });
-      await fetchWorkouts();
-      setEditingWorkoutId(null);
-      setDraftSets([]);
-      addToast("Sesión actualizada", "success");
-    } catch {
-      addToast("Error al guardar los cambios", "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  }, [currentDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDeleteWorkout = async (workoutId: string) => {
     await workoutService.deleteWorkout(workoutId);
-    const fresh = await workoutService.getWorkouts();
-    setWorkouts(fresh);
+    const fresh = await fetchWorkouts();
     setSelectedDayWorkouts((prev) => {
       if (!prev) return null;
       const remaining = fresh.filter((w) =>
-        isSameDay(parseISO(w.start_time), prev.date),
+        isSameDay(parseWorkoutTime(w.start_time), prev.date),
       );
       return remaining.length > 0
         ? { date: prev.date, workouts: remaining }
@@ -216,7 +125,7 @@ const Calendar: React.FC = () => {
       await workoutService.syncAllFromCalendar().catch(() => {});
       // Step 2: attach Fitbit data to existing gym workouts
       await workoutService.syncFitbitBulk().catch(() => null);
-      // Step 3: create standalone workouts for Fitbit activities not in DB yet
+      // Step 3: create standalone workouts for Fitbit activities not yet in DB
       const fitbitResult = await workoutService
         .syncFitbitCreate()
         .catch(() => null);
@@ -254,14 +163,13 @@ const Calendar: React.FC = () => {
         is_completed: s.is_completed,
       })),
     });
-    await fetchWorkouts();
+    await refreshAll();
     addToast("Horario actualizado", "success");
   };
 
   const closeModal = () => {
     setSelectedDayWorkouts(null);
-    setEditingWorkoutId(null);
-    setDraftSets([]);
+    cancelEdit();
   };
 
   return (

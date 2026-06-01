@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import {
   LineChart,
   Line,
@@ -12,14 +12,17 @@ import {
 import { TrendingUp, ChevronDown, AlertCircle } from "lucide-react";
 import PeriodSelector from "../ui/PeriodSelector";
 import { PERIOD_OPTIONS } from "../../constants/periods";
-import { analyticsService } from "../../services/analytics";
 import { Exercise } from "../../services/exercise";
-import { format, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { SkeletonChartArea } from "../ui/Skeleton";
-
-const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+import {
+  CHART_TOOLTIP_CONFIG,
+  AXIS_TICK_STYLE,
+} from "../../constants/chartStyles";
+import { CHART_HEIGHTS } from "../../constants/dimensions";
+import { capitalize } from "../../utils/chartFormatters";
+import { useWeightProgress } from "./hooks/useWeightProgress";
+import { useDropdown } from "./hooks/useDropdown";
 
 interface Props {
   exercises: Exercise[];
@@ -27,13 +30,18 @@ interface Props {
 }
 
 const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
-  const [selectedExercise, setSelectedExercise] = useState("");
-  const [weightData, setWeightData] = useState<any[]>([]);
-  const [loadingWeights, setLoadingWeights] = useState(false);
-  const [weightError, setWeightError] = useState(false);
-  const [days, setDays] = useState("30");
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const {
+    selectedExercise,
+    setSelectedExercise,
+    weightData,
+    loadingWeights,
+    weightError,
+    setWeightError,
+    days,
+    setDays,
+  } = useWeightProgress(exercises);
+
+  const { isOpen, setIsOpen, dropdownRef } = useDropdown();
 
   const sortedExercises = exercises.slice().sort((a, b) => {
     const ma = a.muscle?.name ?? "";
@@ -42,54 +50,6 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
   });
 
   const selectedEx = sortedExercises.find((ex) => ex.id === selectedExercise);
-
-  useEffect(() => {
-    if (exercises.length > 0 && !selectedExercise) {
-      setSelectedExercise(exercises[0].id);
-    }
-  }, [exercises]);
-
-  useEffect(() => {
-    if (!selectedExercise) return;
-    let cancelled = false;
-    setLoadingWeights(true);
-    setWeightData([]);
-    setWeightError(false);
-    analyticsService
-      .getWeightProgress(selectedExercise, Number(days))
-      .then((res) => {
-        if (!cancelled)
-          setWeightData(
-            res.map((d) => ({
-              ...d,
-              formattedDate: format(parseISO(d.date), "dd MMM", { locale: es }),
-            })),
-          );
-      })
-      .catch(() => {
-        if (!cancelled) setWeightError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingWeights(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedExercise, days]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   return (
     <motion.div
@@ -128,8 +88,8 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
             <span className="truncate">
               {selectedEx
                 ? selectedEx.muscle?.name
-                  ? `${cap(selectedEx.muscle.name)} — ${cap(selectedEx.name)}`
-                  : cap(selectedEx.name)
+                  ? `${capitalize(selectedEx.muscle.name)} — ${capitalize(selectedEx.name)}`
+                  : capitalize(selectedEx.name)
                 : "Seleccionar ejercicio"}
             </span>
             <ChevronDown
@@ -151,8 +111,8 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
                 <div className="max-h-64 overflow-y-auto no-scrollbar py-1">
                   {sortedExercises.map((ex) => {
                     const label = ex.muscle?.name
-                      ? `${cap(ex.muscle.name)} — ${cap(ex.name)}`
-                      : cap(ex.name);
+                      ? `${capitalize(ex.muscle.name)} — ${capitalize(ex.name)}`
+                      : capitalize(ex.name);
                     const isSelected = ex.id === selectedExercise;
                     return (
                       <button
@@ -179,22 +139,25 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
       </div>
 
       {!selectedExercise && !loading ? (
-        <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center border border-dashed border-white/[0.06] rounded-2xl">
+        <div
+          className={`${CHART_HEIGHTS.LARGE} flex flex-col items-center justify-center gap-4 text-center border border-dashed border-white/[0.06] rounded-2xl`}
+        >
           <TrendingUp size={36} className="text-slate-700" />
           <p className="text-slate-500 text-sm">
             Selecciona un ejercicio para ver su progreso.
           </p>
         </div>
       ) : loading || loadingWeights ? (
-        <SkeletonChartArea height="h-[300px]" />
+        <SkeletonChartArea height={CHART_HEIGHTS.LARGE} />
       ) : weightError ? (
-        <div className="h-[300px] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-red-500/20 rounded-2xl">
+        <div
+          className={`${CHART_HEIGHTS.LARGE} flex flex-col items-center justify-center gap-3 text-center border border-dashed border-red-500/20 rounded-2xl`}
+        >
           <AlertCircle size={28} className="text-red-500/50" />
           <p className="text-slate-500 text-sm">Error al cargar los datos.</p>
           <button
             onClick={() => {
               setWeightError(false);
-              setLoadingWeights(true);
             }}
             className="text-xs text-primary hover:underline font-semibold"
           >
@@ -202,14 +165,16 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
           </button>
         </div>
       ) : weightData.length === 0 ? (
-        <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center border border-dashed border-white/[0.06] rounded-2xl">
+        <div
+          className={`${CHART_HEIGHTS.LARGE} flex flex-col items-center justify-center gap-4 text-center border border-dashed border-white/[0.06] rounded-2xl`}
+        >
           <TrendingUp size={36} className="text-slate-700" />
           <p className="text-slate-500 text-sm">
             No hay datos para este ejercicio en el período seleccionado.
           </p>
         </div>
       ) : (
-        <div className="h-[300px] w-full">
+        <div className={`${CHART_HEIGHTS.LARGE} w-full`}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={weightData}>
               <CartesianGrid
@@ -219,32 +184,25 @@ const WeightProgressCard: React.FC<Props> = ({ exercises, loading }) => {
               />
               <XAxis
                 dataKey="formattedDate"
-                stroke="#64748b"
-                fontSize={10}
-                fontWeight="black"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
                 interval={Math.max(0, Math.ceil(weightData.length / 8) - 1)}
               />
               <YAxis
-                stroke="#64748b"
-                fontSize={10}
-                fontWeight="black"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0f1729",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                }}
-                labelStyle={{ color: "#94a3b8", fontSize: 11 }}
+                {...CHART_TOOLTIP_CONFIG}
                 itemStyle={{
+                  ...CHART_TOOLTIP_CONFIG.itemStyle,
                   color: "#f97316",
-                  fontWeight: "700",
-                  fontSize: "13px",
                 }}
               />
               <ReferenceLine

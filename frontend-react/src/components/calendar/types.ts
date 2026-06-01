@@ -1,5 +1,17 @@
 import type { Workout } from "../../services/workout";
 
+export interface TimeEdit {
+  startH: number;
+  startM: number;
+  endH: number;
+  endM: number;
+}
+
+export interface WeeklyAssignment {
+  date: string;
+  time: string;
+}
+
 export interface DraftSet {
   exercise_id: string;
   exercise_name: string;
