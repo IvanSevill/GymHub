@@ -13,17 +13,10 @@ import { Layers } from "lucide-react";
 import { motion } from "framer-motion";
 import { SkeletonChartArea } from "../ui/Skeleton";
 import { MuscleBalancePoint } from "../../services/analytics";
+import { CHART_TOOLTIP_CONFIG, AXIS_TICK_STYLE } from "../../constants/chartStyles";
+import { MUSCLE_COLORS } from "../../constants/colors";
+import { capitalize, formatWeek, fmtVolume } from "../../utils/chartFormatters";
 
-const MUSCLE_COLORS: Record<string, string> = {
-  pecho: "#f97316",
-  espalda: "#3b82f6",
-  pierna: "#a855f7",
-  hombro: "#10b981",
-  brazo: "#f59e0b",
-  abdomen: "#ec4899",
-  glúteo: "#06b6d4",
-  glúte: "#06b6d4",
-};
 const FALLBACK_COLORS = [
   "#f97316",
   "#3b82f6",
@@ -33,10 +26,6 @@ const FALLBACK_COLORS = [
   "#ec4899",
   "#06b6d4",
 ];
-
-const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-const fmtVol = (v: number) =>
-  v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${Math.round(v)}kg`;
 
 interface Props {
   data: MuscleBalancePoint[];
@@ -50,7 +39,7 @@ const MuscleBalanceChart: React.FC<Props> = ({ data, loading }) => {
     for (const row of data) {
       if (row.volume <= 0) continue;
       if (!map[row.week]) map[row.week] = {};
-      const m = cap(row.muscle);
+      const m = capitalize(row.muscle);
       map[row.week][m] = (map[row.week][m] || 0) + row.volume;
       muscleSet.add(m);
     }
@@ -105,36 +94,27 @@ const MuscleBalanceChart: React.FC<Props> = ({ data, loading }) => {
               />
               <XAxis
                 dataKey="week"
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
                 interval={xInterval}
-                tickFormatter={(w: string) => {
-                  const parts = w.split("-W");
-                  return parts.length === 2 ? `S${parts[1]}` : w;
-                }}
+                tickFormatter={formatWeek}
               />
               <YAxis
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={fmtVol}
+                tickFormatter={fmtVolume}
                 width={42}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0f1729",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                }}
-                labelStyle={{ color: "#94a3b8", fontSize: 11 }}
+                {...CHART_TOOLTIP_CONFIG}
                 formatter={(v: unknown, name: unknown) => [
-                  typeof v === "number" ? fmtVol(v) : String(v),
+                  typeof v === "number" ? fmtVolume(v) : String(v),
                   String(name),
                 ]}
               />

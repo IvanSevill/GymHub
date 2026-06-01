@@ -16,18 +16,15 @@ import { PERIOD_OPTIONS } from "../../constants/periods";
 import { analyticsService, ExerciseFrequency } from "../../services/analytics";
 import { motion } from "framer-motion";
 import { SkeletonChartArea } from "../ui/Skeleton";
-
-const COLORS = [
-  "#f97316",
-  "#a855f7",
-  "#3b82f6",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#06b6d4",
-];
-
-const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+import { CHART_COLORS } from "../../constants/colors";
+import {
+  CHART_TOOLTIP_CONFIG,
+  AXIS_TICK_STYLE,
+} from "../../constants/chartStyles";
+import {
+  aggregateByMuscle,
+  aggregateByExercise,
+} from "../../utils/frequencyAnalytics";
 
 const FrequencyAnalysisCard: React.FC = () => {
   const [frequency, setFrequency] = useState<ExerciseFrequency[]>([]);
@@ -52,42 +49,13 @@ const FrequencyAnalysisCard: React.FC = () => {
 
   const chartData =
     viewType === "muscle"
-      ? Object.entries(
-          frequency.reduce((acc: Record<string, number>, curr) => {
-            const m = curr.muscle_name ? cap(curr.muscle_name) : "Otro";
-            acc[m] = (acc[m] || 0) + curr.count;
-            return acc;
-          }, {}),
-        )
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count)
-      : frequency
-          .filter((d) => d.exercise_name)
-          .slice(0, 10)
-          .map((d) => ({
-            name: d.muscle_name
-              ? `${cap(d.muscle_name)} — ${cap(d.exercise_name)}`
-              : cap(d.exercise_name),
-            count: d.count,
-          }));
+      ? aggregateByMuscle(frequency)
+      : aggregateByExercise(frequency);
 
   const tableRows =
     viewType === "muscle"
-      ? Object.entries(
-          frequency.reduce((acc: Record<string, number>, curr) => {
-            const m = curr.muscle_name ? cap(curr.muscle_name) : "Otro";
-            acc[m] = (acc[m] || 0) + curr.count;
-            return acc;
-          }, {}),
-        ).sort((a, b) => b[1] - a[1])
-      : frequency
-          .filter((d) => d.exercise_name)
-          .map((d) => [
-            d.muscle_name
-              ? `${cap(d.muscle_name)} — ${cap(d.exercise_name)}`
-              : cap(d.exercise_name),
-            d.count,
-          ]);
+      ? aggregateByMuscle(frequency).map(({ name, count }) => [name, count])
+      : aggregateByExercise(frequency).map(({ name, count }) => [name, count]);
 
   return (
     <motion.div
@@ -165,28 +133,22 @@ const FrequencyAnalysisCard: React.FC = () => {
                 <YAxis
                   dataKey="name"
                   type="category"
-                  stroke="#94a3b8"
-                  fontSize={10}
-                  fontWeight="black"
+                  stroke={AXIS_TICK_STYLE.fill}
+                  fontSize={AXIS_TICK_STYLE.fontSize}
+                  fontWeight={AXIS_TICK_STYLE.fontWeight}
                   axisLine={false}
                   tickLine={false}
                   width={140}
                 />
                 <Tooltip
                   cursor={{ fill: "rgba(255,255,255,0.02)" }}
-                  contentStyle={{
-                    background: "#0f1729",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-                  }}
-                  labelStyle={{ color: "#94a3b8", fontSize: 11 }}
+                  {...CHART_TOOLTIP_CONFIG}
                 />
                 <Bar dataKey="count" radius={[0, 8, 8, 0]} barSize={25}>
                   {chartData.map((_, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
                     />
                   ))}
                   <LabelList
@@ -233,8 +195,8 @@ const FrequencyAnalysisCard: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {tableRows
-                    .filter(([name]: any) => name)
-                    .map(([name, count]: any, i) => (
+                    .filter(([name]) => name)
+                    .map(([name, count], i) => (
                       <tr
                         key={i}
                         className="hover:bg-white/[0.02] transition-colors group"

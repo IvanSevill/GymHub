@@ -14,6 +14,7 @@ import { Timer } from "lucide-react";
 import { motion } from "framer-motion";
 import { SkeletonChartArea } from "../ui/Skeleton";
 import { SessionDuration } from "../../services/analytics";
+import { CHART_TOOLTIP_CONFIG, AXIS_TICK_STYLE } from "../../constants/chartStyles";
 
 const BUCKETS = [
   { label: "< 30min", min: 0, max: 30, color: "#64748b" },
@@ -90,29 +91,23 @@ const DurationHistogram: React.FC<Props> = ({ data, loading }) => {
               />
               <XAxis
                 dataKey="label"
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
                 allowDecimals={false}
                 width={24}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0f1729",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                }}
-                labelStyle={{ color: "#94a3b8", fontSize: 11 }}
+                {...CHART_TOOLTIP_CONFIG}
                 formatter={(v: unknown) => [
                   `${v} sesión${Number(v) !== 1 ? "es" : ""} (${
                     total > 0 ? Math.round((Number(v) / total) * 100) : 0

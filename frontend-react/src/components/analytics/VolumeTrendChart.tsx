@@ -12,6 +12,8 @@ import {
 import { BarChart2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { SkeletonChartArea } from "../ui/Skeleton";
+import { CHART_TOOLTIP_CONFIG, AXIS_TICK_STYLE } from "../../constants/chartStyles";
+import { fmtVolume } from "../../utils/chartFormatters";
 
 interface DataPoint {
   date: string;
@@ -23,9 +25,6 @@ interface Props {
   data: DataPoint[];
   loading: boolean;
 }
-
-const fmtVolume = (v: number) =>
-  v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${Math.round(v)}kg`;
 
 const VolumeTrendChart: React.FC<Props> = ({ data, loading }) => {
   const avg =
@@ -86,34 +85,27 @@ const VolumeTrendChart: React.FC<Props> = ({ data, loading }) => {
               />
               <XAxis
                 dataKey="formattedDate"
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
                 interval={xInterval}
               />
               <YAxis
-                stroke="#475569"
-                fontSize={10}
-                fontWeight="bold"
+                stroke={AXIS_TICK_STYLE.fill}
+                fontSize={AXIS_TICK_STYLE.fontSize}
+                fontWeight={AXIS_TICK_STYLE.fontWeight}
                 axisLine={false}
                 tickLine={false}
                 width={40}
                 tickFormatter={fmtVolume}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0f1729",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                }}
-                labelStyle={{ color: "#94a3b8", fontSize: 11 }}
+                {...CHART_TOOLTIP_CONFIG}
                 itemStyle={{
+                  ...CHART_TOOLTIP_CONFIG.itemStyle,
                   color: "#f97316",
-                  fontWeight: "700",
-                  fontSize: "13px",
                 }}
                 formatter={(v: unknown) => [
                   typeof v === "number" ? `${v.toLocaleString()}kg` : "",

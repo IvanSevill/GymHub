@@ -9,9 +9,8 @@ import { motion } from "framer-motion";
 import { SkeletonCard } from "../components/ui/Skeleton";
 import WeightProgressCard from "../components/analytics/WeightProgressCard";
 import FrequencyAnalysisCard from "../components/analytics/FrequencyAnalysisCard";
-import FitbitSection, {
-  AZM_ZONES,
-} from "../components/analytics/FitbitSection";
+import FitbitSection from "../components/analytics/FitbitSection";
+import { AZM_ZONES } from "../constants/colors";
 
 const Dashboard: React.FC = () => {
   const [maxLifts, setMaxLifts] = useState<MaxLift[]>([]);
