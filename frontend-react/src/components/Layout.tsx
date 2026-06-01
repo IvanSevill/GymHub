@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu, Dumbbell } from "lucide-react";
+import { Menu, Dumbbell, MessageCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ToastContainer from "./ui/ToastContainer";
 import ExerciseModal from "./ExerciseModal";
 import OnboardingTutorial from "./OnboardingTutorial";
+import ChatPanel from "./chat/ChatPanel";
 import { ExerciseModalProvider } from "../context/ExerciseModalContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const location = useLocation();
   const { user } = useAuth();
 
@@ -78,6 +80,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <ToastContainer />
         <ExerciseModal />
         <OnboardingTutorial />
+
+        {/* AI Chat FAB */}
+        <button
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-primary rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-transform md:bottom-8 md:right-8"
+          aria-label="Abrir asistente IA"
+        >
+          <MessageCircle size={20} />
+        </button>
+        <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
       </div>
     </ExerciseModalProvider>
   );
