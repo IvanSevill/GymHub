@@ -18,6 +18,9 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 MAX_MESSAGES = 20
 MAX_DAILY_QUERIES = 5
 
+# Configure once at startup (main.py calls load_dotenv before importing this module)
+genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
+
 # In-memory daily usage counter: {(user_id, "YYYY-MM-DD"): count}
 _daily_usage: dict[tuple[str, str], int] = {}
 
@@ -220,8 +223,12 @@ def _system_prompt(name: str) -> str:
 def _check_rate_limit(user_id: str, is_root: bool) -> bool:
     if is_root:
         return True
-    key = (user_id, str(date.today()))
-    return _daily_usage.get(key, 0) < MAX_DAILY_QUERIES
+    today = str(date.today())
+    # Evict stale entries from past days to avoid unbounded growth
+    for k in list(_daily_usage):
+        if k[1] != today:
+            del _daily_usage[k]
+    return _daily_usage.get((user_id, today), 0) < MAX_DAILY_QUERIES
 
 
 def _record_usage(user_id: str, is_root: bool) -> None:
@@ -248,7 +255,6 @@ def _build_contents(messages: list[ChatMessage]) -> list[dict]:
 
 
 async def _generate(messages: list[ChatMessage], user: AuthUser) -> AsyncIterator[str]:
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
     model = genai.GenerativeModel(
         model_name=MODEL,
         system_instruction=_system_prompt(user.name),
@@ -303,13 +309,10 @@ async def _generate(messages: list[ChatMessage], user: AuthUser) -> AsyncIterato
                 contents.append({"role": "user", "parts": fn_responses})
 
             else:
-                # Final text response — stream word by word for smooth UX
+                # Quota recorded here: only burns if model actually returned text
+                _record_usage(user.id, user.is_root)
                 text = getattr(response, "text", "") or ""
-                words = text.split(" ")
-                for i, word in enumerate(words):
-                    chunk = word + (" " if i < len(words) - 1 else "")
-                    yield f"data: {json.dumps({'type': 'text', 'text': chunk})}\n\n"
-                    await asyncio.sleep(0.012)
+                yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
                 break
 
     except Exception as exc:
@@ -323,6 +326,9 @@ async def chat(
     request: ChatRequest,
     user: AuthUser = Depends(get_current_user),
 ):
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="messages no puede estar vacío")
+
     if not os.getenv("GEMINI_API_KEY"):
         raise HTTPException(status_code=503, detail="AI assistant not configured — set GEMINI_API_KEY")
 
@@ -331,8 +337,6 @@ async def chat(
             status_code=429,
             detail=f"Límite diario de {MAX_DAILY_QUERIES} consultas alcanzado. Vuelve mañana.",
         )
-
-    _record_usage(user.id, user.is_root)
 
     return StreamingResponse(
         _generate(request.messages, user),

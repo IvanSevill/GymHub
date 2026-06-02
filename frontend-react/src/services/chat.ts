@@ -19,6 +19,13 @@ export async function* streamChat(
   messages: ChatMessage[],
 ): AsyncGenerator<ChatEvent> {
   const token = localStorage.getItem("token");
+  if (!token) {
+    yield {
+      type: "error",
+      message: "Sesión no iniciada. Por favor inicia sesión.",
+    };
+    return;
+  }
 
   let response: Response;
   try {

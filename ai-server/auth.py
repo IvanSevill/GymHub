@@ -8,7 +8,9 @@ from jose import JWTError, jwt
 from database import SessionLocal
 from models import User
 
-SECRET_KEY = os.getenv("SECRET_KEY", "")
+SECRET_KEY = os.getenv("SECRET_KEY") or ""
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set — refusing to start")
 ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
