@@ -10,12 +10,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from auth import AuthUser, get_current_user
+from chat_history import get_history, save_message
+from database import SessionLocal
 from tool_runner import execute_tool
 
 router = APIRouter()
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-MAX_MESSAGES = 20
 MAX_DAILY_QUERIES = 5
 
 # Configure once at startup (main.py calls load_dotenv before importing this module)
@@ -202,7 +203,27 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    messages: list[ChatMessage]
+    message: str  # only the new user message; history is loaded from DB
+
+
+# ---------------------------------------------------------------------------
+# DB helpers (sync, called via asyncio.to_thread)
+# ---------------------------------------------------------------------------
+
+def _load_history(user_id: str) -> list[dict]:
+    db = SessionLocal()
+    try:
+        return get_history(user_id, db)
+    finally:
+        db.close()
+
+
+def _save_msg(user_id: str, role: str, content: str) -> None:
+    db = SessionLocal()
+    try:
+        save_message(user_id, role, content, db)
+    finally:
+        db.close()
 
 
 def _system_prompt(name: str) -> str:
@@ -245,16 +266,14 @@ def _remaining_queries(user_id: str, is_root: bool) -> int:
     return max(0, MAX_DAILY_QUERIES - _daily_usage.get(key, 0))
 
 
-def _build_contents(messages: list[ChatMessage]) -> list[dict]:
-    msgs = messages[-MAX_MESSAGES:] if len(messages) > MAX_MESSAGES else messages
-    contents = []
-    for m in msgs:
-        role = "user" if m.role == "user" else "model"
-        contents.append({"role": role, "parts": [{"text": m.content}]})
-    return contents
+def _history_to_contents(history: list[dict]) -> list[dict]:
+    return [
+        {"role": "user" if h["role"] == "user" else "model", "parts": [{"text": h["content"]}]}
+        for h in history
+    ]
 
 
-async def _generate(messages: list[ChatMessage], user: AuthUser) -> AsyncIterator[str]:
+async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
     model = genai.GenerativeModel(
         model_name=MODEL,
         system_instruction=_system_prompt(user.name),
@@ -265,11 +284,14 @@ async def _generate(messages: list[ChatMessage], user: AuthUser) -> AsyncIterato
         ),
     )
 
-    contents = _build_contents(messages[:-1])  # history without last message
-    last_msg = messages[-1].content
+    # Load ring-buffer history from DB (last BUFFER_SIZE messages)
+    history = await asyncio.to_thread(_load_history, user.id)
 
-    # Add final user message
-    contents.append({"role": "user", "parts": [{"text": last_msg}]})
+    # Save user message to DB before calling the model
+    await asyncio.to_thread(_save_msg, user.id, "user", message)
+
+    contents = _history_to_contents(history)
+    contents.append({"role": "user", "parts": [{"text": message}]})
 
     try:
         max_iterations = 6  # safety cap on tool-use loops
@@ -312,6 +334,8 @@ async def _generate(messages: list[ChatMessage], user: AuthUser) -> AsyncIterato
                 # Quota recorded here: only burns if model actually returned text
                 _record_usage(user.id, user.is_root)
                 text = getattr(response, "text", "") or ""
+                # Save assistant response to ring buffer
+                await asyncio.to_thread(_save_msg, user.id, "assistant", text)
                 yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
                 break
 
@@ -321,13 +345,19 @@ async def _generate(messages: list[ChatMessage], user: AuthUser) -> AsyncIterato
     yield 'data: {"type":"done"}\n\n'
 
 
+@router.get("/chat/history")
+async def chat_history_endpoint(user: AuthUser = Depends(get_current_user)):
+    """Return the last BUFFER_SIZE messages for the current user."""
+    return await asyncio.to_thread(_load_history, user.id)
+
+
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
     user: AuthUser = Depends(get_current_user),
 ):
-    if not request.messages:
-        raise HTTPException(status_code=400, detail="messages no puede estar vacío")
+    if not request.message.strip():
+        raise HTTPException(status_code=400, detail="message no puede estar vacío")
 
     if not os.getenv("GEMINI_API_KEY"):
         raise HTTPException(status_code=503, detail="AI assistant not configured — set GEMINI_API_KEY")
@@ -339,11 +369,7 @@ async def chat(
         )
 
     return StreamingResponse(
-        _generate(request.messages, user),
+        _generate(request.message, user),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "X-Remaining-Queries": str(_remaining_queries(user.id, user.is_root)),
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

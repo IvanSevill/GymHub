@@ -7,7 +7,15 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
+from database import Base, engine  # noqa: E402
+from models import ChatEntry, ChatCursor  # noqa: E402, F401 — ensure tables are registered
 from chat import router as chat_router  # noqa: E402
+
+# Create chat_entries and chat_cursors tables if they don't exist yet
+Base.metadata.create_all(bind=engine, tables=[
+    Base.metadata.tables["chat_entries"],
+    Base.metadata.tables["chat_cursors"],
+])
 
 app = FastAPI(title="GymHub AI Server")
 

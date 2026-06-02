@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bot, Loader2, Send, Sparkles, X } from "lucide-react";
-import { type ChatMessage, streamChat } from "../../services/chat";
+import { type ChatMessage, getHistory, streamChat } from "../../services/chat";
 
 const AI_HEALTH_URL = `${import.meta.env.VITE_AI_URL ?? "http://localhost:8001"}/health`;
 
@@ -56,6 +56,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
       setAiReady(false);
       setAiWaking(false);
       setAiElapsed(0);
+      setMessages([]);
       aiReadyRef.current = false;
       return;
     }
@@ -106,6 +107,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     };
   }, [open]);
 
+  // Load persistent history from DB once the server is ready
+  useEffect(() => {
+    if (!open || !aiReady) return;
+    getHistory().then((history) => {
+      if (history.length > 0) setMessages(history);
+    });
+  }, [open, aiReady]);
+
   // Auto-scroll to bottom whenever messages or streaming content changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -123,9 +132,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     if (!trimmed || streaming) return;
 
     const userMsg: ChatMessage = { role: "user", content: trimmed };
-    const updatedMessages = [...messages, userMsg];
-
-    setMessages(updatedMessages);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setStreaming(true);
     setThinking(false);
@@ -135,7 +142,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     let accumulated = "";
 
     try {
-      const generator = streamChat(updatedMessages);
+      // Server loads history from DB; we only send the new message
+      const generator = streamChat(trimmed);
       for await (const event of generator) {
         if (event.type === "thinking") {
           setThinking(true);

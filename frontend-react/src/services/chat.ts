@@ -15,9 +15,28 @@ export interface ChatEvent {
   message?: string;
 }
 
-export async function* streamChat(
-  messages: ChatMessage[],
-): AsyncGenerator<ChatEvent> {
+function authHeaders(): HeadersInit {
+  const token = localStorage.getItem("token");
+  return token
+    ? { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+    : { "Content-Type": "application/json" };
+}
+
+export async function getHistory(): Promise<ChatMessage[]> {
+  const token = localStorage.getItem("token");
+  if (!token) return [];
+  try {
+    const res = await fetch(`${AI_URL}/chat/history`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    return (await res.json()) as ChatMessage[];
+  } catch {
+    return [];
+  }
+}
+
+export async function* streamChat(message: string): AsyncGenerator<ChatEvent> {
   const token = localStorage.getItem("token");
   if (!token) {
     yield {
@@ -31,11 +50,8 @@ export async function* streamChat(
   try {
     response = await fetch(`${AI_URL}/chat`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ messages }),
+      headers: authHeaders(),
+      body: JSON.stringify({ message }),
     });
   } catch {
     yield {
@@ -46,7 +62,11 @@ export async function* streamChat(
   }
 
   if (!response.ok) {
-    yield { type: "error", message: `Error ${response.status}` };
+    const detail =
+      response.status === 429
+        ? "Límite diario alcanzado. Vuelve mañana."
+        : `Error ${response.status}`;
+    yield { type: "error", message: detail };
     return;
   }
 
