@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { type ReactNode, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bot, History, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   type ChatMessage,
   type ChatUsage,
@@ -46,15 +48,58 @@ const ThinkingDots: React.FC = () => (
   </div>
 );
 
-function formatResetCountdown(resetAt: string): string {
-  const diff = Math.max(0, new Date(resetAt).getTime() - Date.now());
-  const totalMinutes = Math.ceil(diff / 60_000);
-  if (totalMinutes <= 0) return "ahora";
-  if (totalMinutes < 60) return `${totalMinutes} min`;
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return m > 0 ? `${h}h ${m} min` : `${h}h`;
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return "00:00:00";
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+const AssistantBubble: React.FC<{ content: string; cursor?: boolean }> = ({
+  content,
+  cursor = false,
+}) => (
+  <div className="mr-auto max-w-[80%] px-4 py-2.5 rounded-2xl rounded-tl-sm bg-white/5 border border-white/8 text-slate-200 text-sm">
+    <div className="prose prose-invert prose-sm max-w-none">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          table: ({ children }: { children?: ReactNode }) => (
+            <div className="overflow-x-auto my-2">
+              <table className="text-xs border-collapse w-full">
+                {children}
+              </table>
+            </div>
+          ),
+          th: ({ children }: { children?: ReactNode }) => (
+            <th className="border border-white/20 px-2 py-1 text-left font-semibold bg-white/10">
+              {children}
+            </th>
+          ),
+          td: ({ children }: { children?: ReactNode }) => (
+            <td className="border border-white/20 px-2 py-1">{children}</td>
+          ),
+          p: ({ children }: { children?: ReactNode }) => (
+            <p className="mb-1 last:mb-0">{children}</p>
+          ),
+          strong: ({ children }: { children?: ReactNode }) => (
+            <strong className="font-semibold text-white">{children}</strong>
+          ),
+          code: ({ children }: { children?: ReactNode }) => (
+            <code className="bg-white/10 rounded px-1 py-0.5 text-xs font-mono">
+              {children}
+            </code>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+    {cursor && <span className="animate-pulse">▋</span>}
+  </div>
+);
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
   const { addToast } = useToast();
@@ -65,7 +110,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
   const [streamingContent, setStreamingContent] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [usage, setUsage] = useState<ChatUsage | null>(null);
-  const [resetCountdown, setResetCountdown] = useState<string>("");
+  const [timeLeft, setTimeLeft] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasLoadedHistoryRef = useRef(false);
@@ -151,12 +196,19 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     getUsage().then(setUsage);
   }, [open, aiReady]);
 
-  // Countdown ticker for reset_at
+  // Countdown ticker — updates every second
   useEffect(() => {
-    if (!usage?.reset_at) return;
-    const tick = () => setResetCountdown(formatResetCountdown(usage.reset_at!));
+    if (!usage?.reset_at) {
+      setTimeLeft(0);
+      return;
+    }
+    const tick = () => {
+      setTimeLeft(
+        Math.max(0, new Date(usage.reset_at!).getTime() - Date.now()),
+      );
+    };
     tick();
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(tick, 1_000);
     return () => clearInterval(id);
   }, [usage?.reset_at]);
 
@@ -187,7 +239,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     if (!trimmed || streaming) return;
 
     const userMsg: ChatMessage = { role: "user", content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
     setStreaming(true);
@@ -198,7 +251,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     let accumulated = "";
 
     try {
-      const generator = streamChat(trimmed);
+      const generator = streamChat(nextMessages);
       for await (const event of generator) {
         if (event.type === "thinking") {
           setThinking(true);
@@ -259,7 +312,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
       setErrorMessage(null);
       setStreamingContent("");
       hasLoadedHistoryRef.current = false;
-      refreshUsage();
+      // Do NOT refresh usage — the timer must keep counting down
     } catch {
       addToast("Error al borrar el historial", "error");
     }
@@ -311,7 +364,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                   <p className="text-white font-semibold text-sm leading-none">
                     GymHub AI
                   </p>
-                  {usage && !usage.is_root ? (
+                  {usage?.is_root ? (
+                    <span className="text-xs text-emerald-400 font-medium">
+                      Sin límite
+                    </span>
+                  ) : usage ? (
                     <p
                       className={`text-xs mt-0.5 ${
                         usage.used >= usage.limit
@@ -321,8 +378,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                             : "text-slate-500"
                       }`}
                     >
-                      {usage.used}/{usage.limit} consultas
-                      {usage.reset_at && ` · reset en ${resetCountdown}`}
+                      <span className="text-xs text-white/50">
+                        {`${usage.used}/${usage.limit} · ${formatCountdown(timeLeft)}`}
+                      </span>
                     </p>
                   ) : (
                     <p className="text-slate-500 text-xs mt-0.5">
@@ -405,7 +463,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                     <p className="text-slate-400 text-xs mt-1.5 max-w-[240px] leading-relaxed">
                       Has usado {usage!.used}/{usage!.limit} consultas.
                       {usage!.reset_at
-                        ? ` Disponible en ${resetCountdown}.`
+                        ? ` Disponible en ${formatCountdown(timeLeft)}.`
                         : ""}
                     </p>
                   </div>
@@ -447,12 +505,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                         {msg.content}
                       </div>
                     ) : (
-                      <div
-                        key={i}
-                        className="mr-auto max-w-[80%] px-4 py-2.5 rounded-2xl rounded-tl-sm bg-white/5 border border-white/8 text-slate-200 text-sm whitespace-pre-wrap"
-                      >
-                        {msg.content}
-                      </div>
+                      <AssistantBubble key={i} content={msg.content} />
                     ),
                   )}
 
@@ -461,10 +514,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
 
                   {/* Streaming response */}
                   {streaming && streamingContent && (
-                    <div className="mr-auto max-w-[80%] px-4 py-2.5 rounded-2xl rounded-tl-sm bg-white/5 border border-white/8 text-slate-200 text-sm whitespace-pre-wrap">
-                      {streamingContent}
-                      <span className="animate-pulse">▋</span>
-                    </div>
+                    <AssistantBubble content={streamingContent} cursor />
                   )}
 
                   {/* Error message */}

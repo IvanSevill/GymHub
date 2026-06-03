@@ -79,5 +79,10 @@ def get_window_info(user_id: str, db: Session) -> tuple[int, datetime | None]:
 
 
 def delete_history(user_id: str, db: Session) -> None:
-    db.query(ChatMessage).filter_by(user_id=user_id).delete()
+    """Delete chat history but preserve messages within the rate-limit window."""
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=RATE_LIMIT_HOURS)
+    db.query(ChatMessage).filter(
+        ChatMessage.user_id == user_id,
+        ChatMessage.created_at < cutoff,
+    ).delete()
     db.commit()

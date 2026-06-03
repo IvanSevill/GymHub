@@ -151,7 +151,10 @@ def _system_prompt(name: str) -> str:
         "- Cita fechas y periodos concretos al dar datos.\n"
         "- Sé conciso y directo.\n"
         "- Si el usuario pide crear o modificar datos, confirma antes si hay ambigüedad.\n"
-        "- Si no hay datos disponibles, dilo claramente."
+        "- Si no hay datos disponibles, dilo claramente.\n"
+        "- Cuando recomiendes ejercicios, SIEMPRE usa get_exercise_frequency o list de herramientas "
+        "para obtener los ejercicios disponibles en la base de datos. Solo recomiendes ejercicios que "
+        "existan en la base de datos del usuario. Nunca inventes nombres de ejercicios."
     )
 
 
