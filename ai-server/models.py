@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -108,24 +108,14 @@ class SleepLog(Base):
 
 
 # ---------------------------------------------------------------------------
-# Chat history — ring buffer (10 slots per user)
+# Chat history — flat table with timestamps
 # ---------------------------------------------------------------------------
 
-class ChatEntry(Base):
-    """One slot in the per-user circular message buffer."""
-    __tablename__ = "chat_entries"
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
     id = Column(String, primary_key=True, default=_uuid)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    slot = Column(Integer, nullable=False)          # 0 .. BUFFER_SIZE-1
-    role = Column(String, nullable=False)           # "user" | "assistant"
+    role = Column(String, nullable=False)
     content = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False)
-    __table_args__ = (UniqueConstraint("user_id", "slot", name="uq_chat_entry_slot"),)
-
-
-class ChatCursor(Base):
-    """Write-pointer and total-count for the ring buffer."""
-    __tablename__ = "chat_cursors"
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    next_slot = Column(Integer, default=0, nullable=False)      # slot to write next
-    total_written = Column(Integer, default=0, nullable=False)  # ever-incrementing count
+    __table_args__ = (Index("ix_chat_messages_user_created", "user_id", "created_at"),)
