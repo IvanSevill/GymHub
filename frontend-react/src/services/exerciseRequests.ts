@@ -29,6 +29,12 @@ export interface ExerciseRequestCreate {
   muscle_name?: string;
 }
 
+export interface ExerciseRequestUpdate {
+  exercise_name?: string;
+  muscle_id?: string;
+  muscle_name?: string;
+}
+
 export const exerciseRequestService = {
   createRequest: async (
     data: ExerciseRequestCreate,
@@ -70,6 +76,32 @@ export const exerciseRequestService = {
       {
         rejection_reason: reason ?? null,
       },
+    );
+    return response.data;
+  },
+
+  deleteRequest: async (id: string): Promise<void> => {
+    await api.delete(`/exercise-requests/${id}`);
+  },
+
+  updateRequest: async (
+    id: string,
+    data: ExerciseRequestUpdate,
+  ): Promise<ExerciseRequest> => {
+    const response = await api.put<ExerciseRequest>(
+      `/exercise-requests/${id}`,
+      data,
+    );
+    return response.data;
+  },
+
+  adminEditRequest: async (
+    id: string,
+    data: ExerciseRequestUpdate,
+  ): Promise<ExerciseRequest> => {
+    const response = await api.put<ExerciseRequest>(
+      `/exercise-requests/${id}/admin-edit`,
+      data,
     );
     return response.data;
   },

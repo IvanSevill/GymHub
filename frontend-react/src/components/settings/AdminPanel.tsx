@@ -2,21 +2,168 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
+  ChevronDown,
   DatabaseZap,
   Dumbbell,
   GitMerge,
   Inbox,
+  Pencil,
+  Save,
   Shield,
+  X,
   XCircle,
 } from "lucide-react";
 import ExerciseLibrary from "./ExerciseLibrary";
 import DataResetPanel from "./DataResetPanel";
 import { StandardizeExercisesContent } from "../../pages/StandardizeExercises";
 import { useToast } from "../../context/ToastContext";
+import { exerciseService, type Muscle } from "../../services/exercise";
 import {
   exerciseRequestService,
   type ExerciseRequest,
 } from "../../services/exerciseRequests";
+
+// ─── Muscle Dropdown (shared within this file) ────────────────────────────────
+
+interface MuscleDropdownProps {
+  muscles: Muscle[];
+  value: string;
+  onChange: (id: string) => void;
+}
+
+const MuscleDropdown: React.FC<MuscleDropdownProps> = ({
+  muscles,
+  value,
+  onChange,
+}) => {
+  const [open, setOpen] = useState(false);
+  const selected = muscles.find((m) => m.id === value);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${
+          selected
+            ? "bg-primary/10 border-primary/40 text-primary"
+            : "bg-white/[0.02] border-white/10 hover:border-white/20 text-slate-400"
+        }`}
+      >
+        <span>{selected ? selected.name : "Seleccionar músculo"}</span>
+        <ChevronDown size={11} className="text-slate-500" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="absolute top-full left-0 right-0 mt-1 bg-surface border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+          >
+            <div className="max-h-[160px] overflow-y-auto py-1">
+              {muscles.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    onChange(m.id);
+                    setOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors ${
+                    value === m.id ? "text-primary" : "text-slate-400"
+                  }`}
+                >
+                  <span className="text-[9px] font-black uppercase tracking-widest">
+                    {m.name}
+                  </span>
+                  {value === m.id && <CheckCircle2 size={10} />}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// ─── Admin Inline Edit Form ───────────────────────────────────────────────────
+
+interface AdminEditFormProps {
+  req: ExerciseRequest;
+  muscles: Muscle[];
+  onCancel: () => void;
+  onSaved: () => void;
+}
+
+const AdminEditForm: React.FC<AdminEditFormProps> = ({
+  req,
+  muscles,
+  onCancel,
+  onSaved,
+}) => {
+  const { addToast } = useToast();
+  const [exerciseName, setExerciseName] = useState(req.exercise_name);
+  const [muscleId, setMuscleId] = useState(req.muscle_id ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!exerciseName.trim()) return;
+    setSaving(true);
+    try {
+      await exerciseRequestService.adminEditRequest(req.id, {
+        exercise_name: exerciseName.trim(),
+        ...(req.type === "exercise" && muscleId ? { muscle_id: muscleId } : {}),
+      });
+      addToast("Solicitud actualizada", "success");
+      onSaved();
+    } catch (err: any) {
+      addToast(
+        err.response?.data?.detail || "Error al editar la solicitud",
+        "error",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 pt-1 border-t border-white/[0.05]">
+      <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.15em]">
+        Editar antes de aprobar
+      </p>
+      <input
+        type="text"
+        value={exerciseName}
+        onChange={(e) => setExerciseName(e.target.value)}
+        className="w-full px-2.5 py-1.5 bg-white/[0.03] border border-white/10 rounded-lg text-white text-[10px] placeholder-slate-600 focus:outline-none focus:border-primary/40 transition-colors"
+      />
+      {req.type === "exercise" && muscles.length > 0 && (
+        <MuscleDropdown
+          muscles={muscles}
+          value={muscleId}
+          onChange={setMuscleId}
+        />
+      )}
+      <div className="flex gap-1.5">
+        <button
+          onClick={onCancel}
+          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-white/5 text-slate-400 font-black text-[9px] uppercase tracking-widest hover:bg-white/10 transition-all"
+        >
+          <X size={9} />
+          Cancelar
+        </button>
+        <button
+          disabled={saving || !exerciseName.trim()}
+          onClick={handleSave}
+          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 font-black text-[9px] uppercase tracking-widest hover:bg-primary hover:text-white transition-all disabled:opacity-30"
+        >
+          <Save size={9} />
+          {saving ? "Guardando..." : "Guardar"}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // ─── Requests tab ─────────────────────────────────────────────────────────────
 
@@ -32,10 +179,12 @@ const RequestsPanel: React.FC = () => {
   const { addToast } = useToast();
   const [filter, setFilter] = useState<FilterStatus>("pending");
   const [requests, setRequests] = useState<ExerciseRequest[]>([]);
+  const [muscles, setMuscles] = useState<Muscle[]>([]);
   const [loading, setLoading] = useState(true);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [actioning, setActioning] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const loadRequests = async (status: FilterStatus) => {
     setLoading(true);
@@ -46,6 +195,13 @@ const RequestsPanel: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    exerciseService
+      .getMuscles()
+      .then(setMuscles)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadRequests(filter);
@@ -141,7 +297,17 @@ const RequestsPanel: React.FC = () => {
 
               {req.status === "pending" && (
                 <>
-                  {rejectingId === req.id ? (
+                  {editingId === req.id ? (
+                    <AdminEditForm
+                      req={req}
+                      muscles={muscles}
+                      onCancel={() => setEditingId(null)}
+                      onSaved={() => {
+                        setEditingId(null);
+                        loadRequests(filter);
+                      }}
+                    />
+                  ) : rejectingId === req.id ? (
                     <div className="flex flex-col gap-2">
                       <input
                         autoFocus
@@ -187,6 +353,14 @@ const RequestsPanel: React.FC = () => {
                       >
                         <XCircle size={10} />
                         Rechazar
+                      </button>
+                      <button
+                        disabled={!!actioning}
+                        onClick={() => setEditingId(req.id)}
+                        className="flex items-center justify-center px-2.5 py-1.5 rounded-lg bg-white/5 text-slate-400 border border-white/[0.06] font-black text-[9px] uppercase tracking-widest hover:bg-primary/10 hover:text-primary hover:border-primary/20 transition-all disabled:opacity-30"
+                        title="Editar antes de aprobar"
+                      >
+                        <Pencil size={10} />
                       </button>
                     </div>
                   )}

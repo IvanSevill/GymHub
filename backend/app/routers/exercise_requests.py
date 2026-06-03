@@ -66,6 +66,83 @@ def get_all_requests(
     return q.order_by(models.ExerciseRequest.created_at.desc()).all()
 
 
+@router.delete("/{request_id}", status_code=204)
+def delete_exercise_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    req = (
+        db.query(models.ExerciseRequest)
+        .filter(models.ExerciseRequest.id == request_id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.requested_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your request")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending requests can be deleted")
+    db.delete(req)
+    db.commit()
+
+
+@router.put("/{request_id}", response_model=schemas.ExerciseRequestResponse)
+def update_exercise_request(
+    request_id: str,
+    data: schemas.ExerciseRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    req = (
+        db.query(models.ExerciseRequest)
+        .filter(models.ExerciseRequest.id == request_id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.requested_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your request")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending requests can be edited")
+    if data.exercise_name is not None:
+        req.exercise_name = data.exercise_name
+    if data.muscle_id is not None:
+        req.muscle_id = data.muscle_id
+    if data.muscle_name is not None:
+        req.muscle_name = data.muscle_name
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+@router.put("/{request_id}/admin-edit", response_model=schemas.ExerciseRequestResponse)
+def admin_edit_request(
+    request_id: str,
+    data: schemas.ExerciseRequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_root_user),
+):
+    req = (
+        db.query(models.ExerciseRequest)
+        .filter(models.ExerciseRequest.id == request_id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending requests can be edited")
+    if data.exercise_name is not None:
+        req.exercise_name = data.exercise_name
+    if data.muscle_id is not None:
+        req.muscle_id = data.muscle_id
+    if data.muscle_name is not None:
+        req.muscle_name = data.muscle_name
+    db.commit()
+    db.refresh(req)
+    return req
+
+
 @router.put("/{request_id}/approve", response_model=schemas.ExerciseRequestResponse)
 def approve_request(
     request_id: str,
