@@ -1,77 +1,83 @@
-"""Ring-buffer chat history — 10 message slots per user.
-
-Slot 0..9 are reused in order. `ChatCursor.next_slot` is the pointer
-to the next slot to overwrite (always the oldest message when full).
-"""
+"""Flat chat history — messages stored with timestamps for time-window rate limiting."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from models import ChatCursor, ChatEntry
+from models import ChatMessage
 
-BUFFER_SIZE = 10
+HISTORY_LIMIT = 10
+RATE_LIMIT_COUNT = 5
+RATE_LIMIT_HOURS = 2
 
 
 def get_history(user_id: str, db: Session) -> list[dict]:
-    """Return messages in chronological order (oldest first)."""
-    cursor = db.query(ChatCursor).filter_by(user_id=user_id).first()
-    if not cursor or cursor.total_written == 0:
-        return []
-
-    entries = {
-        e.slot: e
-        for e in db.query(ChatEntry).filter_by(user_id=user_id).all()
-    }
-
-    filled = min(cursor.total_written, BUFFER_SIZE)
-    if cursor.total_written < BUFFER_SIZE:
-        # Buffer not yet full: slots 0 .. filled-1 in insertion order
-        order = list(range(filled))
-    else:
-        # Full: oldest slot is next_slot, wrap around
-        start = cursor.next_slot
-        order = [(start + i) % BUFFER_SIZE for i in range(BUFFER_SIZE)]
-
-    return [
-        {"role": entries[s].role, "content": entries[s].content}
-        for s in order
-        if s in entries
-    ]
+    rows = (
+        db.query(ChatMessage)
+        .filter_by(user_id=user_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(HISTORY_LIMIT)
+        .all()
+    )
+    rows.reverse()
+    return [{"role": r.role, "content": r.content} for r in rows]
 
 
 def save_message(user_id: str, role: str, content: str, db: Session) -> None:
-    """Write one message into the ring buffer, advancing the pointer."""
-    cursor = (
-        db.query(ChatCursor)
-        .filter_by(user_id=user_id)
-        .with_for_update()
+    db.add(ChatMessage(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        role=role,
+        content=content,
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+    ))
+    db.commit()
+
+
+def count_recent_user_messages(user_id: str, db: Session) -> int:
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=RATE_LIMIT_HOURS)
+    return (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == user_id,
+            ChatMessage.role == "user",
+            ChatMessage.created_at >= cutoff,
+        )
+        .count()
+    )
+
+
+def get_window_info(user_id: str, db: Session) -> tuple[int, datetime | None]:
+    """Return (used_count, window_start) where window_start is the oldest message
+    in the current rate-limit window (first message time). Returns (0, None) if
+    no messages exist in the window."""
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=RATE_LIMIT_HOURS)
+    row = (
+        db.query(ChatMessage.created_at)
+        .filter(
+            ChatMessage.user_id == user_id,
+            ChatMessage.role == "user",
+            ChatMessage.created_at >= cutoff,
+        )
+        .order_by(ChatMessage.created_at.asc())
         .first()
     )
-    if not cursor:
-        cursor = ChatCursor(user_id=user_id, next_slot=0, total_written=0)
-        db.add(cursor)
-        db.flush()
+    if row is None:
+        return 0, None
+    window_start = row.created_at
+    used = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.user_id == user_id,
+            ChatMessage.role == "user",
+            ChatMessage.created_at >= window_start,
+        )
+        .count()
+    )
+    return used, window_start
 
-    slot = cursor.next_slot
-    now = datetime.utcnow()
 
-    existing = db.query(ChatEntry).filter_by(user_id=user_id, slot=slot).first()
-    if existing:
-        existing.role = role
-        existing.content = content
-        existing.created_at = now
-    else:
-        db.add(ChatEntry(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            slot=slot,
-            role=role,
-            content=content,
-            created_at=now,
-        ))
-
-    cursor.next_slot = (slot + 1) % BUFFER_SIZE
-    cursor.total_written += 1
+def delete_history(user_id: str, db: Session) -> None:
+    db.query(ChatMessage).filter_by(user_id=user_id).delete()
     db.commit()

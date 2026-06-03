@@ -1,7 +1,7 @@
 """Read tools — query the GymHub database directly via SQLAlchemy ORM."""
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
@@ -133,7 +133,7 @@ def get_workouts(args: dict, user_id: str, db: Session) -> dict:
     """Return recent workouts with exercise sets and Fitbit data."""
     days: int = int(args.get("days", 30))
     limit: int = int(args.get("limit", 20))
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     workouts = (
         db.query(models.Workout)
@@ -206,7 +206,7 @@ def get_exercise_prs(args: dict, user_id: str, db: Session) -> dict:
         .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
         .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
         .filter(models.Workout.user_id == user_id)
-        .filter(models.Workout.start_time <= datetime.utcnow())
+        .filter(models.Workout.start_time <= datetime.now(timezone.utc).replace(tzinfo=None))
         .filter(models.ExerciseSet.value != "")
         .filter(models.ExerciseSet.value != "0")
     )
@@ -237,7 +237,7 @@ def get_exercise_prs(args: dict, user_id: str, db: Session) -> dict:
 def get_analytics_summary(args: dict, user_id: str, db: Session) -> dict:
     """Return KPI summary for current and previous period."""
     days: int = int(args.get("days", 30))
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     cutoff = now - timedelta(days=days)
 
     curr_count = _compute_workout_count(db, user_id, cutoff, now)
@@ -275,7 +275,7 @@ def get_exercise_frequency(args: dict, user_id: str, db: Session) -> dict:
     """Return how many distinct sessions each exercise appeared in."""
     days: int = int(args.get("days", 90))
     muscle_name: str | None = args.get("muscle_name")
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     query = (
         db.query(
@@ -310,7 +310,7 @@ def get_exercise_history(args: dict, user_id: str, db: Session) -> dict:
     """Return all sets for a specific exercise grouped by session date."""
     exercise_name: str = args.get("exercise_name", "")
     days: int = int(args.get("days", 90))
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     exercise = (
         db.query(models.Exercise)
@@ -349,8 +349,8 @@ def get_weight_progress(args: dict, user_id: str, db: Session) -> dict:
     """Return daily maximum value for a specific exercise over time."""
     exercise_name: str = args.get("exercise_name", "")
     days: int = int(args.get("days", 60))
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now - timedelta(days=days)
 
     exercise = (
         db.query(models.Exercise)
@@ -397,7 +397,7 @@ def get_weight_progress(args: dict, user_id: str, db: Session) -> dict:
 def get_daily_health(args: dict, user_id: str, db: Session) -> dict:
     """Return Fitbit daily health data (steps, calories, active minutes, etc.)."""
     days: int = int(args.get("days", 14))
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
 
     rows = (
         db.query(models.DailyHealth)
@@ -432,7 +432,7 @@ def get_daily_health(args: dict, user_id: str, db: Session) -> dict:
 def get_sleep_logs(args: dict, user_id: str, db: Session) -> dict:
     """Return Fitbit sleep logs with duration, efficiency, and sleep stage breakdown."""
     days: int = int(args.get("days", 14))
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
 
     rows = (
         db.query(models.SleepLog)
@@ -465,7 +465,7 @@ def get_sleep_logs(args: dict, user_id: str, db: Session) -> dict:
 def get_muscle_balance(args: dict, user_id: str, db: Session) -> dict:
     """Return training volume per muscle group per ISO week."""
     days: int = int(args.get("days", 90))
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     rows = (
         db.query(

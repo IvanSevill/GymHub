@@ -1,209 +1,95 @@
 import asyncio
 import json
+import logging
 import os
-from datetime import date, datetime
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import AsyncIterator
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from mcp import ClientSession
+from mcp.client.stdio import StdioServerParameters, stdio_client
 from pydantic import BaseModel
 
 from auth import AuthUser, get_current_user
-from chat_history import get_history, save_message
+from chat_history import (
+    RATE_LIMIT_COUNT,
+    RATE_LIMIT_HOURS,
+    count_recent_user_messages,
+    delete_history,
+    get_history,
+    get_window_info,
+    save_message,
+)
 from database import SessionLocal
-from tool_runner import execute_tool
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-MAX_DAILY_QUERIES = 5
+MCP_SERVER_PATH = Path(
+    os.getenv("MCP_SERVER_PATH", str(Path(__file__).parent.parent / "gymhub-mcp" / "server.py"))
+).resolve()
 
-# Configure once at startup (main.py calls load_dotenv before importing this module)
-genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
-
-# In-memory daily usage counter: {(user_id, "YYYY-MM-DD"): count}
-_daily_usage: dict[tuple[str, str], int] = {}
-
-GEMINI_TOOLS = [
-    {
-        "function_declarations": [
-            {
-                "name": "get_workouts",
-                "description": "Lista los entrenamientos recientes del usuario con ejercicios, series y datos de Fitbit.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 30)"},
-                        "limit": {"type": "integer", "description": "Máximo de workouts (default: 20)"},
-                    },
-                },
-            },
-            {
-                "name": "get_exercise_prs",
-                "description": "Récords personales (máximos históricos) por ejercicio. Filtra por nombre si se indica.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "exercise_name": {"type": "string", "description": "Nombre parcial del ejercicio (opcional)"},
-                    },
-                },
-            },
-            {
-                "name": "get_analytics_summary",
-                "description": "KPIs del periodo: entrenamientos, volumen kg, duración media y PRs. Incluye periodo anterior para comparar.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Días del periodo actual (default: 30)"},
-                    },
-                },
-            },
-            {
-                "name": "get_exercise_frequency",
-                "description": "Ejercicios más realizados en un periodo, con número de sesiones por ejercicio.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 90)"},
-                        "muscle_name": {"type": "string", "description": "Filtrar por grupo muscular (opcional)"},
-                    },
-                },
-            },
-            {
-                "name": "get_exercise_history",
-                "description": "Serie temporal de todos los sets de un ejercicio concreto.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "exercise_name": {"type": "string", "description": "Nombre del ejercicio"},
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 90)"},
-                    },
-                    "required": ["exercise_name"],
-                },
-            },
-            {
-                "name": "get_weight_progress",
-                "description": "Tendencia del peso máximo diario para un ejercicio. Útil para ver progresión.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "exercise_name": {"type": "string", "description": "Nombre del ejercicio"},
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 60)"},
-                    },
-                    "required": ["exercise_name"],
-                },
-            },
-            {
-                "name": "get_daily_health",
-                "description": "Datos diarios de actividad Fitbit: pasos, calorías, minutos activos, FC en reposo.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 14)"},
-                    },
-                },
-            },
-            {
-                "name": "get_sleep_logs",
-                "description": "Registros de sueño Fitbit: duración total, eficiencia y fases (deep, REM, light).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 14)"},
-                    },
-                },
-            },
-            {
-                "name": "get_muscle_balance",
-                "description": "Volumen de entrenamiento (kg) por grupo muscular por semana. Detecta desequilibrios musculares.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 90)"},
-                    },
-                },
-            },
-            {
-                "name": "create_workout",
-                "description": "Crea un nuevo workout en GymHub con ejercicios y series. Sincroniza con Google Calendar automáticamente.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string", "description": "Nombre del workout"},
-                        "start_time": {"type": "string", "description": "Inicio en ISO 8601 (ej: 2025-03-15T18:30:00)"},
-                        "end_time": {"type": "string", "description": "Fin en ISO 8601"},
-                        "exercises": {
-                            "type": "array",
-                            "description": "Ejercicios con sus series",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "exercise_name": {"type": "string"},
-                                    "sets": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "value": {"type": "string"},
-                                                "measurement": {"type": "string"},
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                    "required": ["title", "start_time", "end_time"],
-                },
-            },
-            {
-                "name": "add_set_to_workout",
-                "description": "Añade un set a un workout existente sin modificar los demás sets.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "workout_id": {"type": "string"},
-                        "exercise_name": {"type": "string"},
-                        "value": {"type": "string", "description": "Valor (ej: '80' o '80-70')"},
-                        "measurement": {"type": "string", "description": "Unidad: kg, rep, s, min"},
-                    },
-                    "required": ["workout_id", "exercise_name", "value", "measurement"],
-                },
-            },
-            {
-                "name": "sync_pending_cardio",
-                "description": "Sube al historial las actividades cardio de Fitbit que aún no tienen workout en GymHub.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Días hacia atrás (default: 30)"},
-                    },
-                },
-            },
-            {
-                "name": "sync_fitbit_to_workout",
-                "description": "Asocia datos de Fitbit (calorías, FC, zonas AZM) a un workout específico.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "workout_id": {"type": "string"},
-                    },
-                    "required": ["workout_id"],
-                },
-            },
-        ]
-    }
-]
+_gemini_client: genai.Client | None = None
 
 
-class ChatMessage(BaseModel):
-    role: str  # "user" | "assistant"
-    content: str
+def _get_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
+    return _gemini_client
 
 
-class ChatRequest(BaseModel):
-    message: str  # only the new user message; history is loaded from DB
+# ---------------------------------------------------------------------------
+# Exception unwrapper
+# ---------------------------------------------------------------------------
+
+def _unwrap_exc(exc: BaseException) -> str:
+    """Recursively unwrap ExceptionGroup/BaseExceptionGroup to get the root message."""
+    while hasattr(exc, "exceptions") and exc.exceptions:
+        exc = exc.exceptions[0]
+    return str(exc)
+
+
+# ---------------------------------------------------------------------------
+# MCP → Gemini tool conversion
+# ---------------------------------------------------------------------------
+
+_JSON_TYPE_MAP = {
+    "string": "STRING", "integer": "INTEGER", "number": "NUMBER",
+    "boolean": "BOOLEAN", "array": "ARRAY", "object": "OBJECT",
+}
+
+
+def _json_schema_to_genai(schema: dict) -> genai_types.Schema:
+    t = _JSON_TYPE_MAP.get(schema.get("type", "string"), "STRING")
+    kwargs: dict = {"type": t}
+    if "description" in schema:
+        kwargs["description"] = schema["description"]
+    if t == "OBJECT" and "properties" in schema:
+        kwargs["properties"] = {k: _json_schema_to_genai(v) for k, v in schema["properties"].items()}
+        if "required" in schema:
+            kwargs["required"] = schema["required"]
+    if t == "ARRAY" and "items" in schema:
+        kwargs["items"] = _json_schema_to_genai(schema["items"])
+    return genai_types.Schema(**kwargs)
+
+
+def _mcp_to_genai_tools(mcp_tools: list) -> list[genai_types.Tool]:
+    declarations = []
+    for t in mcp_tools:
+        schema = t.inputSchema or {}
+        declarations.append(genai_types.FunctionDeclaration(
+            name=t.name,
+            description=t.description or t.name,
+            parameters=_json_schema_to_genai(schema) if schema.get("properties") else None,
+        ))
+    return [genai_types.Tool(function_declarations=declarations)] if declarations else []
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +112,36 @@ def _save_msg(user_id: str, role: str, content: str) -> None:
         db.close()
 
 
+def _count_recent(user_id: str) -> int:
+    db = SessionLocal()
+    try:
+        return count_recent_user_messages(user_id, db)
+    finally:
+        db.close()
+
+
+def _get_window_info(user_id: str) -> tuple[int, datetime | None]:
+    db = SessionLocal()
+    try:
+        return get_window_info(user_id, db)
+    finally:
+        db.close()
+
+
+def _clear_history(user_id: str) -> None:
+    db = SessionLocal()
+    try:
+        delete_history(user_id, db)
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# System prompt
+# ---------------------------------------------------------------------------
+
 def _system_prompt(name: str) -> str:
-    today = datetime.utcnow().strftime("%A, %d de %B de %Y")
+    today = datetime.now(timezone.utc).strftime("%A, %d de %B de %Y")
     return (
         f"Eres GymHub AI, el asistente personal de fitness de {name}. Hoy es {today}.\n\n"
         "Tienes acceso a su historial de entrenamientos, récords, sueño y salud. "
@@ -241,114 +155,154 @@ def _system_prompt(name: str) -> str:
     )
 
 
-def _check_rate_limit(user_id: str, is_root: bool) -> bool:
-    if is_root:
-        return True
-    today = str(date.today())
-    # Evict stale entries from past days to avoid unbounded growth
-    for k in list(_daily_usage):
-        if k[1] != today:
-            del _daily_usage[k]
-    return _daily_usage.get((user_id, today), 0) < MAX_DAILY_QUERIES
+# ---------------------------------------------------------------------------
+# Chat schemas
+# ---------------------------------------------------------------------------
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
 
 
-def _record_usage(user_id: str, is_root: bool) -> None:
-    if is_root:
-        return
-    key = (user_id, str(date.today()))
-    _daily_usage[key] = _daily_usage.get(key, 0) + 1
+class ChatRequest(BaseModel):
+    message: str
 
 
-def _remaining_queries(user_id: str, is_root: bool) -> int:
-    if is_root:
-        return 999
-    key = (user_id, str(date.today()))
-    return max(0, MAX_DAILY_QUERIES - _daily_usage.get(key, 0))
-
-
-def _history_to_contents(history: list[dict]) -> list[dict]:
-    return [
-        {"role": "user" if h["role"] == "user" else "model", "parts": [{"text": h["content"]}]}
-        for h in history
-    ]
-
+# ---------------------------------------------------------------------------
+# Streaming generator
+# ---------------------------------------------------------------------------
 
 async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
-    model = genai.GenerativeModel(
-        model_name=MODEL,
-        system_instruction=_system_prompt(user.name),
-        tools=GEMINI_TOOLS,
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.7,
-            max_output_tokens=2048,
-        ),
-    )
-
-    # Load ring-buffer history from DB (last BUFFER_SIZE messages)
-    history = await asyncio.to_thread(_load_history, user.id)
-
-    # Save user message to DB before calling the model
-    await asyncio.to_thread(_save_msg, user.id, "user", message)
-
-    contents = _history_to_contents(history)
-    contents.append({"role": "user", "parts": [{"text": message}]})
-
     try:
-        max_iterations = 6  # safety cap on tool-use loops
+        history = await asyncio.to_thread(_load_history, user.id)
+        await asyncio.to_thread(_save_msg, user.id, "user", message)
 
-        for _ in range(max_iterations):
-            response = await asyncio.to_thread(model.generate_content, contents)
+        mcp_env = {
+            **dict(os.environ),
+            "GYMHUB_USER_ID": user.id,
+            "GYMHUB_TOKEN": user.token,
+            "DATABASE_URL": os.getenv("DATABASE_URL", ""),
+            "BACKEND_URL": os.getenv("BACKEND_URL", "http://localhost:8000"),
+        }
 
-            if not response.candidates:
-                yield f'data: {json.dumps({"type": "error", "message": "Sin respuesta del modelo."})}\n\n'
-                break
+        client = _get_client()
 
-            candidate_content = response.candidates[0].content
-            contents.append(candidate_content)
+        async with stdio_client(StdioServerParameters(
+            command=sys.executable,
+            args=[str(MCP_SERVER_PATH)],
+            env=mcp_env,
+        )) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
 
-            fn_parts = [
-                p for p in candidate_content.parts
-                if hasattr(p, "function_call") and p.function_call and p.function_call.name
-            ]
+                tools_result = await session.list_tools()
+                gemini_tools = _mcp_to_genai_tools(tools_result.tools)
 
-            if fn_parts:
-                yield 'data: {"type":"thinking"}\n\n'
+                config = genai_types.GenerateContentConfig(
+                    system_instruction=_system_prompt(user.name),
+                    tools=gemini_tools,
+                    temperature=0.7,
+                    max_output_tokens=2048,
+                )
 
-                fn_responses = []
-                for part in fn_parts:
-                    fn_name = part.function_call.name
-                    fn_args = dict(part.function_call.args)
-                    result = await execute_tool(fn_name, fn_args, user.id, user.token)
-                    fn_responses.append(
-                        genai.protos.Part(
-                            function_response=genai.protos.FunctionResponse(
-                                name=fn_name,
-                                response={"result": json.dumps(result, default=str)},
-                            )
-                        )
+                contents: list[genai_types.Content] = [
+                    genai_types.Content(
+                        role="user" if h["role"] == "user" else "model",
+                        parts=[genai_types.Part(text=h["content"])],
+                    )
+                    for h in history
+                ]
+                contents.append(genai_types.Content(
+                    role="user",
+                    parts=[genai_types.Part(text=message)],
+                ))
+
+                produced_text = False
+                for _ in range(6):
+                    response = await asyncio.to_thread(
+                        client.models.generate_content,
+                        model=MODEL,
+                        contents=contents,
+                        config=config,
                     )
 
-                contents.append({"role": "user", "parts": fn_responses})
+                    if not response.candidates:
+                        yield f'data: {json.dumps({"type": "error", "message": "Sin respuesta del modelo."})}\n\n'
+                        break
 
-            else:
-                # Quota recorded here: only burns if model actually returned text
-                _record_usage(user.id, user.is_root)
-                text = getattr(response, "text", "") or ""
-                # Save assistant response to ring buffer
-                await asyncio.to_thread(_save_msg, user.id, "assistant", text)
-                yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
-                break
+                    candidate = response.candidates[0].content
+                    contents.append(candidate)
 
-    except Exception as exc:
-        yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+                    fn_parts = [
+                        p for p in candidate.parts
+                        if p.function_call and p.function_call.name
+                    ]
+
+                    if fn_parts:
+                        yield 'data: {"type":"thinking"}\n\n'
+                        fn_responses = []
+                        for part in fn_parts:
+                            fn_name = part.function_call.name
+                            fn_args = dict(part.function_call.args)
+                            tool_result = await session.call_tool(fn_name, fn_args)
+                            result_text = tool_result.content[0].text if tool_result.content else "{}"
+                            fn_responses.append(
+                                genai_types.Part(
+                                    function_response=genai_types.FunctionResponse(
+                                        name=fn_name,
+                                        response={"result": result_text},
+                                    )
+                                )
+                            )
+                        contents.append(genai_types.Content(role="user", parts=fn_responses))
+
+                    else:
+                        text = response.text or ""
+                        await asyncio.to_thread(_save_msg, user.id, "assistant", text)
+                        yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
+                        produced_text = True
+                        break
+
+                if not produced_text:
+                    yield f'data: {json.dumps({"type": "error", "message": "El asistente no pudo generar una respuesta. Inténtalo de nuevo."})}\n\n'
+
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        logger.exception("Error in _generate for user %s", user.id)
+        yield f"data: {json.dumps({'type': 'error', 'message': _unwrap_exc(exc)})}\n\n"
 
     yield 'data: {"type":"done"}\n\n'
 
 
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/chat/usage")
+async def chat_usage_endpoint(user: AuthUser = Depends(get_current_user)):
+    used, window_start = await asyncio.to_thread(_get_window_info, user.id)
+    reset_at: str | None = None
+    if window_start is not None:
+        reset_dt = window_start + timedelta(hours=RATE_LIMIT_HOURS)
+        reset_at = reset_dt.isoformat() + "Z"
+    return {
+        "used": used,
+        "limit": RATE_LIMIT_COUNT,
+        "reset_at": reset_at,
+        "is_root": user.is_root,
+    }
+
+
 @router.get("/chat/history")
 async def chat_history_endpoint(user: AuthUser = Depends(get_current_user)):
-    """Return the last BUFFER_SIZE messages for the current user."""
     return await asyncio.to_thread(_load_history, user.id)
+
+
+@router.delete("/chat/history")
+async def clear_chat_history_endpoint(user: AuthUser = Depends(get_current_user)):
+    await asyncio.to_thread(_clear_history, user.id)
+    return {"cleared": True}
 
 
 @router.post("/chat")
@@ -362,11 +316,13 @@ async def chat(
     if not os.getenv("GEMINI_API_KEY"):
         raise HTTPException(status_code=503, detail="AI assistant not configured — set GEMINI_API_KEY")
 
-    if not _check_rate_limit(user.id, user.is_root):
-        raise HTTPException(
-            status_code=429,
-            detail=f"Límite diario de {MAX_DAILY_QUERIES} consultas alcanzado. Vuelve mañana.",
-        )
+    if not user.is_root:
+        recent = await asyncio.to_thread(_count_recent, user.id)
+        if recent >= RATE_LIMIT_COUNT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Límite de {RATE_LIMIT_COUNT} consultas cada {RATE_LIMIT_HOURS} horas alcanzado.",
+            )
 
     return StreamingResponse(
         _generate(request.message, user),

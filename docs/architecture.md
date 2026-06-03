@@ -4,6 +4,8 @@
 
 ```
 backend/            FastAPI backend (Python)
+ai-server/          Standalone FastAPI AI service (Gemini + MCP, port 8001)
+gymhub-mcp/         MCP server — 13 GymHub tools exposed to the AI
 frontend-react/     React/Vite frontend (TypeScript)
 docs/               Design docs, workflow guides, principles, new-implementations
 ```
@@ -68,3 +70,47 @@ docs/               Design docs, workflow guides, principles, new-implementation
 - **`components/ui/`** — ToastContainer, Skeleton, PeriodSelector.
 
 Key libraries: TanStack Query (server state), Recharts v3 (charts), Framer Motion (animations), Tailwind CSS v4, Lucide React (icons).
+
+---
+
+## AI Server (`ai-server/`)
+
+Standalone FastAPI service on port 8001. Uses the same PostgreSQL/SQLite database as the backend (read-only for most operations) and validates the same JWT tokens.
+
+- **`main.py`** — Bootstrap: loads `.env`, creates `chat_messages` table on startup, configures CORS for the frontend origin, exposes `/health`.
+- **`auth.py`** — Decodes JWT tokens issued by `backend/app/auth.py` (same `SECRET_KEY`). Returns an `AuthUser` dataclass with `id`, `name`, `token`, `is_root`.
+- **`chat.py`** — Four endpoints:
+  - `POST /chat` — validates rate limit, then returns a `text/event-stream` SSE response. SSE event types: `thinking`, `text`, `error`, `done`.
+  - `GET /chat/history` — last 10 messages for the current user.
+  - `DELETE /chat/history` — clears all messages for the current user.
+  - `GET /chat/usage` — returns `{used, limit, reset_hours, is_root}` for rate-limit display.
+  
+  The streaming generator spawns a MCP subprocess per request via `stdio_client`, converts MCP tool schemas to Gemini `FunctionDeclaration` objects, and runs a tool-call loop (max 6 iterations).
+- **`chat_history.py`** — DB persistence: `save_message`, `get_history` (last 10 messages, oldest first), `count_recent_user_messages` (rate-limit window: 5 messages / 2 hours), `delete_history`.
+- **`models.py`** — Read-only mirror of the main backend's ORM models (Workout, Exercise, etc.) plus the `ChatMessage` table owned by this service.
+
+---
+
+## MCP Server (`gymhub-mcp/`)
+
+Model Context Protocol server launched as a subprocess by `ai-server` (one instance per chat request, stdio transport). Receives `GYMHUB_USER_ID`, `GYMHUB_TOKEN`, `DATABASE_URL`, and `BACKEND_URL` via environment variables injected at spawn time.
+
+- **`server.py`** — FastMCP entry point, registers all 13 tools.
+- **`read_tools.py`** — 9 read tools that query the DB directly via SQLAlchemy (no HTTP round-trip).
+- **`write_tools.py`** — 4 write tools that call the backend REST API via `httpx` using the user's Bearer token.
+
+| Tool | Type | Description |
+|---|---|---|
+| `get_workouts` | read | Recent workouts with sets and Fitbit data |
+| `get_exercise_prs` | read | All-time personal records per exercise |
+| `get_analytics_summary` | read | KPI comparison: current vs previous period |
+| `get_exercise_frequency` | read | Most-trained exercises by session count |
+| `get_exercise_history` | read | Time-series of sets for one exercise |
+| `get_weight_progress` | read | Daily max weight trend for one exercise |
+| `get_daily_health` | read | Fitbit daily activity (steps, calories, AZM) |
+| `get_sleep_logs` | read | Fitbit sleep records with stage breakdown |
+| `get_muscle_balance` | read | Weekly training volume per muscle group |
+| `create_workout` | write | Create workout with exercises and sets |
+| `add_set_to_workout` | write | Append a set to an existing workout |
+| `sync_pending_cardio` | write | Upload Fitbit cardio without a GymHub workout |
+| `sync_fitbit_to_workout` | write | Associate Fitbit data with a specific workout |

@@ -22,6 +22,20 @@ function authHeaders(): HeadersInit {
     : { "Content-Type": "application/json" };
 }
 
+export async function clearHistory(): Promise<void> {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  try {
+    const res = await fetch(`${AI_URL}/chat/history`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    throw err instanceof Error ? err : new Error("Error al borrar historial");
+  }
+}
+
 export async function getHistory(): Promise<ChatMessage[]> {
   const token = localStorage.getItem("token");
   if (!token) return [];
@@ -33,6 +47,27 @@ export async function getHistory(): Promise<ChatMessage[]> {
     return (await res.json()) as ChatMessage[];
   } catch {
     return [];
+  }
+}
+
+export interface ChatUsage {
+  used: number;
+  limit: number;
+  reset_at: string | null;
+  is_root: boolean;
+}
+
+export async function getUsage(): Promise<ChatUsage | null> {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+  try {
+    const res = await fetch(`${AI_URL}/chat/usage`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as ChatUsage;
+  } catch {
+    return null;
   }
 }
 
@@ -62,10 +97,13 @@ export async function* streamChat(message: string): AsyncGenerator<ChatEvent> {
   }
 
   if (!response.ok) {
-    const detail =
-      response.status === 429
-        ? "Límite diario alcanzado. Vuelve mañana."
-        : `Error ${response.status}`;
+    let detail = `Error ${response.status}`;
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // use default
+    }
     yield { type: "error", message: detail };
     return;
   }

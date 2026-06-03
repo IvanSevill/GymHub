@@ -11,15 +11,38 @@ import { ExerciseModalProvider } from "../context/ExerciseModalContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 
+const AI_HEALTH_URL = `${import.meta.env.VITE_AI_URL ?? "http://localhost:8001"}/health`;
+
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [aiHealthy, setAiHealthy] = useState(false);
   const location = useLocation();
   const { user } = useAuth();
 
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await fetch(AI_HEALTH_URL, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!cancelled) setAiHealthy(res.ok);
+      } catch {
+        if (!cancelled) setAiHealthy(false);
+      }
+    };
+    check();
+    const interval = setInterval(check, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <ExerciseModalProvider>
@@ -81,14 +104,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <ExerciseModal />
         <OnboardingTutorial />
 
-        {/* AI Chat FAB */}
-        <button
-          onClick={() => setChatOpen(true)}
-          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-primary rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-transform md:bottom-8 md:right-8"
-          aria-label="Abrir asistente IA"
-        >
-          <MessageCircle size={20} />
-        </button>
+        {/* AI Chat FAB — hidden when ai-server is unreachable */}
+        {aiHealthy && (
+          <button
+            onClick={() => setChatOpen(true)}
+            className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-primary rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-transform md:bottom-8 md:right-8"
+            aria-label="Abrir asistente IA"
+          >
+            <MessageCircle size={20} />
+          </button>
+        )}
         <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
       </div>
     </ExerciseModalProvider>
