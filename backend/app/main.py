@@ -18,8 +18,10 @@ logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
+_ALLOWED_MIGRATION_COLUMNS = {"video_url_1", "video_url_2", "image_url"}
+
 with engine.connect() as conn:
-    for col in ("video_url_1", "video_url_2", "image_url"):
+    for col in _ALLOWED_MIGRATION_COLUMNS:
         try:
             conn.execute(text(f"ALTER TABLE exercises ADD COLUMN {col} TEXT"))
             conn.commit()
@@ -48,7 +50,7 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    logger.exception("Unhandled exception: %s", exc)
+    logger.exception("Unhandled exception")
 
     # Ensure CORS headers are present even on error
     origin = request.headers.get("origin")
@@ -59,7 +61,7 @@ async def global_exception_handler(request, exc):
 
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal Server Error", "traceback": str(exc)},
+        content={"detail": "Internal server error"},
         headers=headers
     )
 

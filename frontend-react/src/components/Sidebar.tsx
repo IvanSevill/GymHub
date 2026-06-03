@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
+import { safeImageUrl } from "../utils/url";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -116,10 +117,10 @@ const SidebarContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             }`
           }
         >
-          {user?.picture_url ? (
+          {safeImageUrl(user?.picture_url) ? (
             <img
-              src={user.picture_url}
-              alt={user.name}
+              src={safeImageUrl(user?.picture_url)}
+              alt={user?.name}
               className="w-9 h-9 rounded-xl border border-white/10 shrink-0"
             />
           ) : (

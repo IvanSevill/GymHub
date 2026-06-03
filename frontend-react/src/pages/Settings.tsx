@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import { safeImageUrl } from "../utils/url";
 import { authService } from "../services/auth";
 import { workoutService } from "../services/workout";
 import { motion, AnimatePresence } from "framer-motion";
@@ -127,9 +128,9 @@ const Settings: React.FC = () => {
       <section className="glass-card p-8 relative overflow-hidden group">
         <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
           <div className="relative">
-            {user?.picture_url ? (
+            {safeImageUrl(user?.picture_url) ? (
               <img
-                src={user.picture_url}
+                src={safeImageUrl(user?.picture_url)}
                 alt={user?.name}
                 className="w-20 h-20 rounded-[1.5rem] shadow-2xl border-4 border-white/5"
               />
