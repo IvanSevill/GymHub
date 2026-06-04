@@ -1,4 +1,10 @@
+from datetime import datetime, timedelta
+
 import pytest
+from jose import jwt
+
+SECRET_KEY = "your-secret-key-please-change-me"
+ALGORITHM = "HS256"
 
 
 @pytest.mark.anyio
@@ -76,4 +82,33 @@ async def test_get_me(client, auth_headers):
 @pytest.mark.anyio
 async def test_get_me_no_token(client):
     response = await client.get("/auth/me")
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_missing_auth_header_returns_401(client):
+    response = await client.get("/workouts")
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_malformed_token_returns_401(client):
+    response = await client.get(
+        "/workouts",
+        headers={"Authorization": "Bearer garbage"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_expired_token_returns_401(client):
+    expired_payload = {
+        "sub": "ghost@test.com",
+        "exp": datetime.utcnow() - timedelta(hours=1),
+    }
+    expired_token = jwt.encode(expired_payload, SECRET_KEY, algorithm=ALGORITHM)
+    response = await client.get(
+        "/workouts",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
     assert response.status_code == 401

@@ -153,10 +153,10 @@ async def fitbit_callback(code: str, state: str, db: Session = Depends(database.
 
     response = requests.post(token_url, headers=headers, data=data)
     if response.status_code != 200:
-        logger.error("Fitbit token exchange failed: %s", response.text)
+        logger.error("Fitbit token exchange failed: HTTP %s", response.status_code)
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to exchange Fitbit code: {response.text}",
+            detail="Failed to exchange Fitbit authorization code",
         )
 
     tokens = response.json()

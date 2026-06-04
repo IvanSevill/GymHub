@@ -1,0 +1,16 @@
+# GymHub AI Server — local development
+# Copy this file to .env and fill in your values
+
+# ─── Required ────────────────────────────────────────────────────────────────
+GEMINI_API_KEY=your-gemini-api-key-here
+
+# Same DATABASE_URL and SECRET_KEY as the backend .env
+DATABASE_URL=sqlite:///./gymhub.db
+SECRET_KEY=your-secret-key-here       # must match backend/.env SECRET_KEY
+
+# ─── Service URLs ────────────────────────────────────────────────────────────
+BACKEND_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:5173
+
+# ─── Optional ────────────────────────────────────────────────────────────────
+# GEMINI_MODEL=gemini-2.0-flash        # default; change to gemini-1.5-pro etc.

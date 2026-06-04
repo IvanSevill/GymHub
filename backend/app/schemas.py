@@ -295,6 +295,13 @@ class ExerciseRequestReview(BaseModel):
     rejection_reason: Optional[str] = None
 
 
+class ExerciseRequestUpdate(BaseModel):
+    """Schema for editing an exercise request's fields."""
+    exercise_name: Optional[str] = None
+    muscle_id: Optional[str] = None
+    muscle_name: Optional[str] = None
+
+
 class ExerciseRequestResponse(BaseModel):
     """Schema for returning exercise request details."""
     id: str
