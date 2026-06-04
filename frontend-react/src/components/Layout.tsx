@@ -10,6 +10,7 @@ import ChatPanel from "./chat/ChatPanel";
 import { ExerciseModalProvider } from "../context/ExerciseModalContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
+import { safeImageUrl } from "../utils/url";
 
 const AI_HEALTH_URL = `${import.meta.env.VITE_AI_URL ?? "http://localhost:8001"}/health`;
 
@@ -66,9 +67,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               Gym<span className="text-primary">Hub</span>
             </h1>
             <NavLink to="/settings" className="shrink-0">
-              {user?.picture_url ? (
+              {safeImageUrl(user?.picture_url) ? (
                 <img
-                  src={user.picture_url}
+                  src={safeImageUrl(user?.picture_url)}
                   alt={user?.name}
                   className="w-8 h-8 rounded-lg border border-white/10"
                 />

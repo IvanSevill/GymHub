@@ -130,6 +130,9 @@ const AppContent: React.FC = () => {
 
 function App() {
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  if (!googleClientId) {
+    throw new Error("Missing VITE_GOOGLE_CLIENT_ID — check your .env file");
+  }
 
   return (
     <BackendWakeup>
