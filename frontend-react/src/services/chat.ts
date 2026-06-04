@@ -71,7 +71,9 @@ export async function getUsage(): Promise<ChatUsage | null> {
   }
 }
 
-export async function* streamChat(message: string): AsyncGenerator<ChatEvent> {
+export async function* streamChat(
+  messages: ChatMessage[],
+): AsyncGenerator<ChatEvent> {
   const token = localStorage.getItem("token");
   if (!token) {
     yield {
@@ -81,12 +83,19 @@ export async function* streamChat(message: string): AsyncGenerator<ChatEvent> {
     return;
   }
 
+  const trimmed = messages.slice(-10);
+  const lastUserMessage = [...trimmed].reverse().find((m) => m.role === "user");
+  if (!lastUserMessage) {
+    yield { type: "error", message: "No hay mensaje para enviar." };
+    return;
+  }
+
   let response: Response;
   try {
     response = await fetch(`${AI_URL}/chat`, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message: lastUserMessage.content }),
     });
   } catch {
     yield {
