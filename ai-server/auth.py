@@ -37,11 +37,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> AuthUser:
         user = db.query(User).filter(User.email == email).first()
         if not user:
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
+
+        root_emails = os.getenv("ROOT_EMAILS", "").split(",")
+        is_root = bool(user.is_root) or (email in root_emails)
+
         return AuthUser(
             id=user.id,
             name=user.name or email,
             token=token,
-            is_root=bool(user.is_root),
+            is_root=is_root,
         )
     finally:
         db.close()
