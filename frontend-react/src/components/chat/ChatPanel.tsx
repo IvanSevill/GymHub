@@ -283,6 +283,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
           setStreaming(false);
           setThinking(false);
           refreshUsage();
+          getMemories().then(setMemories);
           break;
         } else if (event.type === "error") {
           setErrorMessage(event.message ?? "Error desconocido");
