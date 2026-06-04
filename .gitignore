@@ -61,3 +61,6 @@ backend/parser_feedback.json
 SESSION_SUMMARY.md
 
 .vercel
+
+# CodeGraph per-project index (regeneratable)
+.codegraph/
