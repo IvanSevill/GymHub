@@ -27,6 +27,8 @@ from chat_history import (
 )
 from database import SessionLocal
 import memory as memory_module
+from sqlalchemy import desc
+import models as db_models
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -137,16 +139,60 @@ def _clear_history(user_id: str) -> None:
         db.close()
 
 
+def _load_recent_workouts(user_id: str, days: int = 7, limit: int = 5) -> list[dict]:
+    """Load recent workouts for context inclusion in system prompt."""
+    db = SessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+        workouts = (
+            db.query(db_models.Workout)
+            .filter(
+                db_models.Workout.user_id == user_id,
+                db_models.Workout.start_time >= cutoff,
+            )
+            .order_by(desc(db_models.Workout.start_time))
+            .limit(limit)
+            .all()
+        )
+
+        result = []
+        for w in workouts:
+            exercises: dict = {}
+            for s in w.exercise_sets:
+                ex_name = s.exercise.name if s.exercise else "Unknown"
+                label = f"{s.value} {s.measurement}".strip()
+                exercises.setdefault(ex_name, []).append(label)
+
+            result.append({
+                "date": w.start_time.strftime("%Y-%m-%d"),
+                "title": w.title,
+                "exercises": exercises,
+            })
+        return result
+    finally:
+        db.close()
+
+
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
-def _system_prompt(name: str, memories: list[dict] | None = None) -> str:
+def _system_prompt(name: str, memories: list[dict] | None = None, recent_workouts: list[dict] | None = None) -> str:
     today = datetime.now(timezone.utc).strftime("%A, %d de %B de %Y")
     memory_text = ""
     if memories:
         lines = "\n".join(f"- {m['key']}: {m['value']}" for m in memories)
         memory_text = f"\n\nInformación recordada sobre {name}:\n{lines}"
+
+    workouts_text = ""
+    if recent_workouts:
+        workout_lines = []
+        for w in recent_workouts:
+            ex_str = ", ".join(f"{name} ({', '.join(sets)})" for name, sets in w['exercises'].items())
+            workout_lines.append(f"- {w['date']}: {w['title']} ({ex_str})")
+        if workout_lines:
+            workouts_text = "\n\nÚltimos entrenamientos (últimos 7 días):\n" + "\n".join(workout_lines)
+
     return (
         f"Eres GymHub AI, el asistente personal de fitness de {name}. Hoy es {today}.\n\n"
         "Tienes acceso a su historial de entrenamientos, récords, sueño y salud. "
@@ -161,6 +207,7 @@ def _system_prompt(name: str, memories: list[dict] | None = None) -> str:
         "preferencias, limitaciones), guárdalo con save_memory usando una clave corta y descriptiva.\n"
         "- Cuando recomiendes ejercicios, usa get_exercise_frequency para verificar qué ejercicios "
         "existen en la base de datos. Solo recomienda ejercicios que estén disponibles."
+        + workouts_text
         + memory_text
     )
 
@@ -194,6 +241,7 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
     try:
         history = await asyncio.to_thread(_load_history, user.id)
         memories = await asyncio.to_thread(_load_memories, user.id)
+        recent_workouts = await asyncio.to_thread(_load_recent_workouts, user.id)
         await asyncio.to_thread(_save_msg, user.id, "user", message)
 
         mcp_env = {
@@ -219,7 +267,7 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                 gemini_tools = _mcp_to_genai_tools(tools_result.tools)
 
                 config = genai_types.GenerateContentConfig(
-                    system_instruction=_system_prompt(user.name, memories),
+                    system_instruction=_system_prompt(user.name, memories, recent_workouts),
                     tools=gemini_tools,
                     temperature=0.7,
                     max_output_tokens=2048,
@@ -336,6 +384,14 @@ async def delete_memory_endpoint(
 
 @router.get("/chat/usage")
 async def chat_usage_endpoint(user: AuthUser = Depends(get_current_user)):
+    if user.is_root:
+        return {
+            "used": 0,
+            "limit": None,
+            "reset_at": None,
+            "is_root": True,
+        }
+
     used, window_start = await asyncio.to_thread(_get_window_info, user.id)
     reset_at: str | None = None
     if window_start is not None:
@@ -345,7 +401,7 @@ async def chat_usage_endpoint(user: AuthUser = Depends(get_current_user)):
         "used": used,
         "limit": RATE_LIMIT_COUNT,
         "reset_at": reset_at,
-        "is_root": user.is_root,
+        "is_root": False,
     }
 
 
