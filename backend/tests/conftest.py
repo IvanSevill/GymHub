@@ -1,12 +1,18 @@
+import os
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
-from app.database import Base, get_db
-from app import models
+# Must be set before app.main is imported — main.py calls Base.metadata.create_all at module level
+os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing")
+
+from app.main import app  # noqa: E402
+from app.database import Base, get_db  # noqa: E402
+from app import models  # noqa: E402
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 

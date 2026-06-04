@@ -15,6 +15,22 @@ Copy from `backend/.env.example`. Required variables:
 | `YOUTUBE_API_KEY` | YouTube Data API v3 — exercise library videos |
 | `PEXELS_API_KEY` | Pexels image search — exercise library images |
 
+## `ai-server/.env`
+
+Copy from `ai-server/.env copy`. Required variables:
+
+| Variable | Description |
+|---|---|
+| `GEMINI_API_KEY` | Google AI Studio API key — server returns 503 on `/chat` if missing |
+| `GEMINI_MODEL` | Model ID (default: `gemini-2.0-flash`) |
+| `DATABASE_URL` | Same database as the backend — SQLite path for dev, PostgreSQL URL for prod |
+| `SECRET_KEY` | Same JWT signing key as the backend — must match exactly |
+| `BACKEND_URL` | Internal URL of the backend service (default: `http://localhost:8000`) |
+| `FRONTEND_URL` | CORS allowed origin (default: `http://localhost:5173`) |
+| `MCP_SERVER_PATH` | Absolute path to `gymhub-mcp/server.py` (auto-detected relative to ai-server in dev) |
+
+`gymhub-mcp` receives its env vars injected by `ai-server` at subprocess spawn time and does not need its own `.env` file.
+
 ## `frontend-react/.env`
 
 | Variable | Description |
