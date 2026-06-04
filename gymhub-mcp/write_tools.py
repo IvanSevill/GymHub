@@ -208,5 +208,38 @@ async def sync_fitbit_to_workout(args: dict, token: str) -> dict:
             return {"error": str(exc)}
 
 
+async def save_memory(args: dict, token: str) -> dict:
+    """Save a memory fact for the current user via the ai-server."""
+    ai_url = os.environ.get("AI_SERVER_URL", "http://localhost:8001")
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"{ai_url}/chat/memory",
+                json={"key": args["key"], "value": args["value"]},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            return {"error": str(exc)}
+
+
+async def get_memories(args: dict, token: str) -> dict:  # noqa: ARG001
+    """Retrieve all stored memory facts for the current user."""
+    ai_url = os.environ.get("AI_SERVER_URL", "http://localhost:8001")
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"{ai_url}/chat/memory",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            return {"memories": resp.json()}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+
 # Suppress unused import warning
 _ = _parse_exercise_value

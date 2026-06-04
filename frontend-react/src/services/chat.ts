@@ -71,6 +71,36 @@ export async function getUsage(): Promise<ChatUsage | null> {
   }
 }
 
+export interface ChatMemoryItem {
+  id: string;
+  key: string;
+  value: string;
+  created_at: string;
+}
+
+export async function getMemories(): Promise<ChatMemoryItem[]> {
+  const token = localStorage.getItem("token");
+  if (!token) return [];
+  try {
+    const res = await fetch(`${AI_URL}/chat/memory`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    return (await res.json()) as ChatMemoryItem[];
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteMemoryItem(id: string): Promise<void> {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  await fetch(`${AI_URL}/chat/memory/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function* streamChat(message: string): AsyncGenerator<ChatEvent> {
   const token = localStorage.getItem("token");
   if (!token) {
