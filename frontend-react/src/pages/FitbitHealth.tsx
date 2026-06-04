@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import PeriodSelector from "../components/ui/PeriodSelector";
 import { PERIOD_OPTIONS } from "../constants/periods";
@@ -11,9 +11,12 @@ import ActivityTable from "../components/health/ActivityTable";
 import { useFitbitHealthData } from "../components/health/hooks/useFitbitHealthData";
 import NotConnectedState from "../components/health/components/NotConnectedState";
 import SyncStatusDisplay from "../components/health/components/SyncStatusDisplay";
+import { useToast } from "../context/ToastContext";
 
 const FitbitHealth: React.FC = () => {
   const { user } = useAuth();
+  const { addToast } = useToast();
+  const [manualSyncing, setManualSyncing] = useState(false);
 
   const {
     days,
@@ -25,7 +28,20 @@ const FitbitHealth: React.FC = () => {
     autoSyncing,
     tablesOpen,
     setTablesOpen,
+    syncData,
   } = useFitbitHealthData(!!user?.fitbit_connected);
+
+  const handleManualSync = async () => {
+    setManualSyncing(true);
+    try {
+      await syncData();
+      addToast("Datos sincronizados correctamente", "success");
+    } catch {
+      addToast("Error al sincronizar datos de Fitbit", "error");
+    } finally {
+      setManualSyncing(false);
+    }
+  };
 
   // Split into current and previous periods for KPI comparison
   const { currentSleep, prevSleep, currentDaily, prevDaily } = useMemo(() => {
@@ -86,11 +102,24 @@ const FitbitHealth: React.FC = () => {
           <p className="text-white font-black text-lg mb-2">
             Sin datos en este período
           </p>
-          <p className="text-slate-500 text-sm">
+          <p className="text-slate-500 text-sm mb-6">
             {!syncStatus?.has_data
-              ? "Pulsa «Sincronizar» para importar tu historial de Fitbit."
+              ? "Importa tu historial completo de Fitbit"
               : "Prueba a ampliar el período de tiempo."}
           </p>
+          {!syncStatus?.has_data && (
+            <button
+              onClick={handleManualSync}
+              disabled={manualSyncing || autoSyncing}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors"
+            >
+              <RefreshCw
+                size={16}
+                className={manualSyncing ? "animate-spin" : ""}
+              />
+              {manualSyncing ? "Sincronizando…" : "Sincronizar ahora"}
+            </button>
+          )}
         </div>
       ) : (
         <>
