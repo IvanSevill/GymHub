@@ -26,6 +26,7 @@ from chat_history import (
     save_message,
 )
 from database import SessionLocal
+import memory as memory_module
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -140,8 +141,12 @@ def _clear_history(user_id: str) -> None:
 # System prompt
 # ---------------------------------------------------------------------------
 
-def _system_prompt(name: str) -> str:
+def _system_prompt(name: str, memories: list[dict] | None = None) -> str:
     today = datetime.now(timezone.utc).strftime("%A, %d de %B de %Y")
+    memory_text = ""
+    if memories:
+        lines = "\n".join(f"- {m['key']}: {m['value']}" for m in memories)
+        memory_text = f"\n\nInformación recordada sobre {name}:\n{lines}"
     return (
         f"Eres GymHub AI, el asistente personal de fitness de {name}. Hoy es {today}.\n\n"
         "Tienes acceso a su historial de entrenamientos, récords, sueño y salud. "
@@ -152,9 +157,11 @@ def _system_prompt(name: str) -> str:
         "- Sé conciso y directo.\n"
         "- Si el usuario pide crear o modificar datos, confirma antes si hay ambigüedad.\n"
         "- Si no hay datos disponibles, dilo claramente.\n"
-        "- Cuando recomiendes ejercicios, SIEMPRE usa get_exercise_frequency o list de herramientas "
-        "para obtener los ejercicios disponibles en la base de datos. Solo recomiendes ejercicios que "
-        "existan en la base de datos del usuario. Nunca inventes nombres de ejercicios."
+        "- Cuando el usuario mencione algo relevante sobre sí mismo (lesiones, objetivos, "
+        "preferencias, limitaciones), guárdalo con save_memory usando una clave corta y descriptiva.\n"
+        "- Cuando recomiendes ejercicios, usa get_exercise_frequency para verificar qué ejercicios "
+        "existen en la base de datos. Solo recomienda ejercicios que estén disponibles."
+        + memory_text
     )
 
 
@@ -175,9 +182,18 @@ class ChatRequest(BaseModel):
 # Streaming generator
 # ---------------------------------------------------------------------------
 
+def _load_memories(user_id: str) -> list[dict]:
+    db = SessionLocal()
+    try:
+        return memory_module.get_memories(user_id, db)
+    finally:
+        db.close()
+
+
 async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
     try:
         history = await asyncio.to_thread(_load_history, user.id)
+        memories = await asyncio.to_thread(_load_memories, user.id)
         await asyncio.to_thread(_save_msg, user.id, "user", message)
 
         mcp_env = {
@@ -186,6 +202,7 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
             "GYMHUB_TOKEN": user.token,
             "DATABASE_URL": os.getenv("DATABASE_URL", ""),
             "BACKEND_URL": os.getenv("BACKEND_URL", "http://localhost:8000"),
+            "AI_SERVER_URL": os.getenv("AI_SERVER_URL", "http://localhost:8001"),
         }
 
         client = _get_client()
@@ -202,7 +219,7 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                 gemini_tools = _mcp_to_genai_tools(tools_result.tools)
 
                 config = genai_types.GenerateContentConfig(
-                    system_instruction=_system_prompt(user.name),
+                    system_instruction=_system_prompt(user.name, memories),
                     tools=gemini_tools,
                     temperature=0.7,
                     max_output_tokens=2048,
@@ -281,6 +298,41 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+@router.get("/chat/memory")
+async def get_memory_endpoint(user: AuthUser = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        return memory_module.get_memories(user.id, db)
+    finally:
+        db.close()
+
+
+@router.post("/chat/memory")
+async def save_memory_endpoint(
+    data: dict,
+    user: AuthUser = Depends(get_current_user),
+):
+    db = SessionLocal()
+    try:
+        return memory_module.save_memory(user.id, data["key"], data["value"], db)
+    finally:
+        db.close()
+
+
+@router.delete("/chat/memory/{memory_id}", status_code=204)
+async def delete_memory_endpoint(
+    memory_id: str,
+    user: AuthUser = Depends(get_current_user),
+):
+    db = SessionLocal()
+    try:
+        ok = memory_module.delete_memory(user.id, memory_id, db)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Memory not found")
+    finally:
+        db.close()
+
 
 @router.get("/chat/usage")
 async def chat_usage_endpoint(user: AuthUser = Depends(get_current_user)):

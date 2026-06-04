@@ -1,13 +1,25 @@
 import React, { type ReactNode, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, History, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  Bot,
+  Brain,
+  History,
+  Loader2,
+  Send,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  type ChatMemoryItem,
   type ChatMessage,
   type ChatUsage,
   clearHistory,
+  deleteMemoryItem,
   getHistory,
+  getMemories,
   getUsage,
   streamChat,
 } from "../../services/chat";
@@ -111,6 +123,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [usage, setUsage] = useState<ChatUsage | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [memories, setMemories] = useState<ChatMemoryItem[]>([]);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasLoadedHistoryRef = useRef(false);
@@ -194,6 +208,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
       if (history.length > 0) setMessages(history);
     });
     getUsage().then(setUsage);
+    getMemories().then(setMemories);
   }, [open, aiReady]);
 
   // Countdown ticker — updates every second
@@ -392,6 +407,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
               <div className="flex items-center gap-1">
                 {aiReady && (
                   <button
+                    onClick={() => setMemoryOpen((v) => !v)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                      memoryOpen
+                        ? "text-primary bg-primary/15"
+                        : "text-slate-500 hover:text-primary hover:bg-white/8"
+                    }`}
+                    aria-label="Memoria del asistente"
+                    title="Memoria"
+                  >
+                    <Brain size={15} />
+                  </button>
+                )}
+                {aiReady && (
+                  <button
                     onClick={handleLoadHistory}
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-primary hover:bg-white/8 transition-colors"
                     aria-label="Cargar historial"
@@ -419,6 +448,56 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                 </button>
               </div>
             </div>
+
+            {/* Memory panel */}
+            <AnimatePresence>
+              {memoryOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden border-b border-white/8"
+                >
+                  <div className="p-3">
+                    <p className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
+                      Memoria
+                    </p>
+                    {memories.length === 0 ? (
+                      <p className="text-xs text-slate-600 italic">
+                        Sin recuerdos guardados aún
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {memories.map((mem) => (
+                          <span
+                            key={mem.id}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-300"
+                          >
+                            <span className="text-primary font-medium">
+                              {mem.key}:
+                            </span>{" "}
+                            {mem.value}
+                            <button
+                              onClick={async () => {
+                                await deleteMemoryItem(mem.id);
+                                setMemories((prev) =>
+                                  prev.filter((m) => m.id !== mem.id),
+                                );
+                              }}
+                              className="ml-0.5 text-slate-600 hover:text-red-400 transition-colors"
+                              aria-label={`Borrar recuerdo: ${mem.key}`}
+                            >
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Messages area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">

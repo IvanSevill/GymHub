@@ -249,5 +249,28 @@ async def sync_fitbit_to_workout(workout_id: str) -> dict:
     return await write_tools.sync_fitbit_to_workout({"workout_id": workout_id}, TOKEN)
 
 
+@mcp.tool()
+async def save_memory(key: str, value: str) -> dict:
+    """Guarda un hecho importante sobre el usuario en memoria persistente.
+
+    Úsalo cuando el usuario mencione objetivos, lesiones, preferencias o cualquier
+    información relevante sobre sí mismo. Si ya existe una memoria con esa clave,
+    se actualiza con el nuevo valor.
+
+    key: etiqueta corta, e.g. 'objetivo', 'lesion_hombro', 'dias_entrenamiento'
+    value: descripción, e.g. 'ganar masa muscular', 'lesión en hombro izquierdo'
+    """
+    return await write_tools.save_memory({"key": key, "value": value}, TOKEN)
+
+
+@mcp.tool()
+async def get_memories() -> dict:
+    """Recupera todos los recuerdos guardados del usuario.
+
+    Devuelve una lista de memorias con su clave, valor y fecha de creación.
+    """
+    return await write_tools.get_memories({}, TOKEN)
+
+
 if __name__ == "__main__":
     mcp.run()

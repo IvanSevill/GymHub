@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -119,3 +119,13 @@ class ChatMessage(Base):
     content = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False)
     __table_args__ = (Index("ix_chat_messages_user_created", "user_id", "created_at"),)
+
+
+class ChatMemory(Base):
+    __tablename__ = "chat_memories"
+    id = Column(String, primary_key=True, default=_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    key = Column(String, nullable=False)
+    value = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
