@@ -4,7 +4,7 @@ import os
 from typing import Optional
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
@@ -41,8 +41,12 @@ def _build_user_schema(
 
 
 @router.post("/google", response_model=schemas.Token)
-async def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(database.get_db)):
-    """Exchange a Google authorization code for a JWT access token."""
+async def google_auth(
+    req: schemas.GoogleAuthRequest,
+    response: Response,
+    db: Session = Depends(database.get_db),
+):
+    """Exchange a Google authorization code for JWT tokens. Sets an HttpOnly refresh-token cookie."""
     token_url = "https://oauth2.googleapis.com/token"
     data = {
         "code": req.code,
@@ -52,20 +56,20 @@ async def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(data
         "grant_type": "authorization_code",
     }
 
-    response = requests.post(token_url, data=data)
-    if response.status_code != 200:
+    google_response = requests.post(token_url, data=data)
+    if google_response.status_code != 200:
         logger.warning(
             "Google OAuth failed — client_id set: %s, status: %s, response: %s",
             bool(GOOGLE_CLIENT_ID),
-            response.status_code,
-            response.text,
+            google_response.status_code,
+            google_response.text,
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to exchange Google code: {response.text}",
+            detail=f"Failed to exchange Google code: {google_response.text}",
         )
 
-    tokens = response.json()
+    tokens = google_response.json()
     id_info = id_token.verify_oauth2_token(
         tokens["id_token"],
         google_requests.Request(),
@@ -101,11 +105,46 @@ async def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(data
     db.commit()
 
     access_token = auth.create_access_token(data={"sub": user.email})
+    refresh_token = auth.create_refresh_token(data={"sub": user.email})
+    auth.set_refresh_cookie(response, refresh_token)
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user": _build_user_schema(user, user_tokens),
     }
+
+
+@router.post("/refresh", response_model=schemas.Token)
+async def refresh_access_token(
+    refresh_token: Optional[str] = Cookie(None),
+    db: Session = Depends(database.get_db),
+):
+    """Issue a new short-lived access token using the HttpOnly refresh-token cookie."""
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="No hay sesión activa")
+
+    email = auth.decode_refresh_token(refresh_token)
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+
+    user_tokens = (
+        db.query(models.UserTokens).filter(models.UserTokens.user_id == user.id).first()
+    )
+    access_token = auth.create_access_token(data={"sub": email})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": _build_user_schema(user, user_tokens),
+    }
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear the refresh-token cookie to end the session."""
+    auth.clear_refresh_cookie(response)
+    return {"message": "Sesión cerrada"}
 
 
 @router.get("/fitbit")
@@ -151,15 +190,15 @@ async def fitbit_callback(code: str, state: str, db: Session = Depends(database.
         "code": code,
     }
 
-    response = requests.post(token_url, headers=headers, data=data)
-    if response.status_code != 200:
-        logger.error("Fitbit token exchange failed: HTTP %s", response.status_code)
+    fitbit_response = requests.post(token_url, headers=headers, data=data)
+    if fitbit_response.status_code != 200:
+        logger.error("Fitbit token exchange failed: HTTP %s", fitbit_response.status_code)
         raise HTTPException(
             status_code=400,
             detail="Failed to exchange Fitbit authorization code",
         )
 
-    tokens = response.json()
+    tokens = fitbit_response.json()
     fitbit_id = tokens["user_id"]
 
     user_tokens = (
@@ -225,7 +264,9 @@ async def register_user(
 
 @router.post("/login", response_model=schemas.Token)
 async def login_for_access_token(
-    user_login: schemas.UserLogin, db: Session = Depends(database.get_db)
+    user_login: schemas.UserLogin,
+    response: Response,
+    db: Session = Depends(database.get_db),
 ):
     """Authenticate with email/password and return a JWT access token."""
     user = db.query(models.User).filter(models.User.email == user_login.email).first()
@@ -239,6 +280,9 @@ async def login_for_access_token(
         )
 
     access_token = auth.create_access_token(data={"sub": user.email})
+    refresh_token = auth.create_refresh_token(data={"sub": user.email})
+    auth.set_refresh_cookie(response, refresh_token)
+
     user_tokens = (
         db.query(models.UserTokens).filter(models.UserTokens.user_id == user.id).first()
     )

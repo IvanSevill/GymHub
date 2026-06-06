@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { User, authService } from "../services/auth";
+import { AuthResponse, User, authService } from "../services/auth";
+import { setToken } from "../services/tokenStore";
 
 interface AuthContextType {
   user: User | null;
@@ -8,12 +9,6 @@ interface AuthContextType {
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
-
-const TOKEN_KEY = "auth_token";
-
-let _token: string | null = localStorage.getItem(TOKEN_KEY);
-
-export const getAuthToken = () => _token;
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -24,30 +19,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const restore = async () => {
-      if (_token) {
-        try {
-          const userData = await authService.getCurrentUser();
-          setUser(userData);
-        } catch {
-          _token = null;
-          localStorage.removeItem(TOKEN_KEY);
-        }
-      }
-      setLoading(false);
-    };
-    restore();
+    authService
+      .refreshSession()
+      .then(({ access_token, user: userData }: AuthResponse) => {
+        setToken(access_token);
+        setUser(userData);
+      })
+      .catch(() => {
+        // No active session — stay logged out
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = (token: string, userData: User) => {
-    _token = token;
-    localStorage.setItem(TOKEN_KEY, token);
+    setToken(token);
     setUser(userData);
   };
 
-  const logout = () => {
-    _token = null;
-    localStorage.removeItem(TOKEN_KEY);
+  const logout = async () => {
+    await authService.serverLogout().catch(() => {});
+    setToken(null);
     setUser(null);
   };
 
