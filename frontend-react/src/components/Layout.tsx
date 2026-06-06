@@ -66,19 +66,23 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               </div>
               Gym<span className="text-primary">Hub</span>
             </h1>
-            <NavLink to="/settings" className="shrink-0">
-              {safeImageUrl(user?.picture_url) ? (
-                <img
-                  src={safeImageUrl(user?.picture_url)}
-                  alt={user?.name}
-                  className="w-8 h-8 rounded-lg border border-white/10"
-                />
-              ) : (
-                <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center font-black text-sm">
-                  {user?.name?.charAt(0) || "U"}
-                </div>
-              )}
-            </NavLink>
+            {/* Hide avatar in topbar when already on settings (photo shown there) */}
+            {location.pathname !== "/settings" && (
+              <NavLink to="/settings" className="shrink-0">
+                {safeImageUrl(user?.picture_url) ? (
+                  <img
+                    src={safeImageUrl(user?.picture_url)}
+                    alt={user?.name}
+                    className="w-8 h-8 rounded-lg border border-white/10"
+                  />
+                ) : (
+                  <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center font-black text-sm">
+                    {user?.name?.charAt(0) || "U"}
+                  </div>
+                )}
+              </NavLink>
+            )}
+            {location.pathname === "/settings" && <div className="w-8" />}
           </div>
 
           <div className="p-5 md:p-10">
@@ -105,8 +109,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <ExerciseModal />
         <OnboardingTutorial />
 
-        {/* AI Chat FAB — hidden when ai-server is unreachable */}
-        {aiHealthy && (
+        {/* AI Chat FAB — hidden on settings page and when ai-server is unreachable */}
+        {aiHealthy && location.pathname !== "/settings" && (
           <button
             onClick={() => setChatOpen(true)}
             className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-primary rounded-2xl shadow-lg shadow-primary/30 flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-transform md:bottom-8 md:right-8"
