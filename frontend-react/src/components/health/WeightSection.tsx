@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { fitbitService, WeightLogEntry } from "../../services/fitbit";
 import { useToast } from "../../context/ToastContext";
@@ -88,20 +88,6 @@ const WeightSection: React.FC = () => {
       addToast("Error al guardar el peso", "error");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await fitbitService.deleteWeightLog(id);
-      setLogs((prev) => {
-        const next = prev.filter((l) => l.id !== id);
-        if (next.length === 0) setState("empty");
-        return next;
-      });
-      addToast("Entrada eliminada", "success");
-    } catch {
-      addToast("Error al eliminar", "error");
     }
   };
 
@@ -437,9 +423,6 @@ const WeightSection: React.FC = () => {
               </ResponsiveContainer>
             </div>
           </ChartCard>
-
-          {/* Log table — collapsible */}
-          <LogTable logs={logs} onDelete={handleDelete} />
         </>
       )}
     </motion.section>
@@ -494,55 +477,6 @@ const KpiCard: React.FC<KpiCardProps> = ({
           {sign}
           {delta.toFixed(1)} {unit} en el período
         </p>
-      )}
-    </div>
-  );
-};
-
-interface LogTableProps {
-  logs: WeightLogEntry[];
-  onDelete: (id: string) => void;
-}
-
-const LogTable: React.FC<LogTableProps> = ({ logs, onDelete }) => {
-  const [open, setOpen] = useState(false);
-  const sorted = [...logs].reverse();
-
-  return (
-    <div className="border border-white/10 rounded-2xl overflow-hidden">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-6 py-4 text-slate-400 hover:text-white hover:bg-white/[0.02] transition-colors"
-      >
-        <span className="text-sm font-bold">Ver registros ({logs.length})</span>
-        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
-      {open && (
-        <div className="border-t border-white/10 divide-y divide-white/5 max-h-72 overflow-y-auto">
-          {sorted.map((l) => (
-            <div
-              key={l.id}
-              className="flex items-center justify-between px-6 py-3"
-            >
-              <span className="text-xs text-slate-400">{l.date}</span>
-              <span className="text-sm font-black text-white">
-                {l.weight_kg} kg
-                {l.body_fat_pct != null && (
-                  <span className="ml-2 text-xs text-slate-400 font-normal">
-                    {l.body_fat_pct}% grasa
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={() => onDelete(l.id)}
-                className="text-slate-600 hover:text-red-400 transition-colors"
-                aria-label="Eliminar"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
       )}
     </div>
   );
