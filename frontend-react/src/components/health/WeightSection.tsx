@@ -12,6 +12,7 @@ import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { fitbitService, WeightLogEntry } from "../../services/fitbit";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
 import ChartCard from "./components/ChartCard";
 import { CHART_TOOLTIP, fmtDate, xTickInterval } from "./chartUtils";
 import PeriodSelector from "../ui/PeriodSelector";
@@ -21,8 +22,19 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 type State = "loading" | "success" | "empty" | "error";
 
+const bmiCategory = (b: number) =>
+  b < 18.5
+    ? "Bajo peso"
+    : b < 25
+      ? "Normal"
+      : b < 30
+        ? "Sobrepeso"
+        : "Obesidad";
+
 const WeightSection: React.FC = () => {
   const { addToast } = useToast();
+  const { user } = useAuth();
+  const heightM = user?.height_cm ? user.height_cm / 100 : null;
 
   const [days, setDays] = useState("90");
   const [logs, setLogs] = useState<WeightLogEntry[]>([]);
@@ -102,6 +114,33 @@ const WeightSection: React.FC = () => {
     latest?.body_fat_pct != null && first?.body_fat_pct != null
       ? latest.body_fat_pct - first.body_fat_pct
       : null;
+
+  // Derived body composition metrics
+  const bmi = heightM && latest ? latest.weight_kg / heightM ** 2 : null;
+  const bmiFirst = heightM && first ? first.weight_kg / heightM ** 2 : null;
+  const bmiDelta = bmi != null && bmiFirst != null ? bmi - bmiFirst : null;
+
+  const leanMass =
+    latest?.body_fat_pct != null
+      ? latest.weight_kg * (1 - latest.body_fat_pct / 100)
+      : null;
+  const leanMassFirst =
+    first?.body_fat_pct != null
+      ? first.weight_kg * (1 - first.body_fat_pct / 100)
+      : null;
+  const leanDelta =
+    leanMass != null && leanMassFirst != null ? leanMass - leanMassFirst : null;
+
+  const fatMass =
+    latest?.body_fat_pct != null
+      ? latest.weight_kg * (latest.body_fat_pct / 100)
+      : null;
+  const fatMassFirst =
+    first?.body_fat_pct != null
+      ? first.weight_kg * (first.body_fat_pct / 100)
+      : null;
+  const fatMassKgDelta =
+    fatMass != null && fatMassFirst != null ? fatMass - fatMassFirst : null;
 
   const chartData = logs.map((l) => ({
     date: fmtDate(l.date),
@@ -261,6 +300,34 @@ const WeightSection: React.FC = () => {
               unit="%"
               color="#a78bfa"
             />
+            <KpiCard
+              label="IMC"
+              value={bmi != null ? bmi.toFixed(1) : "—"}
+              delta={bmiDelta}
+              unit=""
+              color="#f97316"
+              subtitle={
+                bmi != null ? bmiCategory(bmi) : "Añade tu altura en Ajustes"
+              }
+            />
+            {leanMass != null && (
+              <KpiCard
+                label="Masa magra"
+                value={`${leanMass.toFixed(1)} kg`}
+                delta={leanDelta}
+                unit="kg"
+                color="#4ade80"
+              />
+            )}
+            {fatMass != null && (
+              <KpiCard
+                label="Masa grasa"
+                value={`${fatMass.toFixed(1)} kg`}
+                delta={fatMassKgDelta}
+                unit="kg"
+                color="#fb923c"
+              />
+            )}
           </div>
 
           {/* Chart */}
@@ -387,6 +454,7 @@ interface KpiCardProps {
   delta: number | null;
   unit: string;
   color: string;
+  subtitle?: string;
 }
 
 const KpiCard: React.FC<KpiCardProps> = ({
@@ -395,6 +463,7 @@ const KpiCard: React.FC<KpiCardProps> = ({
   delta,
   unit,
   color,
+  subtitle,
 }) => {
   const sign = delta != null ? (delta > 0 ? "+" : "") : "";
   const deltaColor =
@@ -415,6 +484,11 @@ const KpiCard: React.FC<KpiCardProps> = ({
         {label}
       </p>
       <p className="text-3xl font-black text-white tracking-tight">{value}</p>
+      {subtitle && (
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+          {subtitle}
+        </p>
+      )}
       {delta != null && (
         <p className={`text-xs font-bold ${deltaColor}`}>
           {sign}
