@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from "react";
-import { User, authService } from "../services/auth";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { AuthResponse, User, authService } from "../services/auth";
+import { setToken } from "../services/tokenStore";
 
 interface AuthContextType {
   user: User | null;
@@ -9,26 +10,35 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
-// In-memory token — not accessible to injected scripts, intentionally lost on page refresh.
-let _token: string | null = null;
-
-export const getAuthToken = () => _token;
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    authService
+      .refreshSession()
+      .then(({ access_token, user: userData }: AuthResponse) => {
+        setToken(access_token);
+        setUser(userData);
+      })
+      .catch(() => {
+        // No active session — stay logged out
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const login = (token: string, userData: User) => {
-    _token = token;
+    setToken(token);
     setUser(userData);
   };
 
-  const logout = () => {
-    _token = null;
+  const logout = async () => {
+    await authService.serverLogout().catch(() => {});
+    setToken(null);
     setUser(null);
   };
 

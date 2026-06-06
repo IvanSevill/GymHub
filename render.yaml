@@ -25,6 +25,37 @@ services:
         sync: false
       - key: ROOT_EMAILS
         sync: false
+      - key: ENVIRONMENT
+        value: production
+
+  # ── AI Server (GymChat) ───────────────────────────────────────────────────
+  - type: web
+    name: gymhub-ai-server
+    runtime: python
+    rootDir: ai-server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gymhub-db
+          property: connectionString
+      - key: SECRET_KEY
+        sync: false   # Must match gymhub-backend's SECRET_KEY exactly — copy from its env dashboard
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: FRONTEND_URL
+        value: https://gymhub-frontend.onrender.com
+      - key: BACKEND_URL
+        value: https://gymhub-jd53.onrender.com   # update to match gymhub-backend's actual URL
+      - key: AI_SERVER_URL
+        value: https://gymhub-ai-server.onrender.com   # update after first deploy if name differs
+      - key: ROOT_EMAILS
+        sync: false
+      - key: ENVIRONMENT
+        value: production
 
   # ── Frontend (Vite / React) ───────────────────────────────────────────────
   - type: web
@@ -36,6 +67,8 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://gymhub-jd53.onrender.com
+      - key: VITE_AI_URL
+        value: https://gymhub-ai-server.onrender.com   # update after first deploy if name differs
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
 

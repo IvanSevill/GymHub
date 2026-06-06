@@ -90,7 +90,9 @@ export function useFitbitHealthData(
   }, [days, fitbitConnected]);
 
   const syncData = async (): Promise<void> => {
+    const d = Number(days);
     await fitbitService.sync();
+    await fetchData(d);
   };
 
   return {
