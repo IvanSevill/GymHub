@@ -501,3 +501,113 @@ def get_muscle_balance(args: dict, user_id: str, db: Session) -> dict:
         totals_by_muscle[m] = round(totals_by_muscle.get(m, 0.0) + entry["volume_kg"], 1)
 
     return {"balance": balance, "totals_by_muscle": totals_by_muscle}
+
+
+def get_workout_count_in_period(args: dict, user_id: str, db: Session) -> dict:
+    """Count workouts between two dates (inclusive). Dates as YYYY-MM-DD."""
+    start_date: str = args["start_date"]
+    end_date: str = args["end_date"]
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    count = (
+        db.query(func.count(models.Workout.id))
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time >= start,
+            models.Workout.start_time < end,
+        )
+        .scalar()
+        or 0
+    )
+    return {"count": count, "start_date": start_date, "end_date": end_date}
+
+
+def get_workouts_in_period(args: dict, user_id: str, db: Session) -> list:
+    """Return workouts with full exercise detail between two dates (inclusive)."""
+    start_date: str = args["start_date"]
+    end_date: str = args["end_date"]
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+
+    workouts = (
+        db.query(models.Workout)
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time >= start,
+            models.Workout.start_time < end,
+        )
+        .order_by(models.Workout.start_time)
+        .all()
+    )
+
+    result = []
+    for w in workouts:
+        duration_min: int | None = None
+        if w.fitbit_data and w.fitbit_data.duration_ms:
+            duration_min = round(w.fitbit_data.duration_ms / 60_000)
+        elif w.start_time and w.end_time:
+            duration_min = round((w.end_time - w.start_time).total_seconds() / 60)
+
+        exercises: dict = {}
+        for s in w.exercise_sets:
+            name = s.exercise.name if s.exercise else "Unknown"
+            exercises.setdefault(name, []).append(f"{s.value} {s.measurement}".strip())
+
+        result.append({
+            "id": w.id,
+            "title": w.title,
+            "date": w.start_time.strftime("%Y-%m-%d"),
+            "start_time": w.start_time.isoformat(),
+            "end_time": w.end_time.isoformat(),
+            "duration_min": duration_min,
+            "exercises": exercises,
+        })
+
+    return result
+
+
+def get_user_profile(args: dict, user_id: str, db: Session) -> dict:
+    """Return the user's name, height, and latest weight/body fat from WeightLog."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        return {"error": "User not found"}
+
+    latest_weight = (
+        db.query(models.WeightLog)
+        .filter(models.WeightLog.user_id == user_id)
+        .order_by(models.WeightLog.date.desc())
+        .first()
+    )
+
+    return {
+        "name": user.name,
+        "height_cm": user.height_cm,
+        "weight_kg": latest_weight.weight_kg if latest_weight else None,
+        "body_fat_pct": latest_weight.body_fat_pct if latest_weight else None,
+        "weight_date": latest_weight.date if latest_weight else None,
+    }
+
+
+def get_weight_logs(args: dict, user_id: str, db: Session) -> dict:
+    """Return the user's weight and body fat history."""
+    days: int = int(args.get("days", 90))
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    rows = (
+        db.query(models.WeightLog)
+        .filter(models.WeightLog.user_id == user_id)
+        .filter(models.WeightLog.date >= cutoff)
+        .order_by(models.WeightLog.date)
+        .all()
+    )
+
+    logs = [
+        {"date": r.date, "weight_kg": r.weight_kg, "body_fat_pct": r.body_fat_pct}
+        for r in rows
+    ]
+
+    return {
+        "logs": logs,
+        "latest_weight_kg": logs[-1]["weight_kg"] if logs else None,
+        "latest_body_fat_pct": logs[-1]["body_fat_pct"] if logs else None,
+    }
