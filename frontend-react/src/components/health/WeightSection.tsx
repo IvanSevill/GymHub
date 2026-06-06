@@ -8,10 +8,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { fitbitService, WeightLogEntry } from "../../services/fitbit";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
 import ChartCard from "./components/ChartCard";
 import { CHART_TOOLTIP, fmtDate, xTickInterval } from "./chartUtils";
 import PeriodSelector from "../ui/PeriodSelector";
@@ -21,8 +22,19 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 type State = "loading" | "success" | "empty" | "error";
 
+const bmiCategory = (b: number) =>
+  b < 18.5
+    ? "Bajo peso"
+    : b < 25
+      ? "Normal"
+      : b < 30
+        ? "Sobrepeso"
+        : "Obesidad";
+
 const WeightSection: React.FC = () => {
   const { addToast } = useToast();
+  const { user } = useAuth();
+  const heightM = user?.height_cm ? user.height_cm / 100 : null;
 
   const [days, setDays] = useState("90");
   const [logs, setLogs] = useState<WeightLogEntry[]>([]);
@@ -79,28 +91,42 @@ const WeightSection: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await fitbitService.deleteWeightLog(id);
-      setLogs((prev) => {
-        const next = prev.filter((l) => l.id !== id);
-        if (next.length === 0) setState("empty");
-        return next;
-      });
-      addToast("Entrada eliminada", "success");
-    } catch {
-      addToast("Error al eliminar", "error");
-    }
-  };
-
-  // KPI deltas
+  // KPI deltas — compare latest vs first entry in the selected period
   const latest = logs.at(-1);
-  const prev = logs.at(-2);
-  const weightDelta = latest && prev ? latest.weight_kg - prev.weight_kg : null;
+  const first = logs.length > 1 ? logs[0] : null;
+  const weightDelta =
+    latest && first ? latest.weight_kg - first.weight_kg : null;
   const fatDelta =
-    latest?.body_fat_pct != null && prev?.body_fat_pct != null
-      ? latest.body_fat_pct - prev.body_fat_pct
+    latest?.body_fat_pct != null && first?.body_fat_pct != null
+      ? latest.body_fat_pct - first.body_fat_pct
       : null;
+
+  // Derived body composition metrics
+  const bmi = heightM && latest ? latest.weight_kg / heightM ** 2 : null;
+  const bmiFirst = heightM && first ? first.weight_kg / heightM ** 2 : null;
+  const bmiDelta = bmi != null && bmiFirst != null ? bmi - bmiFirst : null;
+
+  const leanMass =
+    latest?.body_fat_pct != null
+      ? latest.weight_kg * (1 - latest.body_fat_pct / 100)
+      : null;
+  const leanMassFirst =
+    first?.body_fat_pct != null
+      ? first.weight_kg * (1 - first.body_fat_pct / 100)
+      : null;
+  const leanDelta =
+    leanMass != null && leanMassFirst != null ? leanMass - leanMassFirst : null;
+
+  const fatMass =
+    latest?.body_fat_pct != null
+      ? latest.weight_kg * (latest.body_fat_pct / 100)
+      : null;
+  const fatMassFirst =
+    first?.body_fat_pct != null
+      ? first.weight_kg * (first.body_fat_pct / 100)
+      : null;
+  const fatMassKgDelta =
+    fatMass != null && fatMassFirst != null ? fatMass - fatMassFirst : null;
 
   const chartData = logs.map((l) => ({
     date: fmtDate(l.date),
@@ -260,6 +286,34 @@ const WeightSection: React.FC = () => {
               unit="%"
               color="#a78bfa"
             />
+            <KpiCard
+              label="IMC"
+              value={bmi != null ? bmi.toFixed(1) : "—"}
+              delta={bmiDelta}
+              unit=""
+              color="#f97316"
+              subtitle={
+                bmi != null ? bmiCategory(bmi) : "Añade tu altura en Ajustes"
+              }
+            />
+            {leanMass != null && (
+              <KpiCard
+                label="Masa magra"
+                value={`${leanMass.toFixed(1)} kg`}
+                delta={leanDelta}
+                unit="kg"
+                color="#4ade80"
+              />
+            )}
+            {fatMass != null && (
+              <KpiCard
+                label="Masa grasa"
+                value={`${fatMass.toFixed(1)} kg`}
+                delta={fatMassKgDelta}
+                unit="kg"
+                color="#fb923c"
+              />
+            )}
           </div>
 
           {/* Chart */}
@@ -369,9 +423,6 @@ const WeightSection: React.FC = () => {
               </ResponsiveContainer>
             </div>
           </ChartCard>
-
-          {/* Log table — collapsible */}
-          <LogTable logs={logs} onDelete={handleDelete} />
         </>
       )}
     </motion.section>
@@ -386,6 +437,7 @@ interface KpiCardProps {
   delta: number | null;
   unit: string;
   color: string;
+  subtitle?: string;
 }
 
 const KpiCard: React.FC<KpiCardProps> = ({
@@ -394,6 +446,7 @@ const KpiCard: React.FC<KpiCardProps> = ({
   delta,
   unit,
   color,
+  subtitle,
 }) => {
   const sign = delta != null ? (delta > 0 ? "+" : "") : "";
   const deltaColor =
@@ -414,60 +467,16 @@ const KpiCard: React.FC<KpiCardProps> = ({
         {label}
       </p>
       <p className="text-3xl font-black text-white tracking-tight">{value}</p>
+      {subtitle && (
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+          {subtitle}
+        </p>
+      )}
       {delta != null && (
         <p className={`text-xs font-bold ${deltaColor}`}>
           {sign}
-          {delta.toFixed(1)} {unit} vs anterior
+          {delta.toFixed(1)} {unit} en el período
         </p>
-      )}
-    </div>
-  );
-};
-
-interface LogTableProps {
-  logs: WeightLogEntry[];
-  onDelete: (id: string) => void;
-}
-
-const LogTable: React.FC<LogTableProps> = ({ logs, onDelete }) => {
-  const [open, setOpen] = useState(false);
-  const sorted = [...logs].reverse();
-
-  return (
-    <div className="border border-white/10 rounded-2xl overflow-hidden">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-6 py-4 text-slate-400 hover:text-white hover:bg-white/[0.02] transition-colors"
-      >
-        <span className="text-sm font-bold">Ver registros ({logs.length})</span>
-        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
-      {open && (
-        <div className="border-t border-white/10 divide-y divide-white/5 max-h-72 overflow-y-auto">
-          {sorted.map((l) => (
-            <div
-              key={l.id}
-              className="flex items-center justify-between px-6 py-3"
-            >
-              <span className="text-xs text-slate-400">{l.date}</span>
-              <span className="text-sm font-black text-white">
-                {l.weight_kg} kg
-                {l.body_fat_pct != null && (
-                  <span className="ml-2 text-xs text-slate-400 font-normal">
-                    {l.body_fat_pct}% grasa
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={() => onDelete(l.id)}
-                className="text-slate-600 hover:text-red-400 transition-colors"
-                aria-label="Eliminar"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
       )}
     </div>
   );
