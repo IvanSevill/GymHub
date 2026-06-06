@@ -11,22 +11,27 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from .database import Base, engine  # noqa: E402
-from .routers import analytics, auth_routes, exercise_requests, exercises, fitbit_health, fitbit_sync, workouts  # noqa: E402
+from .routers import analytics, auth_routes, exercise_requests, exercises, feedback, fitbit_health, fitbit_sync, weight, workouts  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
-_ALLOWED_MIGRATION_COLUMNS = {"video_url_1", "video_url_2", "image_url"}
+_EXERCISE_MIGRATION_COLUMNS = {"video_url_1", "video_url_2", "image_url"}
 
 with engine.connect() as conn:
-    for col in _ALLOWED_MIGRATION_COLUMNS:
+    for col in _EXERCISE_MIGRATION_COLUMNS:
         try:
             conn.execute(text(f"ALTER TABLE exercises ADD COLUMN {col} TEXT"))
             conn.commit()
         except Exception:
             conn.rollback()
+    try:
+        conn.execute(text("ALTER TABLE users ADD COLUMN height_cm FLOAT"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
 app = FastAPI(title="GymHub Backend v2")
 
@@ -73,6 +78,8 @@ app.include_router(fitbit_health.router)
 app.include_router(fitbit_sync.router)
 app.include_router(workouts.router)
 app.include_router(analytics.router)
+app.include_router(weight.router)
+app.include_router(feedback.router)
 
 @app.get("/")
 async def read_root():
