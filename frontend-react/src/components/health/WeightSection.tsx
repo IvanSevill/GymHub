@@ -14,6 +14,8 @@ import { fitbitService, WeightLogEntry } from "../../services/fitbit";
 import { useToast } from "../../context/ToastContext";
 import ChartCard from "./components/ChartCard";
 import { CHART_TOOLTIP, fmtDate, xTickInterval } from "./chartUtils";
+import PeriodSelector from "../ui/PeriodSelector";
+import { GLOBAL_PERIODS } from "../../constants/periods";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -22,6 +24,7 @@ type State = "loading" | "success" | "empty" | "error";
 const WeightSection: React.FC = () => {
   const { addToast } = useToast();
 
+  const [days, setDays] = useState("90");
   const [logs, setLogs] = useState<WeightLogEntry[]>([]);
   const [state, setState] = useState<State>("loading");
 
@@ -34,13 +37,13 @@ const WeightSection: React.FC = () => {
   const fetchLogs = useCallback(async () => {
     setState("loading");
     try {
-      const data = await fitbitService.getWeightLogs(90);
+      const data = await fitbitService.getWeightLogs(Number(days));
       setLogs(data);
       setState(data.length === 0 ? "empty" : "success");
     } catch {
       setState("error");
     }
-  }, []);
+  }, [days]);
 
   useEffect(() => {
     fetchLogs();
@@ -115,22 +118,29 @@ const WeightSection: React.FC = () => {
       className="space-y-4"
     >
       {/* Section header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-xl font-black text-white tracking-tight">
             Peso corporal
           </h3>
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-0.5">
-            Registro manual · últimos 90 días
+            Registro manual · últimos {days} días
           </p>
         </div>
-        <button
-          onClick={() => setFormOpen((v) => !v)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-wider hover:bg-primary hover:text-white transition-all"
-        >
-          <Plus size={12} />
-          Añadir
-        </button>
+        <div className="flex items-center gap-2">
+          <PeriodSelector
+            options={GLOBAL_PERIODS}
+            value={days}
+            onChange={setDays}
+          />
+          <button
+            onClick={() => setFormOpen((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-wider hover:bg-primary hover:text-white transition-all"
+          >
+            <Plus size={12} />
+            Añadir
+          </button>
+        </div>
       </div>
 
       {/* Entry form */}
