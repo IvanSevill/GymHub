@@ -93,13 +93,14 @@ const WeightSection: React.FC = () => {
     }
   };
 
-  // KPI deltas
+  // KPI deltas — compare latest vs first entry in the selected period
   const latest = logs.at(-1);
-  const prev = logs.at(-2);
-  const weightDelta = latest && prev ? latest.weight_kg - prev.weight_kg : null;
+  const first = logs.length > 1 ? logs[0] : null;
+  const weightDelta =
+    latest && first ? latest.weight_kg - first.weight_kg : null;
   const fatDelta =
-    latest?.body_fat_pct != null && prev?.body_fat_pct != null
-      ? latest.body_fat_pct - prev.body_fat_pct
+    latest?.body_fat_pct != null && first?.body_fat_pct != null
+      ? latest.body_fat_pct - first.body_fat_pct
       : null;
 
   const chartData = logs.map((l) => ({
@@ -417,7 +418,7 @@ const KpiCard: React.FC<KpiCardProps> = ({
       {delta != null && (
         <p className={`text-xs font-bold ${deltaColor}`}>
           {sign}
-          {delta.toFixed(1)} {unit} vs anterior
+          {delta.toFixed(1)} {unit} en el período
         </p>
       )}
     </div>
