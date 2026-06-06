@@ -15,7 +15,11 @@ import {
   Clock,
 } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
-import { exerciseService, type Muscle } from "../../services/exercise";
+import {
+  exerciseService,
+  type Exercise,
+  type Muscle,
+} from "../../services/exercise";
 import {
   exerciseRequestService,
   type ExerciseRequest,
@@ -298,9 +302,17 @@ const MuscleRequestModal: React.FC<MuscleModalProps> = ({
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
-const StatusBadge: React.FC<{ status: ExerciseRequest["status"] }> = ({
-  status,
-}) => {
+const StatusBadge: React.FC<{
+  status: ExerciseRequest["status"];
+  deleted?: boolean;
+}> = ({ status, deleted }) => {
+  if (status === "approved" && deleted)
+    return (
+      <span className="flex items-center gap-1 text-[9px] font-black text-slate-500 uppercase tracking-widest">
+        <XCircle size={10} />
+        Eliminado
+      </span>
+    );
   if (status === "approved")
     return (
       <span className="flex items-center gap-1 text-[9px] font-black text-accent uppercase tracking-widest">
@@ -403,6 +415,7 @@ const InlineEditForm: React.FC<InlineEditProps> = ({
 const ExerciseRequestSection: React.FC = () => {
   const { addToast } = useToast();
   const [muscles, setMuscles] = useState<Muscle[]>([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [requests, setRequests] = useState<ExerciseRequest[]>([]);
   const [musclesError, setMusclesError] = useState(false);
   const [showExerciseModal, setShowExerciseModal] = useState(false);
@@ -420,12 +433,19 @@ const ExerciseRequestSection: React.FC = () => {
     }
   };
 
+  const exerciseExists = (name: string) =>
+    exercises.some((e) => e.name.toLowerCase() === name.toLowerCase());
+
   const loadData = async () => {
     await Promise.all([
       loadMuscles(),
       exerciseRequestService
         .getMyRequests()
         .then(setRequests)
+        .catch(() => {}),
+      exerciseService
+        .getExercises()
+        .then(setExercises)
         .catch(() => {}),
     ]);
   };
@@ -450,6 +470,12 @@ const ExerciseRequestSection: React.FC = () => {
 
   const pendingOrRejected = requests.filter((r) => r.status !== "approved");
   const approved = requests.filter((r) => r.status === "approved");
+  const approvedActive = approved.filter((r) =>
+    exerciseExists(r.exercise_name),
+  );
+  const approvedDeleted = approved.filter(
+    (r) => !exerciseExists(r.exercise_name),
+  );
 
   return (
     <>
@@ -580,7 +606,11 @@ const ExerciseRequestSection: React.FC = () => {
               >
                 <ChevronRight size={11} />
               </motion.span>
-              Solicitudes aceptadas ({approved.length})
+              Solicitudes aceptadas ({approvedActive.length}
+              {approvedDeleted.length > 0
+                ? ` · ${approvedDeleted.length} eliminado${approvedDeleted.length > 1 ? "s" : ""}`
+                : ""}
+              )
             </button>
             <AnimatePresence initial={false}>
               {acceptedOpen && (
@@ -592,7 +622,7 @@ const ExerciseRequestSection: React.FC = () => {
                   className="overflow-hidden"
                 >
                   <div className="flex flex-col gap-1.5">
-                    {approved.map((req) => (
+                    {approvedActive.map((req) => (
                       <div
                         key={req.id}
                         className="flex items-center justify-between px-3 py-2 bg-accent/[0.03] rounded-xl border border-accent/[0.08]"
@@ -613,6 +643,24 @@ const ExerciseRequestSection: React.FC = () => {
                           )}
                         </div>
                         <StatusBadge status="approved" />
+                      </div>
+                    ))}
+                    {approvedDeleted.map((req) => (
+                      <div
+                        key={req.id}
+                        className="flex items-center justify-between px-3 py-2 bg-white/[0.01] rounded-xl border border-white/[0.04] opacity-50"
+                      >
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-[10px] font-black text-slate-400 truncate line-through">
+                            {req.exercise_name}
+                          </span>
+                          <span className="text-[9px] text-slate-600 truncate">
+                            {req.type === "exercise"
+                              ? (req.muscle?.name ?? "—")
+                              : `Músculo: ${req.muscle_name}`}
+                          </span>
+                        </div>
+                        <StatusBadge status="approved" deleted />
                       </div>
                     ))}
                   </div>
