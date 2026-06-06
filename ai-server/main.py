@@ -32,6 +32,11 @@ app.add_middleware(
 app.include_router(chat_router)
 
 
+@app.get("/")
+async def root():
+    return {"service": "GymChat AI", "status": "running", "docs": "/docs"}
+
+
 @app.get("/health")
 async def health():
     configured = bool(os.getenv("GEMINI_API_KEY"))
