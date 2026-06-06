@@ -404,18 +404,30 @@ const ExerciseRequestSection: React.FC = () => {
   const { addToast } = useToast();
   const [muscles, setMuscles] = useState<Muscle[]>([]);
   const [requests, setRequests] = useState<ExerciseRequest[]>([]);
+  const [musclesError, setMusclesError] = useState(false);
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [showMuscleModal, setShowMuscleModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [acceptedOpen, setAcceptedOpen] = useState(false);
 
+  const loadMuscles = async () => {
+    try {
+      const m = await exerciseService.getMuscles();
+      setMuscles(m);
+      setMusclesError(false);
+    } catch {
+      setMusclesError(true);
+    }
+  };
+
   const loadData = async () => {
-    const [m, r] = await Promise.all([
-      exerciseService.getMuscles(),
-      exerciseRequestService.getMyRequests(),
+    await Promise.all([
+      loadMuscles(),
+      exerciseRequestService
+        .getMyRequests()
+        .then(setRequests)
+        .catch(() => {}),
     ]);
-    setMuscles(m);
-    setRequests(r);
   };
 
   useEffect(() => {
@@ -455,6 +467,18 @@ const ExerciseRequestSection: React.FC = () => {
             </p>
           </div>
         </div>
+
+        {musclesError && (
+          <div className="flex items-center justify-between px-3 py-2 bg-amber-500/10 rounded-xl border border-amber-500/20 text-[10px] font-bold text-amber-400">
+            <span>Error cargando músculos — el servidor está arrancando</span>
+            <button
+              onClick={loadMuscles}
+              className="ml-2 underline hover:text-amber-300 transition-colors shrink-0"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <button
