@@ -23,6 +23,7 @@ import {
 import { useToast } from "../context/ToastContext";
 import AdminPanel from "../components/settings/AdminPanel";
 import ExerciseRequestSection from "../components/settings/ExerciseRequestSection";
+import FeedbackSection from "../components/settings/FeedbackSection";
 import { CALENDAR_CACHE_KEY } from "../App";
 
 const Settings: React.FC = () => {
@@ -422,6 +423,9 @@ const Settings: React.FC = () => {
 
       {/* Exercise requests — non-root only */}
       {user?.is_root !== 1 && <ExerciseRequestSection />}
+
+      {/* Feedback — non-root only */}
+      {user?.is_root !== 1 && <FeedbackSection />}
 
       {/* Admin panel — root only */}
       {user?.is_root === 1 && <AdminPanel />}
