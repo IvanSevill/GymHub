@@ -117,17 +117,6 @@ const WeightSection: React.FC = () => {
   const leanDelta =
     leanMass != null && leanMassFirst != null ? leanMass - leanMassFirst : null;
 
-  const fatMass =
-    latest?.body_fat_pct != null
-      ? latest.weight_kg * (latest.body_fat_pct / 100)
-      : null;
-  const fatMassFirst =
-    first?.body_fat_pct != null
-      ? first.weight_kg * (first.body_fat_pct / 100)
-      : null;
-  const fatMassKgDelta =
-    fatMass != null && fatMassFirst != null ? fatMass - fatMassFirst : null;
-
   const chartData = logs.map((l) => ({
     date: fmtDate(l.date),
     weight: l.weight_kg,
@@ -303,15 +292,6 @@ const WeightSection: React.FC = () => {
                 delta={leanDelta}
                 unit="kg"
                 color="#4ade80"
-              />
-            )}
-            {fatMass != null && (
-              <KpiCard
-                label="Masa grasa"
-                value={`${fatMass.toFixed(1)} kg`}
-                delta={fatMassKgDelta}
-                unit="kg"
-                color="#fb923c"
               />
             )}
           </div>
