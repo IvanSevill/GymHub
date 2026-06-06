@@ -9,6 +9,10 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
+from slowapi import Limiter, _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+from slowapi.middleware import SlowAPIMiddleware  # noqa: E402
+from slowapi.util import get_remote_address  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from .database import Base, engine  # noqa: E402
 from .routers import analytics, auth_routes, exercise_requests, exercises, feedback, fitbit_health, fitbit_sync, weight, workouts  # noqa: E402
@@ -33,7 +37,11 @@ with engine.connect() as conn:
     except Exception:
         conn.rollback()
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 app = FastAPI(title="GymHub Backend v2")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS configuration
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -45,6 +53,7 @@ origins = list(
     }
 )
 
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
