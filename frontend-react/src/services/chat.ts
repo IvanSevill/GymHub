@@ -103,6 +103,23 @@ export async function deleteMemoryItem(id: string): Promise<void> {
   });
 }
 
+export async function saveMemoryItem(
+  key: string,
+  value: string,
+): Promise<void> {
+  const token = getToken();
+  if (!token) return;
+  const res = await fetch(`${AI_URL}/chat/memory`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ key: key.trim(), value: value.trim() }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
 export async function* streamChat(
   messages: ChatMessage[],
 ): AsyncGenerator<ChatEvent> {

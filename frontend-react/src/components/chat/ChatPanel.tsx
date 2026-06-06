@@ -5,8 +5,11 @@ import remarkGfm from "remark-gfm";
 import {
   Bot,
   Brain,
+  Check,
   History,
   Loader2,
+  Pencil,
+  Plus,
   Send,
   Sparkles,
   Trash2,
@@ -21,6 +24,7 @@ import {
   getHistory,
   getMemories,
   getUsage,
+  saveMemoryItem,
   streamChat,
 } from "../../services/chat";
 import { useToast } from "../../context/ToastContext";
@@ -125,6 +129,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [memories, setMemories] = useState<ChatMemoryItem[]>([]);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memFormOpen, setMemFormOpen] = useState(false);
+  const [memFormKey, setMemFormKey] = useState("");
+  const [memFormValue, setMemFormValue] = useState("");
+  const [memFormSaving, setMemFormSaving] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasLoadedHistoryRef = useRef(false);
@@ -460,10 +468,96 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                   transition={{ duration: 0.2 }}
                   className="overflow-hidden border-b border-white/8"
                 >
-                  <div className="p-3">
-                    <p className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                      Memoria
-                    </p>
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                        Memoria
+                      </p>
+                      <button
+                        onClick={() => {
+                          setMemFormKey("");
+                          setMemFormValue("");
+                          setMemFormOpen((v) => !v);
+                        }}
+                        className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                      >
+                        <Plus size={12} />
+                        Añadir
+                      </button>
+                    </div>
+
+                    {/* Add / edit form */}
+                    <AnimatePresence>
+                      {memFormOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-white/5 border border-white/10">
+                            <input
+                              type="text"
+                              placeholder="Clave (ej: objetivo)"
+                              value={memFormKey}
+                              onChange={(e) => setMemFormKey(e.target.value)}
+                              className="input-field text-xs py-1 px-2"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Valor (ej: ganar masa muscular)"
+                              value={memFormValue}
+                              onChange={(e) => setMemFormValue(e.target.value)}
+                              className="input-field text-xs py-1 px-2"
+                            />
+                            <div className="flex gap-1.5 justify-end">
+                              <button
+                                onClick={() => setMemFormOpen(false)}
+                                className="text-xs text-slate-500 hover:text-slate-300 px-2 py-1"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                disabled={
+                                  !memFormKey.trim() ||
+                                  !memFormValue.trim() ||
+                                  memFormSaving
+                                }
+                                onClick={async () => {
+                                  if (
+                                    !memFormKey.trim() ||
+                                    !memFormValue.trim()
+                                  )
+                                    return;
+                                  setMemFormSaving(true);
+                                  try {
+                                    await saveMemoryItem(
+                                      memFormKey,
+                                      memFormValue,
+                                    );
+                                    const updated = await getMemories();
+                                    setMemories(updated);
+                                    setMemFormOpen(false);
+                                  } finally {
+                                    setMemFormSaving(false);
+                                  }
+                                }}
+                                className="flex items-center gap-1 text-xs btn-primary px-2 py-1 rounded-lg disabled:opacity-40"
+                              >
+                                {memFormSaving ? (
+                                  <Loader2 size={10} className="animate-spin" />
+                                ) : (
+                                  <Check size={10} />
+                                )}
+                                Guardar
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     {memories.length === 0 ? (
                       <p className="text-xs text-slate-600 italic">
                         Sin recuerdos guardados aún
@@ -480,13 +574,24 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                             </span>{" "}
                             {mem.value}
                             <button
+                              onClick={() => {
+                                setMemFormKey(mem.key);
+                                setMemFormValue(mem.value);
+                                setMemFormOpen(true);
+                              }}
+                              className="ml-0.5 text-slate-600 hover:text-primary transition-colors"
+                              aria-label={`Editar recuerdo: ${mem.key}`}
+                            >
+                              <Pencil size={10} />
+                            </button>
+                            <button
                               onClick={async () => {
                                 await deleteMemoryItem(mem.id);
                                 setMemories((prev) =>
                                   prev.filter((m) => m.id !== mem.id),
                                 );
                               }}
-                              className="ml-0.5 text-slate-600 hover:text-red-400 transition-colors"
+                              className="text-slate-600 hover:text-red-400 transition-colors"
                               aria-label={`Borrar recuerdo: ${mem.key}`}
                             >
                               <X size={10} />
