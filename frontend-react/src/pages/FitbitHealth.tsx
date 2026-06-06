@@ -130,9 +130,9 @@ const FitbitHealth: React.FC = () => {
 
           <ActivityCharts data={currentDaily} />
 
-          <SleepCharts data={currentSleep} />
-
           <SleepLastEntry data={currentSleep} />
+
+          <SleepCharts data={currentSleep} />
 
           <WeightSection />
         </>
