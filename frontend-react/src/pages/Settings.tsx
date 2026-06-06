@@ -17,10 +17,13 @@ import {
   Mail,
   Shield,
   LogOut,
+  Ruler,
+  Save,
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import AdminPanel from "../components/settings/AdminPanel";
 import ExerciseRequestSection from "../components/settings/ExerciseRequestSection";
+import FeedbackSection from "../components/settings/FeedbackSection";
 import { CALENDAR_CACHE_KEY } from "../App";
 
 const Settings: React.FC = () => {
@@ -33,6 +36,8 @@ const Settings: React.FC = () => {
   const [isCalendarListOpen, setIsCalendarListOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [heightInput, setHeightInput] = useState("");
+  const [heightSaving, setHeightSaving] = useState(false);
 
   const fetchCalendars = async () => {
     setLoadingCalendars(true);
@@ -62,6 +67,28 @@ const Settings: React.FC = () => {
   useEffect(() => {
     fetchCalendars();
   }, []);
+
+  useEffect(() => {
+    if (user?.height_cm != null) setHeightInput(String(user.height_cm));
+  }, [user?.height_cm]);
+
+  const handleSaveHeight = async () => {
+    const val = parseFloat(heightInput);
+    if (isNaN(val) || val < 50 || val > 300) {
+      addToast("Altura inválida (50–300 cm)", "error");
+      return;
+    }
+    setHeightSaving(true);
+    try {
+      await authService.updateProfile({ height_cm: val });
+      await refreshUser();
+      addToast("Altura actualizada", "success");
+    } catch {
+      addToast("Error al guardar la altura", "error");
+    } finally {
+      setHeightSaving(false);
+    }
+  };
 
   const handleSetCalendar = async (id: string) => {
     try {
@@ -159,6 +186,35 @@ const Settings: React.FC = () => {
                   Administrador
                 </span>
               )}
+            </div>
+
+            {/* Height field */}
+            <div className="flex items-center gap-2 justify-center md:justify-start">
+              <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-xl px-2 py-1.5">
+                <Ruler size={13} className="text-slate-500 shrink-0" />
+                <input
+                  type="number"
+                  min={50}
+                  max={300}
+                  placeholder="Altura"
+                  value={heightInput}
+                  onChange={(e) => setHeightInput(e.target.value)}
+                  className="w-16 bg-transparent text-xs text-white font-black outline-none placeholder:text-slate-600"
+                />
+                <span className="text-[10px] text-slate-500 font-bold">cm</span>
+              </div>
+              <button
+                onClick={handleSaveHeight}
+                disabled={heightSaving || !heightInput}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-wider hover:bg-primary hover:text-white transition-all disabled:opacity-40"
+              >
+                {heightSaving ? (
+                  <RefreshCw size={11} className="animate-spin" />
+                ) : (
+                  <Save size={11} />
+                )}
+                Guardar
+              </button>
             </div>
           </div>
 
@@ -367,6 +423,9 @@ const Settings: React.FC = () => {
 
       {/* Exercise requests — non-root only */}
       {user?.is_root !== 1 && <ExerciseRequestSection />}
+
+      {/* Feedback — non-root only */}
+      {user?.is_root !== 1 && <FeedbackSection />}
 
       {/* Admin panel — root only */}
       {user?.is_root === 1 && <AdminPanel />}

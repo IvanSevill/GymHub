@@ -8,6 +8,7 @@ import ActivityCharts from "../components/health/ActivityCharts";
 import SleepCharts from "../components/health/SleepCharts";
 import SleepTable from "../components/health/SleepTable";
 import ActivityTable from "../components/health/ActivityTable";
+import WeightSection from "../components/health/WeightSection";
 import { useFitbitHealthData } from "../components/health/hooks/useFitbitHealthData";
 import NotConnectedState from "../components/health/components/NotConnectedState";
 import SyncStatusDisplay from "../components/health/components/SyncStatusDisplay";
@@ -133,6 +134,8 @@ const FitbitHealth: React.FC = () => {
           <ActivityCharts data={currentDaily} />
 
           <SleepCharts data={currentSleep} />
+
+          <WeightSection />
 
           {/* Collapsible raw data tables */}
           <div className="border border-white/10 rounded-2xl overflow-hidden">

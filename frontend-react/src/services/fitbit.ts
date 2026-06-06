@@ -50,6 +50,14 @@ export interface SyncResult {
   error?: string;
 }
 
+export interface WeightLogEntry {
+  id: string;
+  date: string;
+  weight_kg: number;
+  body_fat_pct: number | null;
+  created_at: string;
+}
+
 export const fitbitService = {
   sync: async (): Promise<SyncResult> => {
     const res = await api.post<SyncResult>("/fitbit/sync");
@@ -69,5 +77,21 @@ export const fitbitService = {
   getDaily: async (days = 30): Promise<DailyHealth[]> => {
     const res = await api.get<DailyHealth[]>(`/fitbit/daily?days=${days}`);
     return res.data;
+  },
+
+  getWeightLogs: async (days = 90): Promise<WeightLogEntry[]> => {
+    const res = await api.get<WeightLogEntry[]>(`/weight?days=${days}`);
+    return res.data;
+  },
+  logWeight: async (data: {
+    date: string;
+    weight_kg: number;
+    body_fat_pct?: number;
+  }): Promise<WeightLogEntry> => {
+    const res = await api.post<WeightLogEntry>("/weight", data);
+    return res.data;
+  },
+  deleteWeightLog: async (id: string): Promise<void> => {
+    await api.delete(`/weight/${id}`);
   },
 };

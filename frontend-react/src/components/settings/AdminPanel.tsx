@@ -7,6 +7,7 @@ import {
   Dumbbell,
   GitMerge,
   Inbox,
+  MessageSquare,
   Pencil,
   Save,
   Shield,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import ExerciseLibrary from "./ExerciseLibrary";
 import DataResetPanel from "./DataResetPanel";
+import FeedbackPanel from "./FeedbackPanel";
 import { StandardizeExercisesContent } from "../../pages/StandardizeExercises";
 import { useToast } from "../../context/ToastContext";
 import { exerciseService, type Muscle } from "../../services/exercise";
@@ -376,7 +378,12 @@ const RequestsPanel: React.FC = () => {
 
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 
-type AdminTab = "biblioteca" | "estandarizar" | "solicitudes" | "datos";
+type AdminTab =
+  | "biblioteca"
+  | "estandarizar"
+  | "solicitudes"
+  | "datos"
+  | "feedback";
 
 const AdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>("biblioteca");
@@ -407,6 +414,11 @@ const AdminPanel: React.FC = () => {
       ),
     },
     { id: "datos", label: "Base de datos", icon: <DatabaseZap size={11} /> },
+    {
+      id: "feedback",
+      label: "Feedback",
+      icon: <MessageSquare size={11} />,
+    },
   ];
 
   return (
@@ -457,6 +469,7 @@ const AdminPanel: React.FC = () => {
           {activeTab === "estandarizar" && <StandardizeExercisesContent />}
           {activeTab === "solicitudes" && <RequestsPanel />}
           {activeTab === "datos" && <DataResetPanel />}
+          {activeTab === "feedback" && <FeedbackPanel />}
         </motion.div>
       </AnimatePresence>
     </section>

@@ -272,5 +272,105 @@ async def get_memories() -> dict:
     return await write_tools.get_memories({}, TOKEN)
 
 
+# ---------------------------------------------------------------------------
+# New read tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_workout_count_in_period(start_date: str, end_date: str) -> dict:
+    """Cuenta el número exacto de entrenamientos entre dos fechas (inclusivo).
+
+    start_date / end_date: formato YYYY-MM-DD.
+    Devuelve {count, start_date, end_date}.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.get_workout_count_in_period(
+            {"start_date": start_date, "end_date": end_date}, USER_ID, db
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_workouts_in_period(start_date: str, end_date: str) -> list:
+    """Devuelve los entrenamientos completos con ejercicios y series entre dos fechas.
+
+    start_date / end_date: formato YYYY-MM-DD.
+    Cada workout incluye id, título, fecha, duración en minutos y ejercicios agrupados con sus series.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.get_workouts_in_period(
+            {"start_date": start_date, "end_date": end_date}, USER_ID, db
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_user_profile() -> dict:
+    """Devuelve el perfil del usuario: nombre, altura y último registro de peso y % grasa.
+
+    Útil para contextualizar recomendaciones de carga, IMC o progreso corporal.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.get_user_profile({}, USER_ID, db)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_weight_logs(days: int = 90) -> dict:
+    """Historial de peso corporal y porcentaje de grasa del usuario.
+
+    Devuelve una lista de entradas con fecha, peso (kg) y % grasa (si se registró),
+    más los valores más recientes como campos de acceso rápido.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.get_weight_logs({"days": days}, USER_ID, db)
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# New write tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def log_weight(date: str, weight_kg: float, body_fat_pct: Optional[float] = None) -> dict:
+    """Registra o actualiza el peso corporal y el % de grasa de una fecha concreta.
+
+    Si ya existe un registro para esa fecha, lo sobreescribe (upsert).
+    date: formato YYYY-MM-DD (e.g. '2025-06-06')
+    weight_kg: peso en kilogramos
+    body_fat_pct: porcentaje de grasa corporal (opcional, 1–70)
+    """
+    return await write_tools.log_weight(
+        {"date": date, "weight_kg": weight_kg, "body_fat_pct": body_fat_pct}, TOKEN
+    )
+
+
+@mcp.tool()
+async def delete_weight_log(date: str) -> dict:
+    """Elimina el registro de peso de una fecha concreta (para corregir errores).
+
+    date: formato YYYY-MM-DD
+    """
+    return await write_tools.delete_weight_log({"date": date}, TOKEN)
+
+
 if __name__ == "__main__":
     mcp.run()
