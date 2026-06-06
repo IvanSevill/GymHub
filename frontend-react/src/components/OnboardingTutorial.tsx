@@ -10,6 +10,7 @@ import {
   Dumbbell,
   Heart,
   History,
+  Settings,
   X,
   Zap,
 } from "lucide-react";
@@ -72,6 +73,14 @@ const steps: Step[] = [
     title: "Métricas de Salud Fitbit",
     description:
       "Conecta tu Fitbit desde Ajustes para ver pasos, frecuencia cardíaca, sueño, calorías y zonas activas en un único panel.",
+  },
+  {
+    route: "/settings",
+    icon: <Settings size={18} className="text-slate-300" />,
+    label: "Perfil",
+    title: "Completa tu perfil",
+    description:
+      "Añade tu altura en Ajustes para que GymChat pueda darte recomendaciones más precisas sobre cargas y progreso. Es opcional — puedes saltarte este paso.",
   },
   {
     route: "/",

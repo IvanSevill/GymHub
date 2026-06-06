@@ -8,6 +8,7 @@ export interface User {
   is_root: number;
   has_calendar: boolean;
   fitbit_connected: boolean;
+  height_cm?: number | null;
 }
 
 export interface AuthResponse {
@@ -38,6 +39,10 @@ export const authService = {
   },
   disconnectFitbit: async (): Promise<{ message: string }> => {
     const response = await api.delete<{ message: string }>("/auth/fitbit");
+    return response.data;
+  },
+  updateProfile: async (data: { height_cm?: number }): Promise<User> => {
+    const response = await api.put<User>("/auth/me", data);
     return response.data;
   },
 };
