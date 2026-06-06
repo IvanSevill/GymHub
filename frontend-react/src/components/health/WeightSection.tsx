@@ -118,28 +118,30 @@ const WeightSection: React.FC = () => {
       className="space-y-4"
     >
       {/* Section header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h3 className="text-xl font-black text-white tracking-tight">
-            Peso corporal
-          </h3>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-0.5">
-            Registro manual · últimos {days} días
-          </p>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-xl font-black text-white tracking-tight">
+              Peso corporal
+            </h3>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-0.5">
+              Registro manual · últimos {days} días
+            </p>
+          </div>
+          <button
+            onClick={() => setFormOpen((v) => !v)}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-wider hover:bg-primary hover:text-white transition-all"
+          >
+            <Plus size={12} />
+            Añadir
+          </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="overflow-x-auto scrollbar-none">
           <PeriodSelector
             options={GLOBAL_PERIODS}
             value={days}
             onChange={setDays}
           />
-          <button
-            onClick={() => setFormOpen((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-wider hover:bg-primary hover:text-white transition-all"
-          >
-            <Plus size={12} />
-            Añadir
-          </button>
         </div>
       </div>
 

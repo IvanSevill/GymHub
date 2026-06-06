@@ -439,12 +439,12 @@ const AdminPanel: React.FC = () => {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-1 p-1 bg-black/30 rounded-2xl border border-white/[0.05]">
+      <div className="flex gap-1 p-1 bg-black/30 rounded-2xl border border-white/[0.05] overflow-x-auto scrollbar-none">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+            className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${
               activeTab === tab.id
                 ? "bg-primary text-white shadow-lg shadow-primary/20"
                 : "text-slate-500 hover:text-slate-300"
