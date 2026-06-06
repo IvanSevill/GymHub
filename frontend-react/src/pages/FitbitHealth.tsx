@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import PeriodSelector from "../components/ui/PeriodSelector";
 import { PERIOD_OPTIONS } from "../constants/periods";
 import HealthKpiCards from "../components/health/HealthKpiCards";
 import ActivityCharts from "../components/health/ActivityCharts";
 import SleepCharts from "../components/health/SleepCharts";
-import SleepTable from "../components/health/SleepTable";
-import ActivityTable from "../components/health/ActivityTable";
+import SleepLastEntry from "../components/health/SleepLastEntry";
 import WeightSection from "../components/health/WeightSection";
 import { useFitbitHealthData } from "../components/health/hooks/useFitbitHealthData";
 import NotConnectedState from "../components/health/components/NotConnectedState";
@@ -27,8 +26,6 @@ const FitbitHealth: React.FC = () => {
     syncStatus,
     loading,
     autoSyncing,
-    tablesOpen,
-    setTablesOpen,
     syncData,
   } = useFitbitHealthData(!!user?.fitbit_connected);
 
@@ -135,30 +132,9 @@ const FitbitHealth: React.FC = () => {
 
           <SleepCharts data={currentSleep} />
 
+          <SleepLastEntry data={currentSleep} />
+
           <WeightSection />
-
-          {/* Collapsible raw data tables */}
-          <div className="border border-white/10 rounded-2xl overflow-hidden">
-            <button
-              onClick={() => setTablesOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-6 py-4 text-slate-400 hover:text-white hover:bg-white/[0.02] transition-colors"
-            >
-              <span className="text-sm font-bold">
-                Ver datos detallados ({currentSleep.length} noches ·{" "}
-                {currentDaily.length} días)
-              </span>
-              {tablesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-
-            {tablesOpen && (
-              <div className="border-t border-white/10 p-4 space-y-8">
-                {currentSleep.length > 0 && <SleepTable data={currentSleep} />}
-                {currentDaily.length > 0 && (
-                  <ActivityTable data={currentDaily} />
-                )}
-              </div>
-            )}
-          </div>
         </>
       )}
     </div>
