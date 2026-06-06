@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -24,6 +24,7 @@ class User(Base):
     hashed_password = Column(String, nullable=True)
     picture_url = Column(String, nullable=True)
     is_root = Column(Integer, default=0)
+    height_cm = Column(Float, nullable=True)
 
     workouts = relationship("Workout", back_populates="user")
 
@@ -158,6 +159,20 @@ class SleepLog(Base):
     log_type = Column(String, nullable=True)
 
     user = relationship("User")
+
+
+class WeightLog(Base):
+    """Manual daily weight and body fat % entry."""
+
+    __tablename__ = "weight_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(String, nullable=False)
+    weight_kg = Column(Float, nullable=False)
+    body_fat_pct = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_weight_log_user_date"),)
 
 
 # Suppress unused import warning — datetime is used via Column(DateTime, default=datetime.utcnow)

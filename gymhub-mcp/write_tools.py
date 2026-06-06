@@ -241,5 +241,59 @@ async def get_memories(args: dict, token: str) -> dict:  # noqa: ARG001
             return {"error": str(exc)}
 
 
+async def log_weight(args: dict, token: str) -> dict:
+    """Log or update the user's weight and optional body fat % for a date (upserts by date)."""
+    payload: dict = {
+        "date": args["date"],
+        "weight_kg": float(args["weight_kg"]),
+    }
+    if args.get("body_fat_pct") is not None:
+        payload["body_fat_pct"] = float(args["body_fat_pct"])
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"{_get_backend_url()}/weight",
+                json=payload,
+                headers=_auth_headers(token),
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            return {"ok": True, "date": payload["date"], "weight_kg": payload["weight_kg"]}
+        except httpx.HTTPStatusError as exc:
+            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+
+async def delete_weight_log(args: dict, token: str) -> dict:
+    """Delete the weight log entry for a specific date."""
+    date: str = args["date"]
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(
+                f"{_get_backend_url()}/weight",
+                params={"date": date},
+                headers=_auth_headers(token),
+                timeout=10.0,
+            )
+            r.raise_for_status()
+            entries = r.json()
+            if not entries:
+                return {"ok": False, "error": f"No weight entry found for {date}"}
+            entry_id = entries[0]["id"]
+            r2 = await client.delete(
+                f"{_get_backend_url()}/weight/{entry_id}",
+                headers=_auth_headers(token),
+                timeout=10.0,
+            )
+            r2.raise_for_status()
+            return {"ok": True, "deleted_date": date}
+        except httpx.HTTPStatusError as exc:
+            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+
 # Suppress unused import warning
 _ = _parse_exercise_value

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -16,6 +16,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=True)
     is_root = Column(Integer, default=0)
+    height_cm = Column(Float, nullable=True)
 
 
 class Workout(Base):
@@ -129,3 +130,14 @@ class ChatMemory(Base):
     value = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
+
+
+class WeightLog(Base):
+    __tablename__ = "weight_logs"
+    id = Column(String, primary_key=True, default=_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(String, nullable=False)
+    weight_kg = Column(Float, nullable=False)
+    body_fat_pct = Column(Float, nullable=True)
+    created_at = Column(DateTime, nullable=True)
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_weight_log_user_date"),)
