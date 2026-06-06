@@ -1,3 +1,5 @@
+import { getToken } from "./tokenStore";
+
 const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8001";
 
 export type ChatRole = "user" | "assistant";
@@ -16,14 +18,14 @@ export interface ChatEvent {
 }
 
 function authHeaders(): HeadersInit {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   return token
     ? { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
     : { "Content-Type": "application/json" };
 }
 
 export async function clearHistory(): Promise<void> {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   if (!token) return;
   try {
     const res = await fetch(`${AI_URL}/chat/history`, {
@@ -37,7 +39,7 @@ export async function clearHistory(): Promise<void> {
 }
 
 export async function getHistory(): Promise<ChatMessage[]> {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   if (!token) return [];
   try {
     const res = await fetch(`${AI_URL}/chat/history`, {
@@ -58,7 +60,7 @@ export interface ChatUsage {
 }
 
 export async function getUsage(): Promise<ChatUsage | null> {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   if (!token) return null;
   try {
     const res = await fetch(`${AI_URL}/chat/usage`, {
@@ -79,7 +81,7 @@ export interface ChatMemoryItem {
 }
 
 export async function getMemories(): Promise<ChatMemoryItem[]> {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   if (!token) return [];
   try {
     const res = await fetch(`${AI_URL}/chat/memory`, {
@@ -93,7 +95,7 @@ export async function getMemories(): Promise<ChatMemoryItem[]> {
 }
 
 export async function deleteMemoryItem(id: string): Promise<void> {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   if (!token) return;
   await fetch(`${AI_URL}/chat/memory/${id}`, {
     method: "DELETE",
@@ -104,7 +106,7 @@ export async function deleteMemoryItem(id: string): Promise<void> {
 export async function* streamChat(
   messages: ChatMessage[],
 ): AsyncGenerator<ChatEvent> {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   if (!token) {
     yield {
       type: "error",
@@ -130,7 +132,7 @@ export async function* streamChat(
   } catch {
     yield {
       type: "error",
-      message: "No se pudo conectar con el asistente IA.",
+      message: "No se pudo conectar con GymChat.",
     };
     return;
   }

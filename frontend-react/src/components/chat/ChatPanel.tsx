@@ -378,7 +378,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                 </div>
                 <div>
                   <p className="text-white font-semibold text-sm leading-none">
-                    GymHub AI
+                    GymChat
                   </p>
                   {usage?.is_root ? (
                     <span className="text-xs text-emerald-400 font-medium">
@@ -556,7 +556,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                   </div>
                   <div className="text-center">
                     <p className="text-white font-semibold text-base">
-                      GymHub AI
+                      GymChat
                     </p>
                     <p className="text-slate-400 text-sm mt-1.5 max-w-[260px] leading-relaxed">
                       Pregúntame sobre tus entrenamientos, récords o salud.

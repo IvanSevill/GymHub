@@ -194,7 +194,7 @@ def _system_prompt(name: str, memories: list[dict] | None = None, recent_workout
             workouts_text = "\n\nÚltimos entrenamientos (últimos 7 días):\n" + "\n".join(workout_lines)
 
     return (
-        f"Eres GymHub AI, el asistente personal de fitness de {name}. Hoy es {today}.\n\n"
+        f"Eres GymChat, el asistente personal de fitness de {name}. Hoy es {today}.\n\n"
         "Tienes acceso a su historial de entrenamientos, récords, sueño y salud. "
         "Usa las funciones disponibles para dar respuestas basadas en datos reales.\n\n"
         "Reglas:\n"
@@ -250,7 +250,7 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
             "GYMHUB_TOKEN": user.token,
             "DATABASE_URL": os.getenv("DATABASE_URL", ""),
             "BACKEND_URL": os.getenv("BACKEND_URL", "http://localhost:8000"),
-            "AI_SERVER_URL": os.getenv("AI_SERVER_URL", "http://localhost:8001"),
+            "AI_SERVER_URL": os.getenv("AI_SERVER_URL", f"http://localhost:{os.getenv('PORT', '8001')}"),
         }
 
         client = _get_client()

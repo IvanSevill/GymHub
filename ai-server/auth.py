@@ -38,7 +38,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> AuthUser:
         if not user:
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
 
-        root_emails = os.getenv("ROOT_EMAILS", "").split(",")
+        root_emails = [e.strip() for e in os.getenv("ROOT_EMAILS", "").split(",") if e.strip()]
         is_root = bool(user.is_root) or (email in root_emails)
 
         return AuthUser(
