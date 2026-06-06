@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 import uuid
 from .database import Base
@@ -21,6 +21,7 @@ class User(Base):
     hashed_password = Column(String, nullable=True) # For potential email/password users
     picture_url = Column(String, nullable=True)
     is_root = Column(Integer, default=0) # 0 for regular user, 1 for root/admin
+    height_cm = Column(Float, nullable=True)
 
     tokens = relationship("UserTokens", back_populates="user", uselist=False, cascade="all, delete-orphan")
     workouts = relationship("Workout", back_populates="user", cascade="all, delete-orphan")
@@ -187,3 +188,29 @@ class ExerciseRequest(Base):
     requested_by = relationship("User", foreign_keys=[requested_by_id])
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_id])
     muscle = relationship("Muscle", foreign_keys=[muscle_id])
+
+
+class WeightLog(Base):
+    """Manual daily weight and body fat % log for a user."""
+    __tablename__ = "weight_logs"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(String, nullable=False)      # YYYY-MM-DD
+    weight_kg = Column(Float, nullable=False)
+    body_fat_pct = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_weight_log_user_date"),)
+
+
+class UserFeedback(Base):
+    """Feedback submitted by non-root users, visible to root admins."""
+    __tablename__ = "user_feedback"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    rating = Column(Integer, nullable=True)    # 1–5, optional
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")

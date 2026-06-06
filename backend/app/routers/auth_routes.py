@@ -37,6 +37,7 @@ def _build_user_schema(
         is_root=user.is_root,
         has_calendar=bool(user_tokens and user_tokens.selected_calendar_id),
         fitbit_connected=bool(user_tokens and user_tokens.fitbit_id),
+        height_cm=user.height_cm,
     )
 
 
@@ -296,4 +297,18 @@ async def login_for_access_token(
 @router.get("/me", response_model=schemas.User)
 async def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
     """Return the current authenticated user's profile."""
+    return _build_user_schema(current_user, current_user.tokens)
+
+
+@router.put("/me", response_model=schemas.User)
+async def update_profile(
+    update: schemas.UserUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Update optional user profile fields (height)."""
+    if update.height_cm is not None:
+        current_user.height_cm = update.height_cm
+    db.commit()
+    db.refresh(current_user)
     return _build_user_schema(current_user, current_user.tokens)

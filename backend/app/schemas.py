@@ -171,12 +171,17 @@ class UserCreate(UserBase):
     """Schema for creating a new user (e.g., for email/password sign-up)."""
     password: str = Field(..., min_length=8, description="User's password")
 
+class UserUpdate(BaseModel):
+    """Schema for updating optional user profile fields."""
+    height_cm: Optional[float] = Field(None, description="User's height in centimetres", ge=50, le=300)
+
 class User(UserBase):
     """Schema for returning user details."""
     id: str = Field(..., description="Unique identifier of the user")
     is_root: int = Field(0, description="User's root status (0: regular, 1: root)")
     has_calendar: bool = Field(False, description="Indicates if user has connected a Google Calendar")
     fitbit_connected: bool = Field(False, description="Indicates if user has connected Fitbit")
+    height_cm: Optional[float] = Field(None, description="User's height in centimetres")
 
     class Config:
         orm_mode = True
@@ -225,6 +230,38 @@ class MaxLift(BaseModel):
     max_value: float
     measurement: str
     date: datetime
+
+# Weight Log Schemas
+class WeightLogCreate(BaseModel):
+    date: str = Field(..., description="Date of the entry (YYYY-MM-DD)")
+    weight_kg: float = Field(..., description="Body weight in kilograms", gt=0, le=500)
+    body_fat_pct: Optional[float] = Field(None, description="Body fat percentage", ge=1, le=70)
+
+class WeightLogResponse(BaseModel):
+    id: str
+    date: str
+    weight_kg: float
+    body_fat_pct: Optional[float]
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+# Feedback Schemas
+class FeedbackCreate(BaseModel):
+    message: str = Field(..., min_length=5, description="Feedback message from the user")
+    rating: Optional[int] = Field(None, description="Optional 1–5 rating", ge=1, le=5)
+
+class FeedbackResponse(BaseModel):
+    id: str
+    message: str
+    rating: Optional[int]
+    created_at: datetime
+    user_name: str
+    user_email: str
+
+    class Config:
+        orm_mode = True
 
 
 class AnalyticsSummary(BaseModel):
