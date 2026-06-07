@@ -348,6 +348,7 @@ class ExerciseRequestResponse(BaseModel):
     muscle_name: Optional[str] = None
     status: str
     rejection_reason: Optional[str] = None
+    exercise_id: Optional[str] = None
     created_at: datetime
     reviewed_at: Optional[datetime] = None
     requested_by: ExerciseRequestUserInfo

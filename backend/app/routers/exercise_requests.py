@@ -168,7 +168,10 @@ def approve_request(
         )
         if existing:
             raise HTTPException(409, f"Exercise '{req.exercise_name}' already exists")
-        db.add(models.Exercise(name=req.exercise_name, muscle_id=muscle.id))
+        new_exercise = models.Exercise(name=req.exercise_name, muscle_id=muscle.id)
+        db.add(new_exercise)
+        db.flush()
+        req.exercise_id = new_exercise.id
 
     elif req.type == "muscle_with_exercise":
         muscle = (
@@ -183,7 +186,10 @@ def approve_request(
         )
         if existing:
             raise HTTPException(409, f"Exercise '{req.exercise_name}' already exists")
-        db.add(models.Exercise(name=req.exercise_name, muscle_id=muscle.id))
+        new_exercise = models.Exercise(name=req.exercise_name, muscle_id=muscle.id)
+        db.add(new_exercise)
+        db.flush()
+        req.exercise_id = new_exercise.id
 
     req.status = "approved"
     req.reviewed_by_id = current_user.id

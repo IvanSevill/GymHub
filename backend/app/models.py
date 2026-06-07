@@ -180,6 +180,7 @@ class ExerciseRequest(Base):
     muscle_name = Column(String, nullable=True)
     status = Column(String, default="pending")  # "pending" | "approved" | "rejected"
     rejection_reason = Column(String, nullable=True)
+    exercise_id = Column(String, ForeignKey("exercises.id", ondelete="SET NULL"), nullable=True)
     requested_by_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     reviewed_by_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

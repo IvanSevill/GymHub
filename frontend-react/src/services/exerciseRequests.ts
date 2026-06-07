@@ -16,6 +16,7 @@ export interface ExerciseRequest {
   muscle_name?: string;
   status: "pending" | "approved" | "rejected";
   rejection_reason?: string;
+  exercise_id?: string;
   created_at: string;
   reviewed_at?: string;
   requested_by: ExerciseRequestUserInfo;

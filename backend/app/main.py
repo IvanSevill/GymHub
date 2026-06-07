@@ -36,6 +36,14 @@ with engine.connect() as conn:
         conn.commit()
     except Exception:
         conn.rollback()
+    try:
+        conn.execute(text(
+            "ALTER TABLE exercise_requests ADD COLUMN exercise_id VARCHAR "
+            "REFERENCES exercises(id) ON DELETE SET NULL"
+        ))
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
