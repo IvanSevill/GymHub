@@ -300,59 +300,21 @@ const MuscleRequestModal: React.FC<MuscleModalProps> = ({
   );
 };
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-const StatusBadge: React.FC<{
-  status: ExerciseRequest["status"];
-  deleted?: boolean;
-}> = ({ status, deleted }) => {
-  if (status === "approved" && deleted)
-    return (
-      <span className="flex items-center gap-1 text-[9px] font-black text-slate-500 uppercase tracking-widest">
-        <XCircle size={10} />
-        Eliminado
-      </span>
-    );
-  if (status === "approved")
-    return (
-      <span className="flex items-center gap-1 text-[9px] font-black text-accent uppercase tracking-widest">
-        <CheckCircle2 size={10} />
-        Aprobado
-      </span>
-    );
-  if (status === "rejected")
-    return (
-      <span className="flex items-center gap-1 text-[9px] font-black text-danger uppercase tracking-widest">
-        <XCircle size={10} />
-        Rechazado
-      </span>
-    );
-  return (
-    <span className="flex items-center gap-1 text-[9px] font-black text-amber-400 uppercase tracking-widest">
-      <Clock size={10} />
-      Pendiente
-    </span>
-  );
-};
-
 // ─── Inline Edit Form ─────────────────────────────────────────────────────────
 
 interface InlineEditProps {
   req: ExerciseRequest;
-  muscles: Muscle[];
   onCancel: () => void;
   onSaved: () => void;
 }
 
 const InlineEditForm: React.FC<InlineEditProps> = ({
   req,
-  muscles,
   onCancel,
   onSaved,
 }) => {
   const { addToast } = useToast();
   const [exerciseName, setExerciseName] = useState(req.exercise_name);
-  const [muscleId, setMuscleId] = useState(req.muscle_id ?? "");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -361,7 +323,6 @@ const InlineEditForm: React.FC<InlineEditProps> = ({
     try {
       await exerciseRequestService.updateRequest(req.id, {
         exercise_name: exerciseName.trim(),
-        ...(req.type === "exercise" && muscleId ? { muscle_id: muscleId } : {}),
       });
       addToast("Solicitud actualizada", "success");
       onSaved();
@@ -381,15 +342,9 @@ const InlineEditForm: React.FC<InlineEditProps> = ({
         type="text"
         value={exerciseName}
         onChange={(e) => setExerciseName(e.target.value)}
+        placeholder="Nombre del ejercicio"
         className="w-full px-2.5 py-1.5 bg-white/[0.03] border border-white/10 rounded-lg text-white text-[10px] placeholder-slate-600 focus:outline-none focus:border-primary/40 transition-colors"
       />
-      {req.type === "exercise" && muscles.length > 0 && (
-        <MuscleDropdown
-          muscles={muscles}
-          value={muscleId}
-          onChange={setMuscleId}
-        />
-      )}
       <div className="flex gap-1.5">
         <button
           onClick={onCancel}
@@ -421,7 +376,8 @@ const ExerciseRequestSection: React.FC = () => {
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [showMuscleModal, setShowMuscleModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [acceptedOpen, setAcceptedOpen] = useState(false);
+  const [approvedOpen, setApprovedOpen] = useState(false);
+  const [rejectedOpen, setRejectedOpen] = useState(false);
 
   const loadMuscles = async () => {
     try {
@@ -432,9 +388,6 @@ const ExerciseRequestSection: React.FC = () => {
       setMusclesError(true);
     }
   };
-
-  const exerciseExists = (name: string) =>
-    exercises.some((e) => e.name.toLowerCase() === name.toLowerCase());
 
   const loadData = async () => {
     await Promise.all([
@@ -454,6 +407,17 @@ const ExerciseRequestSection: React.FC = () => {
     loadData();
   }, []);
 
+  // Check if the created exercise still exists in the catalog.
+  // If exercise_id is set (new requests), check by ID — the FK is SET NULL on delete,
+  // so null means the exercise was deleted. For old requests without exercise_id,
+  // fall back to name match.
+  const exerciseStillExists = (req: ExerciseRequest) => {
+    if (req.exercise_id) return exercises.some((e) => e.id === req.exercise_id);
+    return exercises.some(
+      (e) => e.name.toLowerCase() === req.exercise_name.toLowerCase(),
+    );
+  };
+
   const handleDelete = async (id: string) => {
     if (!window.confirm("¿Eliminar esta solicitud pendiente?")) return;
     try {
@@ -468,14 +432,11 @@ const ExerciseRequestSection: React.FC = () => {
     }
   };
 
-  const pendingOrRejected = requests.filter((r) => r.status !== "approved");
-  const approved = requests.filter((r) => r.status === "approved");
-  const approvedActive = approved.filter((r) =>
-    exerciseExists(r.exercise_name),
-  );
-  const approvedDeleted = approved.filter(
-    (r) => !exerciseExists(r.exercise_name),
-  );
+  const pending = requests.filter((r) => r.status === "pending");
+  const rejected = requests.filter((r) => r.status === "rejected");
+  const approved = requests
+    .filter((r) => r.status === "approved")
+    .filter((r) => exerciseStillExists(r));
 
   return (
     <>
@@ -523,14 +484,14 @@ const ExerciseRequestSection: React.FC = () => {
           </button>
         </div>
 
-        {/* Pending / rejected requests */}
-        {pendingOrRejected.length > 0 && (
+        {/* Pendientes */}
+        {pending.length > 0 && (
           <div className="flex flex-col gap-2">
             <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em]">
-              Mis solicitudes
+              Pendientes
             </p>
             <div className="flex flex-col gap-1.5">
-              {pendingOrRejected.map((req) => (
+              {pending.map((req) => (
                 <div
                   key={req.id}
                   className="flex flex-col px-3 py-2 bg-white/[0.02] rounded-xl border border-white/[0.04]"
@@ -543,42 +504,35 @@ const ExerciseRequestSection: React.FC = () => {
                       <span className="text-[9px] text-slate-500 truncate">
                         {req.type === "exercise"
                           ? (req.muscle?.name ?? "—")
-                          : `Nuevo: ${req.muscle_name}`}
+                          : `Nuevo grupo: ${req.muscle_name}`}
                       </span>
-                      {req.status === "rejected" && req.rejection_reason && (
-                        <span className="text-[9px] text-danger/80 truncate">
-                          {req.rejection_reason}
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <StatusBadge status={req.status} />
-                      {req.status === "pending" && (
-                        <>
-                          <button
-                            onClick={() =>
-                              setEditingId(editingId === req.id ? null : req.id)
-                            }
-                            className="p-1 rounded-lg text-slate-500 hover:text-primary hover:bg-primary/10 transition-all"
-                            title="Editar"
-                          >
-                            <Pencil size={11} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(req.id)}
-                            className="p-1 rounded-lg text-slate-500 hover:text-danger hover:bg-danger/10 transition-all"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        </>
-                      )}
+                      <span className="flex items-center gap-1 text-[9px] font-black text-amber-400 uppercase tracking-widest">
+                        <Clock size={10} />
+                        Pendiente
+                      </span>
+                      <button
+                        onClick={() =>
+                          setEditingId(editingId === req.id ? null : req.id)
+                        }
+                        className="p-1 rounded-lg text-slate-500 hover:text-primary hover:bg-primary/10 transition-all"
+                        title="Editar nombre"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(req.id)}
+                        className="p-1 rounded-lg text-slate-500 hover:text-danger hover:bg-danger/10 transition-all"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={11} />
+                      </button>
                     </div>
                   </div>
                   {editingId === req.id && (
                     <InlineEditForm
                       req={req}
-                      muscles={muscles}
                       onCancel={() => setEditingId(null)}
                       onSaved={() => {
                         setEditingId(null);
@@ -592,28 +546,24 @@ const ExerciseRequestSection: React.FC = () => {
           </div>
         )}
 
-        {/* Approved requests — collapsible */}
-        {approved.length > 0 && (
+        {/* Denegadas — collapsible */}
+        {rejected.length > 0 && (
           <div className="flex flex-col gap-2">
             <button
-              onClick={() => setAcceptedOpen((v) => !v)}
+              onClick={() => setRejectedOpen((v) => !v)}
               className="flex items-center gap-2 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] hover:text-slate-400 transition-colors"
             >
               <motion.span
-                animate={{ rotate: acceptedOpen ? 90 : 0 }}
+                animate={{ rotate: rejectedOpen ? 90 : 0 }}
                 transition={{ duration: 0.15 }}
                 className="inline-flex"
               >
                 <ChevronRight size={11} />
               </motion.span>
-              Solicitudes aceptadas ({approvedActive.length}
-              {approvedDeleted.length > 0
-                ? ` · ${approvedDeleted.length} eliminado${approvedDeleted.length > 1 ? "s" : ""}`
-                : ""}
-              )
+              Denegadas ({rejected.length})
             </button>
             <AnimatePresence initial={false}>
-              {acceptedOpen && (
+              {rejectedOpen && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
@@ -622,7 +572,66 @@ const ExerciseRequestSection: React.FC = () => {
                   className="overflow-hidden"
                 >
                   <div className="flex flex-col gap-1.5">
-                    {approvedActive.map((req) => (
+                    {rejected.map((req) => (
+                      <div
+                        key={req.id}
+                        className="flex items-center justify-between px-3 py-2 bg-danger/[0.03] rounded-xl border border-danger/[0.08]"
+                      >
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-[10px] font-black text-white truncate">
+                            {req.exercise_name}
+                          </span>
+                          <span className="text-[9px] text-slate-500 truncate">
+                            {req.type === "exercise"
+                              ? (req.muscle?.name ?? "—")
+                              : `Nuevo grupo: ${req.muscle_name}`}
+                          </span>
+                          {req.rejection_reason && (
+                            <span className="text-[9px] text-danger/70 truncate">
+                              {req.rejection_reason}
+                            </span>
+                          )}
+                        </div>
+                        <span className="flex items-center gap-1 text-[9px] font-black text-danger uppercase tracking-widest shrink-0">
+                          <XCircle size={10} />
+                          Denegada
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* Aprobadas — collapsible, only shows if exercise still in catalog */}
+        {approved.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setApprovedOpen((v) => !v)}
+              className="flex items-center gap-2 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] hover:text-slate-400 transition-colors"
+            >
+              <motion.span
+                animate={{ rotate: approvedOpen ? 90 : 0 }}
+                transition={{ duration: 0.15 }}
+                className="inline-flex"
+              >
+                <ChevronRight size={11} />
+              </motion.span>
+              Aprobadas ({approved.length})
+            </button>
+            <AnimatePresence initial={false}>
+              {approvedOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex flex-col gap-1.5">
+                    {approved.map((req) => (
                       <div
                         key={req.id}
                         className="flex items-center justify-between px-3 py-2 bg-accent/[0.03] rounded-xl border border-accent/[0.08]"
@@ -642,25 +651,10 @@ const ExerciseRequestSection: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <StatusBadge status="approved" />
-                      </div>
-                    ))}
-                    {approvedDeleted.map((req) => (
-                      <div
-                        key={req.id}
-                        className="flex items-center justify-between px-3 py-2 bg-white/[0.01] rounded-xl border border-white/[0.04] opacity-50"
-                      >
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="text-[10px] font-black text-slate-400 truncate line-through">
-                            {req.exercise_name}
-                          </span>
-                          <span className="text-[9px] text-slate-600 truncate">
-                            {req.type === "exercise"
-                              ? (req.muscle?.name ?? "—")
-                              : `Músculo: ${req.muscle_name}`}
-                          </span>
-                        </div>
-                        <StatusBadge status="approved" deleted />
+                        <span className="flex items-center gap-1 text-[9px] font-black text-accent uppercase tracking-widest shrink-0">
+                          <CheckCircle2 size={10} />
+                          Aprobada
+                        </span>
                       </div>
                     ))}
                   </div>
