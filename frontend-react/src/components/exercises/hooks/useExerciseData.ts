@@ -20,16 +20,20 @@ export function useExerciseData(): UseExerciseDataResult {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      exerciseService.getExercises(),
-      analyticsService.getMaxLifts(),
-    ])
-      .then(([exs, lifts]) => {
-        setExercises(exs.sort((a, b) => a.name.localeCompare(b.name)));
-        setPrsMap(Object.fromEntries(lifts.map((l) => [l.exercise_id, l])));
-      })
+    exerciseService
+      .getExercises()
+      .then((exs) =>
+        setExercises(exs.sort((a, b) => a.name.localeCompare(b.name))),
+      )
       .catch(() => addToast("Error al cargar los ejercicios", "error"))
       .finally(() => setLoading(false));
+
+    analyticsService
+      .getMaxLifts()
+      .then((lifts) =>
+        setPrsMap(Object.fromEntries(lifts.map((l) => [l.exercise_id, l]))),
+      )
+      .catch(() => {});
   }, []);
 
   return { exercises, prsMap, selectedMuscleId, setSelectedMuscleId, loading };
