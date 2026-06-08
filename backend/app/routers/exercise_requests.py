@@ -174,11 +174,14 @@ def approve_request(
         req.exercise_id = new_exercise.id
 
     elif req.type == "muscle_with_exercise":
+        normalized_muscle_name = req.muscle_name.strip().lower()
         muscle = (
-            db.query(models.Muscle).filter(models.Muscle.name == req.muscle_name).first()
+            db.query(models.Muscle)
+            .filter(models.Muscle.name == normalized_muscle_name)
+            .first()
         )
         if not muscle:
-            muscle = models.Muscle(name=req.muscle_name)
+            muscle = models.Muscle(name=normalized_muscle_name)
             db.add(muscle)
             db.flush()
         existing = (
