@@ -44,6 +44,44 @@ with engine.connect() as conn:
         conn.commit()
     except Exception:
         conn.rollback()
+    # Backfill: create missing exercises for approved requests where exercise_id is NULL
+    try:
+        orphans = conn.execute(text(
+            "SELECT er.id, er.type, er.exercise_name, er.muscle_id, er.muscle_name "
+            "FROM exercise_requests er "
+            "WHERE er.status = 'approved' AND er.exercise_id IS NULL"
+        )).fetchall()
+        for row in orphans:
+            existing = conn.execute(
+                text("SELECT id FROM exercises WHERE name = :name"),
+                {"name": row.exercise_name},
+            ).fetchone()
+            if existing:
+                ex_id = existing[0]
+            else:
+                muscle_id = row.muscle_id
+                if not muscle_id and row.muscle_name:
+                    m = conn.execute(
+                        text("SELECT id FROM muscles WHERE name = :n"),
+                        {"n": row.muscle_name},
+                    ).fetchone()
+                    if m:
+                        muscle_id = m[0]
+                if not muscle_id:
+                    continue
+                import uuid as _uuid
+                ex_id = str(_uuid.uuid4())
+                conn.execute(
+                    text("INSERT INTO exercises (id, name, muscle_id) VALUES (:id, :name, :muscle_id)"),
+                    {"id": ex_id, "name": row.exercise_name, "muscle_id": muscle_id},
+                )
+            conn.execute(
+                text("UPDATE exercise_requests SET exercise_id = :ex_id WHERE id = :req_id"),
+                {"ex_id": ex_id, "req_id": row.id},
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
