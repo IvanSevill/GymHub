@@ -8,12 +8,15 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from database import Base, engine  # noqa: E402
-from models import ChatMessage, ChatMemory  # noqa: E402, F401 — ensure tables are registered
+from models import ChatMessage, ChatMemory, Goal, NutritionLog, MoodEnergyLog  # noqa: E402, F401 — ensure tables are registered
 from chat import router as chat_router  # noqa: E402
 
 Base.metadata.create_all(bind=engine, tables=[
     Base.metadata.tables["chat_messages"],
     Base.metadata.tables["chat_memories"],
+    Base.metadata.tables["goals"],
+    Base.metadata.tables["nutrition_logs"],
+    Base.metadata.tables["mood_energy_logs"],
 ])
 
 app = FastAPI(title="GymHub AI Server")
