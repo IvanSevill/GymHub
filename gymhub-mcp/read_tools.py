@@ -1,6 +1,8 @@
 """Read tools — query the GymHub database directly via SQLAlchemy ORM."""
 
+import json
 import re
+import statistics
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import desc, func
@@ -610,4 +612,499 @@ def get_weight_logs(args: dict, user_id: str, db: Session) -> dict:
         "logs": logs,
         "latest_weight_kg": logs[-1]["weight_kg"] if logs else None,
         "latest_body_fat_pct": logs[-1]["body_fat_pct"] if logs else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 6 new read tools for GymChat
+# ---------------------------------------------------------------------------
+
+
+def get_goal_progress(args: dict, user_id: str, db: Session) -> dict:
+    """Return progress for all active goals (or a specific one by goal_id)."""
+    goal_id: str | None = args.get("goal_id")
+
+    query = db.query(models.Goal).filter(models.Goal.user_id == user_id)
+    if goal_id:
+        query = query.filter(models.Goal.id == goal_id)
+    else:
+        query = query.filter(models.Goal.status == "active")
+    goals = query.all()
+
+    result = []
+    for g in goals:
+        current_value = None
+        if g.goal_type == "weight":
+            latest = (
+                db.query(models.WeightLog)
+                .filter(models.WeightLog.user_id == user_id)
+                .order_by(models.WeightLog.date.desc())
+                .first()
+            )
+            if latest:
+                current_value = latest.weight_kg
+        elif g.goal_type == "strength":
+            if g.description:
+                sets = (
+                    db.query(models.ExerciseSet.value)
+                    .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
+                    .join(models.Exercise, models.ExerciseSet.exercise_id == models.Exercise.id)
+                    .filter(models.Workout.user_id == user_id)
+                    .filter(models.Exercise.name.ilike(f"%{g.description}%"))
+                    .filter(models.ExerciseSet.value != "")
+                    .all()
+                )
+                if sets:
+                    current_value = max(_parse_exercise_value(s.value) for s in sets)
+        elif g.goal_type == "sleep":
+            cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=14)).strftime("%Y-%m-%d")
+            rows = (
+                db.query(func.avg(models.SleepLog.duration_ms))
+                .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= cutoff)
+                .scalar()
+            )
+            if rows:
+                current_value = round(rows / 3_600_000, 2)
+        elif g.goal_type == "cardio":
+            current_value = None
+
+        pct_complete = None
+        if current_value is not None and g.target_value and g.target_value > 0:
+            pct_complete = round((current_value / g.target_value) * 100, 1)
+
+        result.append({
+            "id": g.id,
+            "goal_type": g.goal_type,
+            "description": g.description,
+            "target_value": g.target_value,
+            "current_value": current_value,
+            "target_date": g.target_date,
+            "metric_unit": g.metric_unit,
+            "pct_complete": pct_complete,
+            "status": g.status,
+        })
+
+    return {"goals": result}
+
+
+def analyze_performance_correlation(args: dict, user_id: str, db: Session) -> dict:
+    """Pearson correlation between two health/performance metrics."""
+    metric1: str = args.get("metric1", "")
+    metric2: str = args.get("metric2", "")
+    days: int = int(args.get("days", 60))
+
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    def _get_series(metric: str) -> dict[str, float]:
+        series: dict[str, float] = {}
+        if metric in ("sleep_duration", "sleep_efficiency"):
+            col = models.SleepLog.duration_ms if metric == "sleep_duration" else models.SleepLog.efficiency
+            rows = (
+                db.query(models.SleepLog.date, col)
+                .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= cutoff)
+                .all()
+            )
+            for date, val in rows:
+                if val is not None:
+                    v = val / 3_600_000 if metric == "sleep_duration" else float(val)
+                    series[date] = v
+        elif metric == "resting_hr":
+            rows = (
+                db.query(models.DailyHealth.date, models.DailyHealth.resting_heart_rate)
+                .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= cutoff)
+                .all()
+            )
+            for date, val in rows:
+                if val and val > 0:
+                    series[date] = float(val)
+        elif metric == "steps":
+            rows = (
+                db.query(models.DailyHealth.date, models.DailyHealth.steps)
+                .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= cutoff)
+                .all()
+            )
+            for date, val in rows:
+                if val and val > 0:
+                    series[date] = float(val)
+        elif metric == "workout_volume":
+            rows = (
+                db.query(models.Workout.start_time, models.ExerciseSet.value)
+                .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
+                .filter(models.Workout.user_id == user_id, models.Workout.start_time >= datetime.strptime(cutoff, "%Y-%m-%d"))
+                .filter(models.ExerciseSet.value != "")
+                .all()
+            )
+            daily_vol: dict[str, float] = {}
+            for start_time, value_str in rows:
+                date_key = start_time.strftime("%Y-%m-%d")
+                daily_vol[date_key] = daily_vol.get(date_key, 0.0) + _parse_exercise_value(value_str)
+            series.update(daily_vol)
+        elif metric == "weight":
+            rows = (
+                db.query(models.WeightLog.date, models.WeightLog.weight_kg)
+                .filter(models.WeightLog.user_id == user_id, models.WeightLog.date >= cutoff)
+                .all()
+            )
+            for date, val in rows:
+                if val:
+                    series[date] = float(val)
+        elif metric in ("mood", "energy"):
+            col = models.MoodEnergyLog.mood_rating if metric == "mood" else models.MoodEnergyLog.energy_rating
+            rows = (
+                db.query(models.MoodEnergyLog.date, col)
+                .filter(models.MoodEnergyLog.user_id == user_id, models.MoodEnergyLog.date >= cutoff)
+                .all()
+            )
+            for date, val in rows:
+                if val is not None:
+                    series[date] = float(val)
+        return series
+
+    s1 = _get_series(metric1)
+    s2 = _get_series(metric2)
+
+    common_dates = sorted(set(s1.keys()) & set(s2.keys()))
+    if len(common_dates) < 3:
+        return {
+            "metric1": metric1,
+            "metric2": metric2,
+            "correlation_r": None,
+            "sample_size": len(common_dates),
+            "interpretation": "Datos insuficientes para calcular correlación (mín. 3 puntos).",
+        }
+
+    v1 = [s1[d] for d in common_dates]
+    v2 = [s2[d] for d in common_dates]
+
+    try:
+        r = statistics.correlation(v1, v2)
+    except statistics.StatisticsError:
+        r = None
+
+    abs_r = abs(r) if r is not None else 0
+    if r is None:
+        interpretation = "No se pudo calcular la correlación."
+    elif abs_r >= 0.7:
+        direction = "positiva" if r > 0 else "negativa"
+        interpretation = f"Correlación {direction} fuerte ({r:.3f})"
+    elif abs_r >= 0.4:
+        direction = "positiva" if r > 0 else "negativa"
+        interpretation = f"Correlación {direction} moderada ({r:.3f})"
+    else:
+        direction = "positiva" if r > 0 else "negativa"
+        interpretation = f"Correlación {direction} débil ({r:.3f})"
+
+    return {
+        "metric1": metric1,
+        "metric2": metric2,
+        "correlation_r": round(r, 4) if r is not None else None,
+        "sample_size": len(common_dates),
+        "interpretation": interpretation,
+    }
+
+
+def predict_performance_trend(args: dict, user_id: str, db: Session) -> dict:
+    """Simple OLS linear regression to predict exercise performance trend."""
+    exercise_name: str = args.get("exercise_name", "")
+    days: int = int(args.get("days", 30))
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+    exercise = (
+        db.query(models.Exercise)
+        .filter(models.Exercise.name.ilike(f"%{exercise_name}%"))
+        .first()
+    )
+    if not exercise:
+        return {"error": f"Exercise not found: {exercise_name}"}
+
+    rows = (
+        db.query(models.Workout.start_time, models.ExerciseSet.value)
+        .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
+        .filter(models.Workout.user_id == user_id)
+        .filter(models.ExerciseSet.exercise_id == exercise.id)
+        .filter(models.Workout.start_time >= cutoff)
+        .filter(models.ExerciseSet.value != "")
+        .filter(models.ExerciseSet.value != "0")
+        .order_by(models.Workout.start_time)
+        .all()
+    )
+
+    daily_max: dict[str, float] = {}
+    for start_time, value_str in rows:
+        val = _parse_exercise_value(value_str)
+        if val > 0:
+            date_key = start_time.strftime("%Y-%m-%d")
+            daily_max[date_key] = max(daily_max.get(date_key, 0.0), val)
+
+    if len(daily_max) < 2:
+        return {
+            "exercise": exercise.name,
+            "data_points": len(daily_max),
+            "slope_per_week": None,
+            "current_max": max(daily_max.values()) if daily_max else None,
+            "projected_max_in_days": None,
+            "trend": "insufficient_data",
+        }
+
+    sorted_dates = sorted(daily_max.keys())
+    values = [daily_max[d] for d in sorted_dates]
+    n = len(values)
+    x_mean = (n - 1) / 2.0
+    y_mean = sum(values) / n
+
+    num = sum((i - x_mean) * (v - y_mean) for i, v in enumerate(values))
+    den = sum((i - x_mean) ** 2 for i in range(n))
+
+    slope = num / den if den != 0 else 0.0
+    slope_per_week = slope * 7
+
+    current_max = values[-1]
+    projected = current_max + slope * 30
+
+    if abs(slope_per_week) < 0.01:
+        trend = "estable"
+    elif slope_per_week > 0:
+        trend = "mejorando"
+    else:
+        trend = "bajando"
+
+    return {
+        "exercise": exercise.name,
+        "data_points": n,
+        "slope_per_week": round(slope_per_week, 4),
+        "current_max": current_max,
+        "projected_max_in_days": round(projected, 2),
+        "trend": trend,
+    }
+
+
+def suggest_recovery_protocol(args: dict, user_id: str, db: Session) -> dict:
+    """Evaluate recovery signals: last 3 workouts, sleep, resting HR."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    workout_cutoff = now - timedelta(days=14)
+    workouts = (
+        db.query(models.Workout)
+        .filter(models.Workout.user_id == user_id, models.Workout.start_time >= workout_cutoff)
+        .order_by(models.Workout.start_time.desc())
+        .limit(3)
+        .all()
+    )
+
+    total_volume = 0.0
+    total_duration = 0.0
+    for w in workouts:
+        for s in w.exercise_sets:
+            total_volume += _parse_exercise_value(s.value)
+        if w.fitbit_data and w.fitbit_data.duration_ms:
+            total_duration += w.fitbit_data.duration_ms / 60000
+        elif w.end_time and w.start_time:
+            total_duration += (w.end_time - w.start_time).total_seconds() / 60
+
+    sleep_cutoff = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    sleep_rows = (
+        db.query(models.SleepLog.efficiency, models.SleepLog.duration_ms)
+        .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= sleep_cutoff)
+        .all()
+    )
+
+    avg_sleep_efficiency = (
+        round(sum(r.efficiency for r in sleep_rows) / len(sleep_rows)) if sleep_rows else None
+    )
+    avg_sleep_duration_h = (
+        round(sum(r.duration_ms for r in sleep_rows) / len(sleep_rows) / 3_600_000, 2) if sleep_rows else None
+    )
+
+    health_cutoff = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    health_rows = (
+        db.query(models.DailyHealth.resting_heart_rate)
+        .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= health_cutoff)
+        .filter(models.DailyHealth.resting_heart_rate > 0)
+        .all()
+    )
+    avg_resting_hr = (
+        round(sum(r.resting_heart_rate for r in health_rows) / len(health_rows)) if health_rows else None
+    )
+
+    sleep_deficit = avg_sleep_duration_h is not None and avg_sleep_duration_h < 7.0
+
+    return {
+        "total_load_kg": round(total_volume, 1),
+        "total_duration_min": round(total_duration, 1),
+        "workout_count": len(workouts),
+        "avg_sleep_efficiency": avg_sleep_efficiency,
+        "avg_sleep_duration_h": avg_sleep_duration_h,
+        "sleep_deficit": sleep_deficit,
+        "avg_resting_hr": avg_resting_hr,
+    }
+
+
+def generate_workout_plan(args: dict, user_id: str, db: Session) -> dict:
+    """Gather data for LLM to build a personalized workout plan."""
+    focus_groups: list = args.get("focus_muscle_groups", [])
+    goal: str = args.get("goal", "")
+    intensity_level: str = args.get("intensity_level", "moderate")
+
+    exercises_by_muscle = {}
+    for muscle_name in focus_groups:
+        exercises = (
+            db.query(models.Exercise.name)
+            .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
+            .filter(models.Muscle.name.ilike(f"%{muscle_name}%"))
+            .all()
+        )
+        exercises_by_muscle[muscle_name] = [e.name for e in exercises]
+
+    prs = []
+    for muscle_name in focus_groups:
+        pr_rows = (
+            db.query(
+                models.Exercise.name,
+                models.ExerciseSet.value,
+                models.ExerciseSet.measurement,
+                models.Workout.start_time,
+            )
+            .join(models.ExerciseSet, models.Exercise.id == models.ExerciseSet.exercise_id)
+            .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
+            .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
+            .filter(models.Workout.user_id == user_id)
+            .filter(models.Muscle.name.ilike(f"%{muscle_name}%"))
+            .filter(models.ExerciseSet.value != "")
+            .filter(models.ExerciseSet.value != "0")
+            .all()
+        )
+        pr_map: dict = {}
+        for ex_name, val, meas, _ in pr_rows:
+            v = _parse_exercise_value(val)
+            if v > 0 and (ex_name not in pr_map or v > pr_map[ex_name]["value"]):
+                pr_map[ex_name] = {"value": v, "measurement": meas}
+        for ex_name, data in pr_map.items():
+            prs.append({"exercise": ex_name, "max_value": data["value"], "unit": data["measurement"]})
+
+    days = 90
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    balance_rows = (
+        db.query(models.Muscle.name, func.sum(_parse_exercise_value(models.ExerciseSet.value)))
+        .join(models.Exercise, models.Muscle.id == models.Exercise.muscle_id)
+        .join(models.ExerciseSet, models.Exercise.id == models.ExerciseSet.exercise_id)
+        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
+        .filter(models.Workout.user_id == user_id, models.Workout.start_time >= cutoff)
+        .filter(models.ExerciseSet.value != "")
+        .group_by(models.Muscle.name)
+        .all()
+    )
+    muscle_balance = {name: round(float(vol), 1) for name, vol in balance_rows if vol is not None}
+
+    active_goals = (
+        db.query(models.Goal)
+        .filter(models.Goal.user_id == user_id, models.Goal.status == "active")
+        .all()
+    )
+    goals_data = [
+        {"goal_type": g.goal_type, "description": g.description, "target_value": g.target_value}
+        for g in active_goals
+    ]
+
+    return {
+        "focus_muscle_groups": focus_groups,
+        "goal": goal,
+        "intensity_level": intensity_level,
+        "exercises_by_muscle": exercises_by_muscle,
+        "personal_records": prs,
+        "muscle_balance": muscle_balance,
+        "active_goals": goals_data,
+    }
+
+
+def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> dict:
+    """Assess overtraining risk based on volume, HR, sleep, and mood trends."""
+    days: int = int(args.get("days", 14))
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now - timedelta(days=days)
+    mid = now - timedelta(days=days // 2)
+
+    recent_volume = _compute_volume(db, user_id, mid, now)
+    previous_volume = _compute_volume(db, user_id, cutoff, mid)
+
+    recent_count = _compute_workout_count(db, user_id, mid, now)
+    previous_count = _compute_workout_count(db, user_id, cutoff, mid)
+
+    risk_factors = []
+    if previous_volume > 0 and recent_volume > previous_volume * 1.2:
+        risk_factors.append(
+            f"Aumento de volumen >20% ({previous_volume:.0f} → {recent_volume:.0f} kg)"
+        )
+
+    health_cutoff = (now - timedelta(days=14)).strftime("%Y-%m-%d")
+    health_rows = (
+        db.query(models.DailyHealth.date, models.DailyHealth.resting_heart_rate)
+        .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= health_cutoff)
+        .filter(models.DailyHealth.resting_heart_rate > 0)
+        .order_by(models.DailyHealth.date)
+        .all()
+    )
+    if len(health_rows) >= 4:
+        first_hr = sum(r.resting_heart_rate for r in health_rows[: len(health_rows) // 2]) / (len(health_rows) // 2)
+        last_hr = sum(r.resting_heart_rate for r in health_rows[len(health_rows) // 2 :]) / (len(health_rows) - len(health_rows) // 2)
+        if last_hr > first_hr * 1.05:
+            risk_factors.append(
+                f"FC en reposo en aumento ({first_hr:.0f} → {last_hr:.0f} bpm)"
+            )
+
+    sleep_cutoff = (now - timedelta(days=14)).strftime("%Y-%m-%d")
+    sleep_rows = (
+        db.query(models.SleepLog.efficiency)
+        .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= sleep_cutoff)
+        .all()
+    )
+    if sleep_rows:
+        avg_eff = sum(r.efficiency for r in sleep_rows) / len(sleep_rows)
+        if avg_eff < 80:
+            risk_factors.append(f"Eficiencia de sueño baja ({avg_eff:.0f}%)")
+
+    mood_rows = (
+        db.query(models.MoodEnergyLog.mood_rating, models.MoodEnergyLog.energy_rating)
+        .filter(models.MoodEnergyLog.user_id == user_id, models.MoodEnergyLog.date >= sleep_cutoff)
+        .all()
+    )
+    if mood_rows:
+        avg_mood = sum(r.mood_rating for r in mood_rows) / len(mood_rows)
+        avg_energy = sum(r.energy_rating for r in mood_rows) / len(mood_rows)
+        if avg_mood < 4:
+            risk_factors.append(f"Estado de ánimo bajo ({avg_mood:.1f}/10)")
+        if avg_energy < 4:
+            risk_factors.append(f"Nivel de energía bajo ({avg_energy:.1f}/10)")
+
+    if len(risk_factors) >= 3:
+        risk_level = "alto"
+    elif len(risk_factors) >= 1:
+        risk_level = "moderado"
+    else:
+        risk_level = "bajo"
+
+    recommendations = []
+    if "volumen" in " ".join(risk_factors).lower():
+        recommendations.append("Reducir el volumen de entrenamiento un 20% esta semana.")
+    if "sueño" in " ".join(risk_factors).lower():
+        recommendations.append("Priorizar descanso: mínimo 7-8 horas de sueño.")
+    if "FC" in " ".join(risk_factors):
+        recommendations.append("Tomar una semana de descarga o actividad ligera.")
+    if "ánimo" in " ".join(risk_factors).lower() or "energía" in " ".join(risk_factors).lower():
+        recommendations.append("Considerar días de recuperación activa y revisar nutrición.")
+    if not recommendations:
+        recommendations.append("Mantener la rutina actual. Los indicadores son positivos.")
+
+    return {
+        "risk_level": risk_level,
+        "risk_factors": risk_factors,
+        "recommendations": recommendations,
+        "data_summary": {
+            "recent_workout_count": recent_count,
+            "previous_workout_count": previous_count,
+            "recent_volume_kg": round(recent_volume, 1),
+            "previous_volume_kg": round(previous_volume, 1),
+            "avg_sleep_efficiency": round(avg_eff, 1) if sleep_rows else None,
+            "avg_mood": round(avg_mood, 1) if mood_rows else None,
+            "avg_energy": round(avg_energy, 1) if mood_rows else None,
+        },
     }

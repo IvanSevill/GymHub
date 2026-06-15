@@ -408,11 +408,11 @@ const ExerciseRequestSection: React.FC = () => {
   }, []);
 
   // Check if the created exercise still exists in the catalog.
-  // If exercise_id is set (new requests), check by ID — the FK is SET NULL on delete,
-  // so null means the exercise was deleted. For old requests without exercise_id,
-  // fall back to name match.
+  // The FK is SET NULL on delete, so if exercise_id is still set the exercise
+  // definitely exists in the DB — no need to verify against the client list.
+  // For old requests without exercise_id, fall back to name match.
   const exerciseStillExists = (req: ExerciseRequest) => {
-    if (req.exercise_id) return exercises.some((e) => e.id === req.exercise_id);
+    if (req.exercise_id != null) return true;
     return exercises.some(
       (e) => e.name.toLowerCase() === req.exercise_name.toLowerCase(),
     );

@@ -6,7 +6,6 @@ import {
   Bot,
   Brain,
   Check,
-  History,
   Loader2,
   Pencil,
   Plus,
@@ -19,7 +18,6 @@ import {
   type ChatMemoryItem,
   type ChatMessage,
   type ChatUsage,
-  clearHistory,
   deleteMemoryItem,
   getHistory,
   getMemories,
@@ -27,7 +25,7 @@ import {
   saveMemoryItem,
   streamChat,
 } from "../../services/chat";
-import { useToast } from "../../context/ToastContext";
+import { SkeletonBlock } from "../ui/Skeleton";
 
 const AI_HEALTH_URL = `${import.meta.env.VITE_AI_URL ?? "http://localhost:8001"}/health`;
 
@@ -118,7 +116,6 @@ const AssistantBubble: React.FC<{ content: string; cursor?: boolean }> = ({
 );
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
-  const { addToast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -129,6 +126,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [memories, setMemories] = useState<ChatMemoryItem[]>([]);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [memFormOpen, setMemFormOpen] = useState(false);
   const [memFormKey, setMemFormKey] = useState("");
   const [memFormValue, setMemFormValue] = useState("");
@@ -212,8 +210,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
   useEffect(() => {
     if (!open || !aiReady || hasLoadedHistoryRef.current) return;
     hasLoadedHistoryRef.current = true;
+    setLoadingHistory(true);
     getHistory().then((history) => {
       if (history.length > 0) setMessages(history);
+      setLoadingHistory(false);
     });
     getUsage().then(setUsage);
     getMemories().then(setMemories);
@@ -249,12 +249,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
 
   const refreshUsage = () => {
     getUsage().then(setUsage);
-  };
-
-  const handleLoadHistory = async () => {
-    const history = await getHistory();
-    setMessages(history);
-    refreshUsage();
   };
 
   const handleSend = async () => {
@@ -329,17 +323,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const handleClearHistory = async () => {
-    try {
-      await clearHistory();
-      setMessages([]);
-      setErrorMessage(null);
-      setStreamingContent("");
-      hasLoadedHistoryRef.current = false;
-      // Do NOT refresh usage — the timer must keep counting down
-    } catch {
-      addToast("Error al borrar el historial", "error");
-    }
+  const handleClearHistory = () => {
+    setMessages([]);
+    setErrorMessage(null);
+    setStreamingContent("");
+    hasLoadedHistoryRef.current = false;
   };
 
   const rateLimitReached =
@@ -426,16 +414,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                     title="Memoria"
                   >
                     <Brain size={15} />
-                  </button>
-                )}
-                {aiReady && (
-                  <button
-                    onClick={handleLoadHistory}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-primary hover:bg-white/8 transition-colors"
-                    aria-label="Cargar historial"
-                    title="Cargar historial"
-                  >
-                    <History size={15} />
                   </button>
                 )}
                 {messages.length > 0 && (
@@ -607,7 +585,34 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
 
             {/* Messages area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {isEmpty && aiWaking && !aiReady ? (
+              {loadingHistory && isEmpty ? (
+                /* Loading skeleton while history fetches */
+                <div className="flex flex-col gap-3 py-4">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className={`flex ${i % 2 === 0 ? "justify-start" : "justify-end"}`}
+                    >
+                      <div
+                        className={`${
+                          i % 2 === 0 ? "mr-auto" : "ml-auto"
+                        } max-w-[80%] px-4 py-3 rounded-2xl ${
+                          i % 2 === 0
+                            ? "rounded-tl-sm bg-white/5 border border-white/8"
+                            : "rounded-tr-sm bg-primary/20 border border-primary/20"
+                        }`}
+                      >
+                        <div className="flex flex-col gap-2">
+                          <SkeletonBlock
+                            className={`h-3 ${["w-3/4", "w-1/2", "w-2/3"][i % 3]}`}
+                          />
+                          <SkeletonBlock className="h-3 w-1/3" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : isEmpty && aiWaking && !aiReady ? (
                 /* Wakeup state — ai-server cold start on Render */
                 <div className="flex flex-col items-center justify-center h-full gap-4">
                   <Loader2 size={28} className="text-primary animate-spin" />

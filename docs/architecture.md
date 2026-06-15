@@ -77,7 +77,7 @@ Key libraries: TanStack Query (server state), Recharts v3 (charts), Framer Motio
 
 Standalone FastAPI service on port 8001. Uses the same PostgreSQL/SQLite database as the backend (read-only for most operations) and validates the same JWT tokens.
 
-- **`main.py`** — Bootstrap: loads `.env`, creates `chat_messages` table on startup, configures CORS for the frontend origin, exposes `/health`.
+- **`main.py`** — Bootstrap: loads `.env`, creates `chat_messages`, `goals`, `nutrition_logs`, `mood_energy_logs` tables on startup, configures CORS for the frontend origin, exposes `/health`.
 - **`auth.py`** — Decodes JWT tokens issued by `backend/app/auth.py` (same `SECRET_KEY`). Returns an `AuthUser` dataclass with `id`, `name`, `token`, `is_root`.
 - **`chat.py`** — Four endpoints:
   - `POST /chat` — validates rate limit, then returns a `text/event-stream` SSE response. SSE event types: `thinking`, `text`, `error`, `done`.
@@ -86,8 +86,10 @@ Standalone FastAPI service on port 8001. Uses the same PostgreSQL/SQLite databas
   - `GET /chat/usage` — returns `{used, limit, reset_hours, is_root}` for rate-limit display.
   
   The streaming generator spawns a MCP subprocess per request via `stdio_client`, converts MCP tool schemas to Gemini `FunctionDeclaration` objects, and runs a tool-call loop (max 6 iterations).
-- **`chat_history.py`** — DB persistence: `save_message`, `get_history` (last 10 messages, oldest first), `count_recent_user_messages` (rate-limit window: 5 messages / 2 hours), `delete_history`.
-- **`models.py`** — Read-only mirror of the main backend's ORM models (Workout, Exercise, etc.) plus the `ChatMessage` table owned by this service.
+  
+  The **system prompt** now enforces a strict fitness-coach personality: direct, data-driven, demanding but fair. Off-topic questions get an in-character refusal. Mentions goals, nutrition, and mood/energy tracking as available features.
+- **`chat_history.py`** — DB persistence: `save_message`, `get_history` (last 10 messages, oldest first), `count_recent_user_messages` (rate-limit window: 5 messages / 2 hours), `delete_history`. Delete only removes messages older than the rate-limit window (frontend delete now only clears local state).
+- **`models.py`** — Read-only mirror of the main backend's ORM models (Workout, Exercise, etc.) plus the `ChatMessage` table owned by this service. Also defines `Goal`, `NutritionLog`, and `MoodEnergyLog` tables for the new tracking features.
 
 ---
 
@@ -95,9 +97,9 @@ Standalone FastAPI service on port 8001. Uses the same PostgreSQL/SQLite databas
 
 Model Context Protocol server launched as a subprocess by `ai-server` (one instance per chat request, stdio transport). Receives `GYMHUB_USER_ID`, `GYMHUB_TOKEN`, `DATABASE_URL`, and `BACKEND_URL` via environment variables injected at spawn time.
 
-- **`server.py`** — FastMCP entry point, registers all 13 tools.
-- **`read_tools.py`** — 9 read tools that query the DB directly via SQLAlchemy (no HTTP round-trip).
-- **`write_tools.py`** — 4 write tools that call the backend REST API via `httpx` using the user's Bearer token.
+- **`server.py`** — FastMCP entry point, registers 22 tools (13 original + 6 new reads + 3 new writes).
+- **`read_tools.py`** — 15 read tools that query the DB directly via SQLAlchemy (no HTTP round-trip).
+- **`write_tools.py`** — 7 write tools: 4 call the backend REST API via `httpx`, 3 access the DB directly (set_goal, log_nutrition, log_mood_and_energy).
 
 | Tool | Type | Description |
 |---|---|---|
@@ -110,7 +112,24 @@ Model Context Protocol server launched as a subprocess by `ai-server` (one insta
 | `get_daily_health` | read | Fitbit daily activity (steps, calories, AZM) |
 | `get_sleep_logs` | read | Fitbit sleep records with stage breakdown |
 | `get_muscle_balance` | read | Weekly training volume per muscle group |
+| `get_workout_count_in_period` | read | Count workouts between two dates |
+| `get_workouts_in_period` | read | Detail workouts between two dates |
+| `get_user_profile` | read | Name, height, latest weight |
+| `get_weight_logs` | read | Weight and body fat history |
+| `get_goal_progress` | read | Active goals with current vs target value |
+| `analyze_performance_correlation` | read | Pearson r between two health/performance metrics |
+| `predict_performance_trend` | read | OLS linear trend for exercise performance |
+| `suggest_recovery_protocol` | read | Recovery signals from workouts, sleep, HR |
+| `generate_workout_plan` | read | Data bundle for LLM to build a custom plan |
+| `get_overtraining_risk_assessment` | read | Risk level from volume, HR, sleep, mood trends |
 | `create_workout` | write | Create workout with exercises and sets |
 | `add_set_to_workout` | write | Append a set to an existing workout |
 | `sync_pending_cardio` | write | Upload Fitbit cardio without a GymHub workout |
 | `sync_fitbit_to_workout` | write | Associate Fitbit data with a specific workout |
+| `save_memory` | write | Save a memory fact about the user |
+| `get_memories` | write | Retrieve all stored memories |
+| `log_weight` | write | Log/update body weight for a date |
+| `delete_weight_log` | write | Delete a weight log entry |
+| `set_goal` | write | Create/update a fitness goal (upsert by type) |
+| `log_nutrition` | write | Log a meal with foods and macros |
+| `log_mood_and_energy` | write | Log daily mood and energy (upsert by date) |

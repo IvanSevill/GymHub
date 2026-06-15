@@ -372,5 +372,213 @@ async def delete_weight_log(date: str) -> dict:
     return await write_tools.delete_weight_log({"date": date}, TOKEN)
 
 
+# ---------------------------------------------------------------------------
+# New read tools (goals, analytics, recovery, planning)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_goal_progress(goal_id: Optional[str] = None) -> dict:
+    """Progreso de los objetivos de fitness del usuario.
+
+    Si se especifica goal_id devuelve solo ese objetivo; si no, todos los activos.
+    Para cada objetivo calcula el valor actual según el tipo (peso, fuerza, sueño, etc.)
+    e incluye el porcentaje completado.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.get_goal_progress({"goal_id": goal_id}, USER_ID, db)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def analyze_performance_correlation(metric1: str, metric2: str, days: int = 60) -> dict:
+    """Correlación de Pearson entre dos métricas de salud/rendimiento.
+
+    Métricas disponibles: sleep_duration, sleep_efficiency, resting_hr, steps,
+    workout_volume, weight, mood, energy.
+    Devuelve el coeficiente r, tamaño de muestra e interpretación en español.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.analyze_performance_correlation(
+            {"metric1": metric1, "metric2": metric2, "days": days}, USER_ID, db
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def predict_performance_trend(exercise_name: str, days: int = 30) -> dict:
+    """Predice la tendencia de rendimiento para un ejercicio mediante regresión lineal.
+
+    Devuelve la pendiente semanal, el valor máximo actual, la proyección futura
+    y la dirección de la tendencia (mejorando/estable/bajando).
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.predict_performance_trend(
+            {"exercise_name": exercise_name, "days": days}, USER_ID, db
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def suggest_recovery_protocol(reason: str = "") -> dict:
+    """Evalúa señales de recuperación y sugiere un protocolo de recuperación.
+
+    Analiza últimos 3 entrenamientos (volumen + duración), sueño (7 días) y
+    frecuencia cardíaca en reposo para detectar fatiga acumulada.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.suggest_recovery_protocol({"reason": reason}, USER_ID, db)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def generate_workout_plan(
+    duration_weeks: int,
+    focus_muscle_groups: list,
+    goal: str,
+    intensity_level: str = "moderate",
+) -> dict:
+    """Genera un plan de entrenamiento personalizado basado en datos reales del usuario.
+
+    Consulta ejercicios disponibles por grupo muscular, PRs del usuario,
+    equilibrio muscular y objetivos activos. Devuelve datos estructurados
+    para que el LLM construya el plan.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.generate_workout_plan(
+            {
+                "duration_weeks": duration_weeks,
+                "focus_muscle_groups": focus_muscle_groups,
+                "goal": goal,
+                "intensity_level": intensity_level,
+            },
+            USER_ID,
+            db,
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_overtraining_risk_assessment(days: int = 14) -> dict:
+    """Evalúa el riesgo de sobreentrenamiento del usuario.
+
+    Analiza tendencias de volumen de entrenamiento, FC en reposo, eficiencia de sueño
+    y estado de ánimo/energía. Devuelve nivel de riesgo (bajo/moderado/alto),
+    factores detectados y recomendaciones.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return read_tools.get_overtraining_risk_assessment(
+            {"days": days}, USER_ID, db
+        )
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# New write tools (goals, nutrition, mood — DB direct, no HTTP)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def set_goal(
+    goal_type: str,
+    target_value: Optional[float] = None,
+    target_date: Optional[str] = None,
+    metric_unit: Optional[str] = None,
+    description: str = "",
+) -> dict:
+    """Crea o actualiza un objetivo de fitness para el usuario.
+
+    goal_type: weight, strength, sleep, cardio, custom
+    Si ya existe un objetivo activo del mismo tipo, lo actualiza.
+    """
+    return await write_tools.set_goal(
+        {
+            "goal_type": goal_type,
+            "target_value": target_value,
+            "target_date": target_date,
+            "metric_unit": metric_unit,
+            "description": description,
+        },
+        USER_ID,
+    )
+
+
+@mcp.tool()
+async def log_nutrition(
+    date: str,
+    meal_type: str,
+    food_items: list,
+    calories: Optional[int] = None,
+    protein_g: Optional[float] = None,
+    carbs_g: Optional[float] = None,
+    fats_g: Optional[float] = None,
+) -> dict:
+    """Registra una comida con alimentos y macros para una fecha concreta.
+
+    date: formato YYYY-MM-DD
+    meal_type: breakfast, lunch, dinner, snack
+    food_items: lista de strings con los alimentos consumidos
+    """
+    return await write_tools.log_nutrition(
+        {
+            "date": date,
+            "meal_type": meal_type,
+            "food_items": food_items,
+            "calories": calories,
+            "protein_g": protein_g,
+            "carbs_g": carbs_g,
+            "fats_g": fats_g,
+        },
+        USER_ID,
+    )
+
+
+@mcp.tool()
+async def log_mood_and_energy(
+    date: str,
+    mood_rating: int,
+    energy_rating: int,
+    notes: Optional[str] = None,
+) -> dict:
+    """Registra el estado de ánimo y nivel de energía para una fecha.
+
+    mood_rating y energy_rating: valores de 1 a 10.
+    Si ya existe un registro para esa fecha, lo actualiza (upsert).
+    """
+    return await write_tools.log_mood_and_energy(
+        {
+            "date": date,
+            "mood_rating": mood_rating,
+            "energy_rating": energy_rating,
+            "notes": notes,
+        },
+        USER_ID,
+    )
+
+
 if __name__ == "__main__":
     mcp.run()
