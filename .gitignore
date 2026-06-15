@@ -64,3 +64,17 @@ SESSION_SUMMARY.md
 
 # CodeGraph per-project index (regeneratable)
 .codegraph/
+
+# Accidental backend npm artifacts
+backend/package.json
+backend/package-lock.json
+
+# Knowledge graph output (regenerated on each update)
+graphify-out/
+
+# Scale testing / unrelated experiments
+prueba_bascula/
+
+# Local opencode agent config
+frontend-react/.opencode/
+frontend-react/AGENTS.md
