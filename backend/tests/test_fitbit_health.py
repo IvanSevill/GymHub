@@ -1,6 +1,7 @@
 """Tests for fitbit_health.py — helper functions and route endpoints."""
 import uuid
 from datetime import datetime
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -215,3 +216,186 @@ async def test_fitbit_daily_empty(client, auth_headers):
     resp = await client.get("/fitbit/daily", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# _upsert_sleep — invalid datetime branch (lines 93-94)
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_sleep_invalid_datetime_falls_back():
+    """Invalid startTime/endTime strings are handled gracefully — entry still saved."""
+    db = _make_db()
+    user = _new_user(db)
+    entry = {
+        "logId": 55555,
+        "dateOfSleep": "2026-05-01",
+        "startTime": "not-a-date",
+        "endTime": "also-not-a-date",
+        "efficiency": 85,
+        "levels": {"summary": {}},
+    }
+    result = _upsert_sleep(db, user.id, entry)
+    assert result is True
+    db.commit()
+    log = db.query(models.SleepLog).filter(models.SleepLog.fitbit_log_id == "55555").first()
+    assert log is not None
+    assert log.start_time is None
+    assert log.end_time is None
+
+
+# ---------------------------------------------------------------------------
+# _sync_sleep_range — via mocked fitbit_utils.get_sleep_list (lines 133-145)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_sleep_range_saves_entries():
+    db = _make_db()
+    user = _new_user(db)
+    tokens = models.UserTokens(
+        user_id=user.id,
+        fitbit_access_token="fake",
+        fitbit_refresh_token="fake-r",
+    )
+    db.add(tokens)
+    db.commit()
+
+    from app.routers.fitbit_health import _sync_sleep_range
+
+    mock_entries = [
+        {
+            "logId": 100001,
+            "dateOfSleep": "2026-06-10",
+            "efficiency": 88,
+            "levels": {"summary": {"deep": {"minutes": 60}}},
+        },
+        {
+            "logId": 100002,
+            "dateOfSleep": "2026-06-09",
+            "efficiency": 82,
+            "levels": {"summary": {}},
+        },
+    ]
+
+    with patch("app.routers.fitbit_health.fitbit_utils.get_sleep_list", return_value=mock_entries):
+        saved = _sync_sleep_range(db, tokens, user.id, "2026-06-01", "2026-06-15")
+
+    assert saved == 2
+    db.commit()
+    assert db.query(models.SleepLog).filter(models.SleepLog.user_id == user.id).count() == 2
+
+
+def test_sync_sleep_range_stops_outside_window():
+    db = _make_db()
+    user = _new_user(db)
+    tokens = models.UserTokens(
+        user_id=user.id, fitbit_access_token="fake", fitbit_refresh_token="fake-r"
+    )
+    db.add(tokens)
+    db.commit()
+
+    from app.routers.fitbit_health import _sync_sleep_range
+
+    mock_entries = [
+        {"logId": 200001, "dateOfSleep": "2026-06-15", "efficiency": 90, "levels": {"summary": {}}},
+        {"logId": 200002, "dateOfSleep": "2026-05-01", "efficiency": 80, "levels": {"summary": {}}},
+    ]
+
+    with patch("app.routers.fitbit_health.fitbit_utils.get_sleep_list", return_value=mock_entries):
+        saved = _sync_sleep_range(db, tokens, user.id, "2026-06-10", "2026-06-16")
+
+    assert saved == 1  # second entry is before from_date → loop breaks
+
+
+# ---------------------------------------------------------------------------
+# _sync_daily_range — via mocked time series (lines 157-194)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_daily_range_saves_days():
+    db = _make_db()
+    user = _new_user(db)
+    tokens = models.UserTokens(
+        user_id=user.id, fitbit_access_token="fake", fitbit_refresh_token="fake-r"
+    )
+    db.add(tokens)
+    db.commit()
+
+    from app.routers.fitbit_health import _sync_daily_range
+
+    ts_rows = [
+        {"dateTime": "2026-06-10", "value": "8000"},
+        {"dateTime": "2026-06-11", "value": "10000"},
+    ]
+
+    with (
+        patch("app.routers.fitbit_health.fitbit_utils.get_activity_time_series", return_value=ts_rows),
+        patch("app.routers.fitbit_health.fitbit_utils.get_resting_hr_time_series", return_value={}),
+    ):
+        days = _sync_daily_range(db, tokens, user.id, "2026-06-10", "2026-06-11")
+
+    assert days == 2
+
+
+def test_sync_daily_range_with_resting_hr():
+    db = _make_db()
+    user = _new_user(db)
+    tokens = models.UserTokens(
+        user_id=user.id, fitbit_access_token="fake", fitbit_refresh_token="fake-r"
+    )
+    db.add(tokens)
+    db.commit()
+
+    from app.routers.fitbit_health import _sync_daily_range
+
+    with (
+        patch(
+            "app.routers.fitbit_health.fitbit_utils.get_activity_time_series",
+            return_value=[{"dateTime": "2026-06-12", "value": "7500"}],
+        ),
+        patch(
+            "app.routers.fitbit_health.fitbit_utils.get_resting_hr_time_series",
+            return_value={"2026-06-12": 58},
+        ),
+    ):
+        days = _sync_daily_range(db, tokens, user.id, "2026-06-12", "2026-06-12")
+
+    assert days == 1
+    db.commit()
+    entry = (
+        db.query(models.DailyHealth)
+        .filter(models.DailyHealth.user_id == user.id, models.DailyHealth.date == "2026-06-12")
+        .first()
+    )
+    assert entry is not None
+    assert entry.resting_heart_rate == 58
+
+
+# ---------------------------------------------------------------------------
+# sync_health_data route — with Fitbit tokens (lines 215-237)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_fitbit_sync_with_tokens(client, auth_headers, db):
+    user = db.query(models.User).filter(models.User.email == "user@test.com").first()
+    tokens = models.UserTokens(
+        user_id=user.id,
+        fitbit_access_token="fake-fitbit",
+        fitbit_refresh_token="fake-refresh",
+    )
+    db.add(tokens)
+    db.commit()
+
+    with (
+        patch("app.routers.fitbit_health._sync_sleep_range", return_value=5),
+        patch("app.routers.fitbit_health._sync_daily_range", return_value=30),
+    ):
+        resp = await client.post("/fitbit/sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["sleep_synced"] == 5
+    assert data["days_synced"] == 30
+    assert "from_date" in data
+    assert "to_date" in data
