@@ -448,3 +448,254 @@ async def test_get_exercise_media_no_api_keys(client, auth_headers, sample_exerc
 async def test_get_exercise_media_not_found(client, auth_headers):
     resp = await client.get("/exercises/nonexistent-id/media", headers=auth_headers)
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# _fetch_youtube_videos — with API key (lines 17-44)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_fetch_youtube_videos_with_key(client, auth_headers, db, sample_exercise):
+    """With YOUTUBE_API_KEY set, fetches and caches YouTube URLs."""
+    import os
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "items": [
+            {"id": {"videoId": "vid1aaa"}},
+            {"id": {"videoId": "vid2bbb"}},
+        ]
+    }
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+    mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_client_instance.get = AsyncMock(return_value=mock_response)
+
+    with (
+        patch.dict(os.environ, {"YOUTUBE_API_KEY": "fake-yt-key"}),
+        patch("app.routers.exercises.httpx.AsyncClient", return_value=mock_client_instance),
+    ):
+        resp = await client.get(f"/exercises/{sample_exercise.id}/media", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["video_url_1"] is not None
+    assert "vid1aaa" in data["video_url_1"]
+
+
+@pytest.mark.anyio
+async def test_fetch_youtube_videos_exception_handled(client, auth_headers, db, sample_exercise):
+    """Exception during YouTube fetch is caught and returns None URLs."""
+    import os
+    from unittest.mock import AsyncMock, patch
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+    mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_client_instance.get = AsyncMock(side_effect=Exception("network error"))
+
+    with (
+        patch.dict(os.environ, {"YOUTUBE_API_KEY": "fake-yt-key"}),
+        patch("app.routers.exercises.httpx.AsyncClient", return_value=mock_client_instance),
+    ):
+        resp = await client.get(f"/exercises/{sample_exercise.id}/media", headers=auth_headers)
+
+    assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# _fetch_pexels_image — with API key (lines 48-75)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_fetch_pexels_image_with_key(client, auth_headers, db, sample_muscle):
+    """With PEXELS_API_KEY set and no YouTube key, fetches and caches Pexels image."""
+    import os
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    # Exercise with no cached URLs
+    ex = models.Exercise(name="pull up pexels", muscle_id=sample_muscle.id)
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "photos": [{"src": {"medium": "https://images.pexels.com/photos/123/photo.jpg"}}]
+    }
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+    mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_client_instance.get = AsyncMock(return_value=mock_response)
+
+    with (
+        patch.dict(os.environ, {"PEXELS_API_KEY": "fake-px-key"}, clear=False),
+        patch.dict(os.environ, {"YOUTUBE_API_KEY": ""}, clear=False),
+        patch("app.routers.exercises.httpx.AsyncClient", return_value=mock_client_instance),
+    ):
+        resp = await client.get(f"/exercises/{ex.id}/media", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["image_url"] == "https://images.pexels.com/photos/123/photo.jpg"
+
+
+@pytest.mark.anyio
+async def test_fetch_pexels_image_error_status(client, auth_headers, db, sample_muscle):
+    """Pexels API returns non-200 → image_url stays None (line 66-68)."""
+    import os
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    ex = models.Exercise(name="pull up pexels err", muscle_id=sample_muscle.id)
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
+
+    mock_response = MagicMock()
+    mock_response.status_code = 400
+    mock_response.json.return_value = {"error": "bad request"}
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+    mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_client_instance.get = AsyncMock(return_value=mock_response)
+
+    with (
+        patch.dict(os.environ, {"PEXELS_API_KEY": "fake-px-key"}, clear=False),
+        patch.dict(os.environ, {"YOUTUBE_API_KEY": ""}, clear=False),
+        patch("app.routers.exercises.httpx.AsyncClient", return_value=mock_client_instance),
+    ):
+        resp = await client.get(f"/exercises/{ex.id}/media", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["image_url"] is None
+
+
+# ---------------------------------------------------------------------------
+# update_muscle — rename branch (lines 136-138 create_muscle, 162-165 update_muscle)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_update_muscle_rename_success(client, root_headers, db):
+    muscle = models.Muscle(name="femoral_rename")
+    db.add(muscle)
+    db.commit()
+    resp = await client.put(
+        f"/muscles/{muscle.id}",
+        json={"name": "femoral_renamed"},
+        headers=root_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "femoral_renamed"
+
+
+@pytest.mark.anyio
+async def test_update_muscle_not_found_by_uuid(client, root_headers):
+    resp = await client.put(
+        "/muscles/00000000-0000-0000-0000-000000000000",
+        json={"name": "newname"},
+        headers=root_headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_update_exercise_muscle_change(client, root_headers, db, sample_muscle):
+    """update_exercise with a different muscle_id — covers line 203."""
+    muscle2 = models.Muscle(name="triceps_ue")
+    db.add(muscle2)
+    db.flush()
+    ex = models.Exercise(name="extension triceps ue", muscle_id=sample_muscle.id)
+    db.add(ex)
+    db.commit()
+    resp = await client.put(
+        f"/exercises/{ex.id}",
+        json={"name": "extension triceps ue", "muscle_id": muscle2.id},
+        headers=root_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["muscle_id"] == muscle2.id
+
+
+@pytest.mark.anyio
+async def test_update_exercise_target_muscle_not_found(client, root_headers, db, sample_muscle):
+    """update_exercise with non-existent muscle_id → 404 (line 202-203)."""
+    ex = models.Exercise(name="press dumbbell nmf", muscle_id=sample_muscle.id)
+    db.add(ex)
+    db.commit()
+    resp = await client.put(
+        f"/exercises/{ex.id}",
+        json={"name": "press dumbbell nmf", "muscle_id": "00000000-0000-0000-0000-000000000000"},
+        headers=root_headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_standardize_exercises_existing_standard(client, auth_headers, db, sample_muscle):
+    """standardize_exercises when standard exercise already exists (line 456-459)."""
+    ex1 = models.Exercise(name="press banca std1", muscle_id=sample_muscle.id)
+    ex2 = models.Exercise(name="press banca std2", muscle_id=sample_muscle.id)
+    # Standard already exists
+    std = models.Exercise(name="Press Banca Std", muscle_id=sample_muscle.id)
+    db.add_all([ex1, ex2, std])
+    db.commit()
+
+    resp = await client.post(
+        "/exercises/standardize",
+        json={
+            "standard_name": "Press Banca Std",
+            "exercise_ids_to_merge": [ex1.id, ex2.id],
+            "muscle_id": sample_muscle.id,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert "merged" in resp.json()["message"]
+
+
+@pytest.mark.anyio
+async def test_standardize_with_calendar_update(client, auth_headers, db, sample_muscle):
+    """standardize_exercises when user has tokens with calendar — hits lines 477-487."""
+    from unittest.mock import patch
+
+    user = db.query(models.User).filter(models.User.email == "user@test.com").first()
+    tokens = models.UserTokens(
+        user_id=user.id,
+        selected_calendar_id="cal-std",
+        google_access_token="goog-std",
+    )
+    db.add(tokens)
+    db.flush()
+
+    ex1 = models.Exercise(name="curl biceps cal1", muscle_id=sample_muscle.id)
+    ex2 = models.Exercise(name="curl biceps cal2", muscle_id=sample_muscle.id)
+    db.add_all([ex1, ex2])
+    db.flush()
+
+    workout = models.Workout(
+        user_id=user.id,
+        title="Biceps",
+        start_time=datetime(2026, 6, 1, 10, 0),
+        end_time=datetime(2026, 6, 1, 11, 0),
+    )
+    db.add(workout)
+    db.flush()
+    db.add(models.ExerciseSet(workout_id=workout.id, exercise_id=ex1.id, value="50", measurement="kg"))
+    db.commit()
+
+    with patch("app.routers.workouts.update_google_calendar_event", return_value=None):
+        resp = await client.post(
+            "/exercises/standardize",
+            json={
+                "standard_name": "Curl Biceps Cal",
+                "exercise_ids_to_merge": [ex1.id, ex2.id],
+                "muscle_id": sample_muscle.id,
+            },
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200

@@ -2,6 +2,8 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+from googleapiclient.errors import HttpError as GHttpError
+
 import pytest
 
 from app import models
@@ -779,3 +781,527 @@ async def test_sync_all_incremental_with_sync_token(client, auth_headers, db):
     db.expire_all()
     updated_tokens = db.query(models.UserTokens).filter(models.UserTokens.user_id == user.id).first()
     assert updated_tokens.google_calendar_sync_token == "new-sync-token"
+
+
+# ---------------------------------------------------------------------------
+# cardio-pending — GET /workouts/cardio-pending
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_cardio_pending_empty(client, auth_headers):
+    resp = await client.get("/workouts/cardio-pending", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.anyio
+async def test_cardio_pending_returns_workouts(client, auth_headers, db):
+    user = _get_user(db)
+    workout = models.Workout(
+        user_id=user.id,
+        title="Cardio Run",
+        start_time=datetime(2026, 6, 1, 7, 0),
+        end_time=datetime(2026, 6, 1, 8, 0),
+    )
+    db.add(workout)
+    db.flush()
+    fd = models.FitbitData(
+        workout_id=workout.id,
+        activity_name="Run",
+        calories=450,
+        heart_rate_avg=160,
+        duration_ms=3600000,
+        distance_km=9.0,
+    )
+    db.add(fd)
+    db.commit()
+
+    resp = await client.get("/workouts/cardio-pending", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["activity_name"] == "Run"
+
+
+# ---------------------------------------------------------------------------
+# sync-cardio-to-calendar — POST /workouts/sync-cardio-to-calendar
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sync_cardio_to_calendar_no_tokens(client, auth_headers):
+    resp = await client.post(
+        "/workouts/sync-cardio-to-calendar",
+        json={"workout_ids": []},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_sync_cardio_to_calendar_no_creds(client, auth_headers, db):
+    user = _get_user(db)
+    tokens = models.UserTokens(user_id=user.id, google_access_token="tok")
+    db.add(tokens)
+    db.commit()
+    with patch("app.routers.workouts.get_google_credentials", return_value=None):
+        resp = await client.post(
+            "/workouts/sync-cardio-to-calendar",
+            json={"workout_ids": []},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_sync_cardio_to_calendar_workout_not_found(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+    mock_svc = MagicMock()
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.post(
+            "/workouts/sync-cardio-to-calendar",
+            json={"workout_ids": ["00000000-0000-0000-0000-000000000000"]},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["failed"] == 1
+
+
+@pytest.mark.anyio
+async def test_sync_cardio_to_calendar_already_synced(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+    workout = models.Workout(
+        user_id=user.id,
+        title="Run Already",
+        start_time=datetime(2026, 6, 3, 7, 0),
+        end_time=datetime(2026, 6, 3, 8, 0),
+        google_event_id="ev-already",
+    )
+    db.add(workout)
+    db.flush()
+    fd = models.FitbitData(workout_id=workout.id, activity_name="Run", calories=400, duration_ms=3600000)
+    db.add(fd)
+    db.commit()
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=MagicMock()),
+    ):
+        resp = await client.post(
+            "/workouts/sync-cardio-to-calendar",
+            json={"workout_ids": [workout.id]},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["already_synced"] == 1
+
+
+@pytest.mark.anyio
+async def test_sync_cardio_to_calendar_success(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+    workout = models.Workout(
+        user_id=user.id,
+        title="Run New",
+        start_time=datetime(2026, 6, 4, 7, 0),
+        end_time=datetime(2026, 6, 4, 8, 0),
+    )
+    db.add(workout)
+    db.flush()
+    fd = models.FitbitData(
+        workout_id=workout.id,
+        activity_name="Run",
+        calories=400,
+        heart_rate_avg=155,
+        duration_ms=3600000,
+        distance_km=8.0,
+    )
+    db.add(fd)
+    db.commit()
+
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.insert.return_value.execute.return_value = {"id": "new-cardio-ev"}
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.post(
+            "/workouts/sync-cardio-to-calendar",
+            json={"workout_ids": [workout.id]},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["synced"] == 1
+
+
+# ---------------------------------------------------------------------------
+# create_calendar — API exception (lines 39-40)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_create_calendar_exception(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id)
+    mock_svc = MagicMock()
+    mock_svc.calendars.return_value.insert.return_value.execute.side_effect = Exception("API error")
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.post(
+            "/workouts/create-calendar", params={"name": "Test"}, headers=auth_headers
+        )
+    assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# list_calendars — exception branches (lines 78-88)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_list_calendars_http_error_401(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id)
+    mock_resp = MagicMock()
+    mock_resp.status = 401
+    mock_svc = MagicMock()
+    mock_svc.calendarList.return_value.list.return_value.execute.side_effect = GHttpError(
+        resp=mock_resp, content=b"Unauthorized"
+    )
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get("/workouts/calendars", headers=auth_headers)
+    assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_list_calendars_generic_exception(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id)
+    mock_svc = MagicMock()
+    mock_svc.calendarList.return_value.list.return_value.execute.side_effect = Exception(
+        "Network error"
+    )
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get("/workouts/calendars", headers=auth_headers)
+    assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# test-parse — creds fail + API exception (lines 466, 485-486)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_test_parse_no_credentials(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id)
+    with patch("app.routers.workouts.get_google_credentials", return_value=None):
+        resp = await client.get("/workouts/test-parse", headers=auth_headers)
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_test_parse_api_exception(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id)
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.side_effect = Exception("Timeout")
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get("/workouts/test-parse", headers=auth_headers)
+    assert resp.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# sync_all — HttpError 410 falls back to full sync (lines 574-578)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sync_all_http_error_410_falls_back_to_full(client, auth_headers, db):
+    user = _get_user(db)
+    tokens = _add_tokens(db, user.id, google=True)
+    tokens.google_calendar_sync_token = "stale-token"
+    db.commit()
+
+    mock_resp_410 = MagicMock()
+    mock_resp_410.status = 410
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.side_effect = [
+        GHttpError(resp=mock_resp_410, content=b"Gone"),
+        {"items": [], "nextSyncToken": "fresh-tok"},
+    ]
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get("/workouts/sync-all", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert "full" in resp.json()["message"]
+    db.expire_all()
+    updated_tokens = (
+        db.query(models.UserTokens).filter(models.UserTokens.user_id == user.id).first()
+    )
+    assert updated_tokens.google_calendar_sync_token == "fresh-tok"
+
+
+# ---------------------------------------------------------------------------
+# sync_all — updates existing workout (lines 672-678)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sync_all_updates_existing_workout(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+
+    workout = models.Workout(
+        user_id=user.id,
+        google_event_id="evt-existing-upd",
+        title="Old Title",
+        start_time=datetime(2026, 5, 1, 9, 0),
+        end_time=datetime(2026, 5, 1, 10, 0),
+    )
+    db.add(workout)
+    db.commit()
+
+    event = {
+        "id": "evt-existing-upd",
+        "summary": "New Title",
+        "description": "[GymHub]\n",
+        "status": "confirmed",
+        "start": {"dateTime": "2026-06-10T10:00:00Z"},
+        "end": {"dateTime": "2026-06-10T11:00:00Z"},
+    }
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.return_value = {
+        "items": [event],
+        "nextSyncToken": "tok-upd",
+    }
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+        patch(
+            "app.routers.workouts.calendar_utils.parse_calendar_description",
+            return_value={"sets": [], "fitbit": None},
+        ),
+    ):
+        resp = await client.get("/workouts/sync-all", headers=auth_headers)
+
+    assert resp.status_code == 200
+    db.expire_all()
+    updated = (
+        db.query(models.Workout)
+        .filter(models.Workout.google_event_id == "evt-existing-upd")
+        .first()
+    )
+    assert updated.title == "New Title"
+
+
+# ---------------------------------------------------------------------------
+# sync_all — updates existing FitbitData (lines 738-760)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sync_all_updates_existing_fitbit_data(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+
+    workout = models.Workout(
+        user_id=user.id,
+        google_event_id="evt-fd-upd",
+        title="Cardio",
+        start_time=datetime(2026, 6, 5, 7, 0),
+        end_time=datetime(2026, 6, 5, 8, 0),
+    )
+    db.add(workout)
+    db.flush()
+    fd = models.FitbitData(
+        workout_id=workout.id, calories=100, heart_rate_avg=120, duration_ms=1800000
+    )
+    db.add(fd)
+    db.commit()
+
+    event = {
+        "id": "evt-fd-upd",
+        "summary": "Cardio",
+        "description": "[GymHub]\n",
+        "status": "confirmed",
+        "start": {"dateTime": "2026-06-05T07:00:00Z"},
+        "end": {"dateTime": "2026-06-05T08:00:00Z"},
+    }
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.return_value = {
+        "items": [event],
+        "nextSyncToken": "tok-fd-upd",
+    }
+    mock_parse = {
+        "sets": [],
+        "fitbit": {
+            "calories": 500,
+            "heart_rate_avg": 155,
+            "duration_ms": 3600000,
+            "distance_km": 9.0,
+            "elevation_gain_m": 50.0,
+            "activity_name": "Run",
+            "azm_fat_burn": 10,
+            "azm_cardio": 20,
+            "azm_peak": 5,
+        },
+    }
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+        patch(
+            "app.routers.workouts.calendar_utils.parse_calendar_description",
+            return_value=mock_parse,
+        ),
+    ):
+        resp = await client.get("/workouts/sync-all", headers=auth_headers)
+
+    assert resp.status_code == 200
+    db.expire_all()
+    updated_fd = (
+        db.query(models.FitbitData).filter(models.FitbitData.workout_id == workout.id).first()
+    )
+    assert updated_fd.calories == 500
+
+
+# ---------------------------------------------------------------------------
+# sync_all — deletes orphaned local workouts (lines 795-796, 805)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sync_all_deletes_orphaned_workout(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+
+    orphan = models.Workout(
+        user_id=user.id,
+        google_event_id="orphan-event-id",
+        title="Orphan",
+        start_time=datetime(2026, 6, 1, 10, 0),
+        end_time=datetime(2026, 6, 1, 11, 0),
+    )
+    db.add(orphan)
+    db.commit()
+
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.return_value = {
+        "items": [],
+        "nextSyncToken": "tok-orphan",
+    }
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get("/workouts/sync-all", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert "deleted" in resp.json()["message"]
+    db.expire_all()
+    assert (
+        db.query(models.Workout)
+        .filter(models.Workout.google_event_id == "orphan-event-id")
+        .first()
+    ) is None
+
+
+# ---------------------------------------------------------------------------
+# sync_all — skips event with no start/end (line 640)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sync_all_skips_event_without_start_end(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+
+    event = {
+        "id": "evt-no-start",
+        "summary": "No Start",
+        "description": "[GymHub]\n",
+        "status": "confirmed",
+        "start": {},
+        "end": {},
+    }
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.return_value = {
+        "items": [event],
+        "nextSyncToken": "tok-nostart",
+    }
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get("/workouts/sync-all", headers=auth_headers)
+
+    assert resp.status_code == 200
+    db.expire_all()
+    assert (
+        db.query(models.Workout).filter(models.Workout.google_event_id == "evt-no-start").first()
+    ) is None
+
+
+# ---------------------------------------------------------------------------
+# sync_cardio_to_calendar — insert exception (lines 911-913)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_sync_cardio_to_calendar_insert_fails(client, auth_headers, db):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+    workout = models.Workout(
+        user_id=user.id,
+        title="Run Error",
+        start_time=datetime(2026, 6, 6, 7, 0),
+        end_time=datetime(2026, 6, 6, 8, 0),
+    )
+    db.add(workout)
+    db.flush()
+    fd = models.FitbitData(
+        workout_id=workout.id, activity_name="Run", calories=300, duration_ms=3600000
+    )
+    db.add(fd)
+    db.commit()
+
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.insert.return_value.execute.side_effect = Exception("API down")
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.post(
+            "/workouts/sync-cardio-to-calendar",
+            json={"workout_ids": [workout.id]},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    assert resp.json()["failed"] == 1
