@@ -83,7 +83,8 @@ with engine.connect() as conn:
     except Exception:
         conn.rollback()
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+_rate_limits = [] if os.getenv("TESTING") == "true" else ["60/minute"]
+limiter = Limiter(key_func=get_remote_address, default_limits=_rate_limits)
 
 app = FastAPI(title="GymHub Backend v2")
 app.state.limiter = limiter

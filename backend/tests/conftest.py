@@ -9,10 +9,16 @@ from sqlalchemy.pool import StaticPool
 # Must be set before app.main is imported — main.py calls Base.metadata.create_all at module level
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing")
+os.environ.setdefault("TESTING", "true")
 
 from app.main import app  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app import models  # noqa: E402
+
+@pytest.fixture(params=["asyncio"])
+def anyio_backend(request):
+    return request.param
+
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 

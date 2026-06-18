@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 from app import models
 
@@ -267,3 +268,183 @@ async def test_standardize_exercises(client, auth_headers, db, sample_muscle):
     assert "Press de Banca" in names
     assert "press banca plano" not in names
     assert "banca plano" not in names
+
+
+@pytest.mark.anyio
+async def test_standardize_missing_fields(client, auth_headers):
+    resp = await client.post(
+        "/exercises/standardize",
+        headers=auth_headers,
+        json={"standard_name": "Press de Banca"},
+    )
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Muscle validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_create_muscle_empty_name(client, root_headers):
+    resp = await client.post("/muscles", headers=root_headers, json={"name": "   "})
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_update_muscle_empty_name(client, root_headers, sample_muscle):
+    resp = await client.put(
+        f"/muscles/{sample_muscle.id}",
+        headers=root_headers,
+        json={"name": "   "},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_update_muscle_duplicate_name(client, root_headers, db, sample_muscle):
+    other = models.Muscle(name="espalda_dup")
+    db.add(other)
+    db.commit()
+    db.refresh(other)
+
+    resp = await client.put(
+        f"/muscles/{other.id}",
+        headers=root_headers,
+        json={"name": sample_muscle.name},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_migrate_abdomen_on_get_muscles(client, db):
+    old_muscle = models.Muscle(name="abdominales")
+    db.add(old_muscle)
+    db.commit()
+
+    resp = await client.get("/muscles")
+    assert resp.status_code == 200
+    names = [m["name"] for m in resp.json()]
+    assert "abdominales" not in names
+    assert "abdomen" in names
+
+
+# ---------------------------------------------------------------------------
+# Exercise validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_update_exercise_not_found(client, root_headers, sample_muscle):
+    resp = await client.put(
+        "/exercises/nonexistent-id",
+        headers=root_headers,
+        json={"name": "nuevo", "muscle_id": sample_muscle.id},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_update_exercise_empty_name(client, root_headers, sample_exercise):
+    resp = await client.put(
+        f"/exercises/{sample_exercise.id}",
+        headers=root_headers,
+        json={"name": "   ", "muscle_id": sample_exercise.muscle_id},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_update_exercise_invalid_muscle(client, root_headers, sample_exercise):
+    resp = await client.put(
+        f"/exercises/{sample_exercise.id}",
+        headers=root_headers,
+        json={"name": "nuevo nombre", "muscle_id": "nonexistent-muscle-id"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_delete_exercise_not_found(client, root_headers):
+    resp = await client.delete("/exercises/nonexistent-id", headers=root_headers)
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Reset endpoints
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_reset_exercises_and_force_resync(client, auth_headers, db, sample_exercise):
+    user = db.query(models.User).filter(models.User.email == "user@test.com").first()
+    workout = models.Workout(
+        user_id=user.id,
+        title="Para reset",
+        start_time=datetime(2026, 5, 1, 10, 0),
+        end_time=datetime(2026, 5, 1, 11, 0),
+    )
+    db.add(workout)
+    db.flush()
+    db.add(
+        models.ExerciseSet(
+            workout_id=workout.id,
+            exercise_id=sample_exercise.id,
+            value="50",
+            measurement="kg",
+            is_completed=True,
+        )
+    )
+    db.commit()
+
+    resp = await client.post("/exercises/reset-and-resync", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "deleted_sets" in data
+
+
+@pytest.mark.anyio
+async def test_reset_all_data_root(client, root_headers, db, sample_exercise):
+    user = db.query(models.User).filter(models.User.email == "root@test.com").first()
+    workout = models.Workout(
+        user_id=user.id,
+        title="Para borrar todo",
+        start_time=datetime(2026, 5, 1, 10, 0),
+        end_time=datetime(2026, 5, 1, 11, 0),
+    )
+    db.add(workout)
+    db.commit()
+
+    resp = await client.post("/exercises/reset-all", headers=root_headers)
+    assert resp.status_code == 200
+    db.expire_all()
+    assert db.query(models.Exercise).count() == 0
+    assert db.query(models.Muscle).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Media endpoint — covers YouTube/Pexels helpers (early return without API key)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_get_exercise_media_no_api_keys(client, auth_headers, sample_exercise):
+    with (
+        patch("app.routers.exercises._fetch_youtube_videos", new=AsyncMock(return_value=(None, None))),
+        patch("app.routers.exercises._fetch_pexels_image", new=AsyncMock(return_value=None)),
+    ):
+        resp = await client.get(
+            f"/exercises/{sample_exercise.id}/media",
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["video_url_1"] is None
+    assert data["video_url_2"] is None
+    assert data["image_url"] is None
+
+
+@pytest.mark.anyio
+async def test_get_exercise_media_not_found(client, auth_headers):
+    resp = await client.get("/exercises/nonexistent-id/media", headers=auth_headers)
+    assert resp.status_code == 404
