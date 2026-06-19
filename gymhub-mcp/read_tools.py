@@ -1,6 +1,5 @@
 """Read tools — query the GymHub database directly via SQLAlchemy ORM."""
 
-import json
 import re
 import statistics
 from datetime import datetime, timedelta, timezone
@@ -17,18 +16,13 @@ import models
 
 
 def _parse_exercise_value(value_str: str) -> float:
-    """Return the max numeric value from a string like '50', '45-40', '40/35', '42.5'.
+    """Return the single numeric weight stored in an ExerciseSet value.
 
-    Handles comma as decimal separator and range notation with '-' or '/'.
-    Returns 0.0 if no numeric value can be extracted.
+    Each set stores one weight, so the only normalization required is the
+    Spanish decimal comma. Non-numeric values (e.g. 'bodyweight') yield 0.0.
     """
-    parts = re.split(r"[-/]", value_str.replace(",", "."))
-    nums = []
-    for p in parts:
-        m = re.search(r"^\s*(\d+\.?\d*)", p)
-        if m:
-            nums.append(float(m.group(1)))
-    return max(nums) if nums else 0.0
+    m = re.match(r"\s*(\d+\.?\d*)", value_str.replace(",", "."))
+    return float(m.group(1)) if m else 0.0
 
 
 def _compute_workout_count(

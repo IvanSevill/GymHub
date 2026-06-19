@@ -96,7 +96,7 @@ class ExerciseSet(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     workout_id = Column(String, ForeignKey("workouts.id", ondelete="CASCADE"), nullable=False)
     exercise_id = Column(String, ForeignKey("exercises.id", ondelete="CASCADE"), nullable=False)
-    value = Column(String, nullable=False) # e.g., "45-40" or "45"
+    value = Column(String, nullable=False)  # single weight per set, e.g. "45" or "42.5"
     measurement = Column(String, nullable=False) # e.g., "kg", "rep", "s"
     is_completed = Column(Boolean, default=False, nullable=False)
 

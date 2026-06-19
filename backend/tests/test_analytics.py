@@ -14,20 +14,18 @@ def test_parse_value_simple():
     assert _parse_exercise_value("50") == 50.0
 
 
-def test_parse_value_range():
-    assert _parse_exercise_value("45-40") == 45.0
-
-
-def test_parse_value_fraction():
-    assert _parse_exercise_value("40/35") == 40.0
-
-
 def test_parse_value_decimal():
     assert _parse_exercise_value("42.5") == 42.5
 
 
 def test_parse_value_comma_decimal():
+    # Spanish decimal comma is normalized to a point
     assert _parse_exercise_value("42,5") == 42.5
+
+
+def test_parse_value_non_numeric():
+    # Non-numeric values (e.g. bodyweight) do not contribute
+    assert _parse_exercise_value("bodyweight") == 0.0
 
 
 def test_parse_value_empty():
