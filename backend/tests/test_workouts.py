@@ -3,38 +3,6 @@ from unittest.mock import patch
 import pytest
 
 from app import models
-from app.routers.workouts import _expand_set_values
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: _expand_set_values (one weight per ExerciseSet row)
-# ---------------------------------------------------------------------------
-
-
-def test_expand_single_value():
-    assert _expand_set_values("12") == ["12"]
-
-
-def test_expand_dash_range():
-    # "12-15" becomes two separate weights / rows
-    assert _expand_set_values("12-15") == ["12", "15"]
-
-
-def test_expand_slash_range():
-    assert _expand_set_values("45/40") == ["45", "40"]
-
-
-def test_expand_decimal_comma_single():
-    # A single decimal value with comma is not a range and stays intact
-    assert _expand_set_values("42,5") == ["42,5"]
-
-
-def test_expand_non_numeric():
-    assert _expand_set_values("bodyweight") == ["bodyweight"]
-
-
-def test_expand_empty():
-    assert _expand_set_values("") == [""]
 
 
 @pytest.mark.anyio

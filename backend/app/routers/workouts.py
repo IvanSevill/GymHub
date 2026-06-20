@@ -1,5 +1,4 @@
 import logging
-import re
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -14,18 +13,6 @@ from ..services.google_calendar import get_google_credentials, update_google_cal
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
-
-
-def _expand_set_values(value: str) -> List[str]:
-    """Split a multi-weight value into individual weights, one per set.
-
-    Each set stores a single weight, so a value that encodes several weights
-    in one entry (e.g. a progressive series ``"12-15"`` or ``"45/40"``) is
-    expanded into one weight per ExerciseSet row. Single values, empty strings
-    and non-numeric values (e.g. ``"bodyweight"``) are returned unchanged.
-    """
-    parts = [p.strip() for p in re.split(r"[-/]", value) if p.strip()]
-    return parts if len(parts) > 1 else [value]
 
 
 @router.post("/create-calendar", response_model=dict)
@@ -165,16 +152,15 @@ async def create_workout(
     db.flush()
 
     for es in workout.exercise_sets:
-        for single_value in _expand_set_values(es.value):
-            db.add(
-                models.ExerciseSet(
-                    workout_id=db_workout.id,
-                    exercise_id=es.exercise_id,
-                    value=single_value,
-                    measurement=es.measurement,
-                    is_completed=es.is_completed,
-                )
+        db.add(
+            models.ExerciseSet(
+                workout_id=db_workout.id,
+                exercise_id=es.exercise_id,
+                value=es.value,
+                measurement=es.measurement,
+                is_completed=es.is_completed,
             )
+        )
 
     db.commit()
     db.refresh(db_workout)
@@ -313,16 +299,15 @@ async def update_workout(
     db.flush()
 
     for es in workout_update.exercise_sets:
-        for single_value in _expand_set_values(es.value):
-            db.add(
-                models.ExerciseSet(
-                    workout_id=db_workout.id,
-                    exercise_id=es.exercise_id,
-                    value=single_value,
-                    measurement=es.measurement,
-                    is_completed=es.is_completed,
-                )
+        db.add(
+            models.ExerciseSet(
+                workout_id=db_workout.id,
+                exercise_id=es.exercise_id,
+                value=es.value,
+                measurement=es.measurement,
+                is_completed=es.is_completed,
             )
+        )
 
     user_tokens = (
         db.query(models.UserTokens)
@@ -736,17 +721,16 @@ async def sync_all_from_calendar(
                     )
                     continue
 
-            for single_value in _expand_set_values(ps["value"]):
-                db.add(
-                    models.ExerciseSet(
-                        workout_id=workout.id,
-                        exercise_id=exercise_obj.id,
-                        value=single_value,
-                        measurement=ps["measurement"],
-                        is_completed=ps.get("is_completed", False),
-                    )
+            db.add(
+                models.ExerciseSet(
+                    workout_id=workout.id,
+                    exercise_id=exercise_obj.id,
+                    value=ps["value"],
+                    measurement=ps["measurement"],
+                    is_completed=ps.get("is_completed", False),
                 )
-                sets_added_to_workout += 1
+            )
+            sets_added_to_workout += 1
 
         if parsed_fitbit_data:
             existing_fd = workout.fitbit_data
