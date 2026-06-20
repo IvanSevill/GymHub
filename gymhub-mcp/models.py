@@ -192,37 +192,5 @@ class Goal(Base):
     updated_at = Column(DateTime, nullable=True)
 
 
-class NutritionLog(Base):
-    """Meal / nutrition entry for a given date and meal type."""
-
-    __tablename__ = "nutrition_logs"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    date = Column(String, nullable=False)
-    meal_type = Column(String, nullable=False)
-    food_items = Column(String, nullable=False, default="[]")
-    calories = Column(Integer, nullable=True)
-    protein_g = Column(Float, nullable=True)
-    carbs_g = Column(Float, nullable=True)
-    fats_g = Column(Float, nullable=True)
-    created_at = Column(DateTime, nullable=True)
-
-
-class MoodEnergyLog(Base):
-    """Daily mood and energy rating (one per day, upserted on date)."""
-
-    __tablename__ = "mood_energy_logs"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    date = Column(String, nullable=False)
-    mood_rating = Column(Integer, nullable=False)
-    energy_rating = Column(Integer, nullable=False)
-    notes = Column(String, nullable=True)
-    created_at = Column(DateTime, nullable=True)
-    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_mood_energy_user_date"),)
-
-
 # Suppress unused import warning — datetime is used via Column(DateTime, default=datetime.utcnow)
 _ = datetime

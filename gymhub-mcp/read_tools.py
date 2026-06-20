@@ -742,16 +742,6 @@ def analyze_performance_correlation(args: dict, user_id: str, db: Session) -> di
             for date, val in rows:
                 if val:
                     series[date] = float(val)
-        elif metric in ("mood", "energy"):
-            col = models.MoodEnergyLog.mood_rating if metric == "mood" else models.MoodEnergyLog.energy_rating
-            rows = (
-                db.query(models.MoodEnergyLog.date, col)
-                .filter(models.MoodEnergyLog.user_id == user_id, models.MoodEnergyLog.date >= cutoff)
-                .all()
-            )
-            for date, val in rows:
-                if val is not None:
-                    series[date] = float(val)
         return series
 
     s1 = _get_series(metric1)
@@ -1011,7 +1001,7 @@ def generate_workout_plan(args: dict, user_id: str, db: Session) -> dict:
 
 
 def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> dict:
-    """Assess overtraining risk based on volume, HR, sleep, and mood trends."""
+    """Assess overtraining risk based on volume, HR and sleep trends."""
     days: int = int(args.get("days", 14))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     cutoff = now - timedelta(days=days)
@@ -1056,19 +1046,6 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> d
         if avg_eff < 80:
             risk_factors.append(f"Eficiencia de sueño baja ({avg_eff:.0f}%)")
 
-    mood_rows = (
-        db.query(models.MoodEnergyLog.mood_rating, models.MoodEnergyLog.energy_rating)
-        .filter(models.MoodEnergyLog.user_id == user_id, models.MoodEnergyLog.date >= sleep_cutoff)
-        .all()
-    )
-    if mood_rows:
-        avg_mood = sum(r.mood_rating for r in mood_rows) / len(mood_rows)
-        avg_energy = sum(r.energy_rating for r in mood_rows) / len(mood_rows)
-        if avg_mood < 4:
-            risk_factors.append(f"Estado de ánimo bajo ({avg_mood:.1f}/10)")
-        if avg_energy < 4:
-            risk_factors.append(f"Nivel de energía bajo ({avg_energy:.1f}/10)")
-
     if len(risk_factors) >= 3:
         risk_level = "alto"
     elif len(risk_factors) >= 1:
@@ -1083,8 +1060,6 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> d
         recommendations.append("Priorizar descanso: mínimo 7-8 horas de sueño.")
     if "FC" in " ".join(risk_factors):
         recommendations.append("Tomar una semana de descarga o actividad ligera.")
-    if "ánimo" in " ".join(risk_factors).lower() or "energía" in " ".join(risk_factors).lower():
-        recommendations.append("Considerar días de recuperación activa y revisar nutrición.")
     if not recommendations:
         recommendations.append("Mantener la rutina actual. Los indicadores son positivos.")
 
@@ -1098,7 +1073,5 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> d
             "recent_volume_kg": round(recent_volume, 1),
             "previous_volume_kg": round(previous_volume, 1),
             "avg_sleep_efficiency": round(avg_eff, 1) if sleep_rows else None,
-            "avg_mood": round(avg_mood, 1) if mood_rows else None,
-            "avg_energy": round(avg_energy, 1) if mood_rows else None,
         },
     }

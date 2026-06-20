@@ -1,6 +1,5 @@
 """Write tools — call the GymHub backend API via httpx (requires auth token)."""
 
-import json
 import os
 from datetime import datetime
 
@@ -349,77 +348,6 @@ async def set_goal(args: dict, user_id: str) -> dict:
         db.close()
 
 
-async def log_nutrition(args: dict, user_id: str) -> dict:
-    """Log a nutrition/meal entry."""
-    date: str = args["date"]
-    meal_type: str = args["meal_type"]
-    food_items: list = args.get("food_items", [])
-    calories: int | None = args.get("calories")
-    protein_g: float | None = args.get("protein_g")
-    carbs_g: float | None = args.get("carbs_g")
-    fats_g: float | None = args.get("fats_g")
-
-    db = SessionLocal()
-    try:
-        entry = models.NutritionLog(
-            user_id=user_id,
-            date=date,
-            meal_type=meal_type,
-            food_items=json.dumps(food_items, ensure_ascii=False),
-            calories=calories,
-            protein_g=protein_g,
-            carbs_g=carbs_g,
-            fats_g=fats_g,
-            created_at=datetime.utcnow(),
-        )
-        db.add(entry)
-        db.commit()
-        return {
-            "id": entry.id,
-            "date": date,
-            "meal_type": meal_type,
-            "calories": calories,
-            "summary": f"{meal_type} registrado para {date}",
-        }
-    finally:
-        db.close()
-
-
-async def log_mood_and_energy(args: dict, user_id: str) -> dict:
-    """Log or update daily mood and energy rating (upsert on date)."""
-    date: str = args["date"]
-    mood_rating: int = int(args["mood_rating"])
-    energy_rating: int = int(args["energy_rating"])
-    notes: str | None = args.get("notes")
-
-    db = SessionLocal()
-    try:
-        existing = (
-            db.query(models.MoodEnergyLog)
-            .filter(models.MoodEnergyLog.user_id == user_id, models.MoodEnergyLog.date == date)
-            .first()
-        )
-        if existing:
-            existing.mood_rating = mood_rating
-            existing.energy_rating = energy_rating
-            if notes is not None:
-                existing.notes = notes
-            db.commit()
-            return {"date": date, "mood_rating": mood_rating, "energy_rating": energy_rating, "saved": True, "updated": True}
-
-        entry = models.MoodEnergyLog(
-            user_id=user_id,
-            date=date,
-            mood_rating=mood_rating,
-            energy_rating=energy_rating,
-            notes=notes,
-            created_at=datetime.utcnow(),
-        )
-        db.add(entry)
-        db.commit()
-        return {"date": date, "mood_rating": mood_rating, "energy_rating": energy_rating, "saved": True, "created": True}
-    finally:
-        db.close()
 
 
 # Suppress unused import warning

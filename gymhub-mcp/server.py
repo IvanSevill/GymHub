@@ -399,7 +399,7 @@ def analyze_performance_correlation(metric1: str, metric2: str, days: int = 60) 
     """Correlación de Pearson entre dos métricas de salud/rendimiento.
 
     Métricas disponibles: sleep_duration, sleep_efficiency, resting_hr, steps,
-    workout_volume, weight, mood, energy.
+    workout_volume, weight.
     Devuelve el coeficiente r, tamaño de muestra e interpretación en español.
     """
     from database import SessionLocal
@@ -482,9 +482,8 @@ def generate_workout_plan(
 def get_overtraining_risk_assessment(days: int = 14) -> dict:
     """Evalúa el riesgo de sobreentrenamiento del usuario.
 
-    Analiza tendencias de volumen de entrenamiento, FC en reposo, eficiencia de sueño
-    y estado de ánimo/energía. Devuelve nivel de riesgo (bajo/moderado/alto),
-    factores detectados y recomendaciones.
+    Analiza tendencias de volumen de entrenamiento, FC en reposo y eficiencia de sueño.
+    Devuelve nivel de riesgo (bajo/moderado/alto), factores detectados y recomendaciones.
     """
     from database import SessionLocal
 
@@ -498,7 +497,7 @@ def get_overtraining_risk_assessment(days: int = 14) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# New write tools (goals, nutrition, mood — DB direct, no HTTP)
+# New write tools (goals — DB direct, no HTTP)
 # ---------------------------------------------------------------------------
 
 
@@ -522,59 +521,6 @@ async def set_goal(
             "target_date": target_date,
             "metric_unit": metric_unit,
             "description": description,
-        },
-        USER_ID,
-    )
-
-
-@mcp.tool()
-async def log_nutrition(
-    date: str,
-    meal_type: str,
-    food_items: list,
-    calories: Optional[int] = None,
-    protein_g: Optional[float] = None,
-    carbs_g: Optional[float] = None,
-    fats_g: Optional[float] = None,
-) -> dict:
-    """Registra una comida con alimentos y macros para una fecha concreta.
-
-    date: formato YYYY-MM-DD
-    meal_type: breakfast, lunch, dinner, snack
-    food_items: lista de strings con los alimentos consumidos
-    """
-    return await write_tools.log_nutrition(
-        {
-            "date": date,
-            "meal_type": meal_type,
-            "food_items": food_items,
-            "calories": calories,
-            "protein_g": protein_g,
-            "carbs_g": carbs_g,
-            "fats_g": fats_g,
-        },
-        USER_ID,
-    )
-
-
-@mcp.tool()
-async def log_mood_and_energy(
-    date: str,
-    mood_rating: int,
-    energy_rating: int,
-    notes: Optional[str] = None,
-) -> dict:
-    """Registra el estado de ánimo y nivel de energía para una fecha.
-
-    mood_rating y energy_rating: valores de 1 a 10.
-    Si ya existe un registro para esa fecha, lo actualiza (upsert).
-    """
-    return await write_tools.log_mood_and_energy(
-        {
-            "date": date,
-            "mood_rating": mood_rating,
-            "energy_rating": energy_rating,
-            "notes": notes,
         },
         USER_ID,
     )
