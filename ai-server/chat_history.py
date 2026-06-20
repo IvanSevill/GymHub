@@ -79,10 +79,14 @@ def get_window_info(user_id: str, db: Session) -> tuple[int, datetime | None]:
 
 
 def delete_history(user_id: str, db: Session) -> None:
-    """Delete chat history but preserve messages within the rate-limit window."""
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=RATE_LIMIT_HOURS)
+    """Delete the user's entire chat history.
+
+    Clearing the conversation removes every stored message for the user. The
+    rate-limit window is time-based (see count_recent_user_messages), so a
+    fresh start also resets the message allowance — acceptable in a personal,
+    single-user deployment where the limit only throttles the owner.
+    """
     db.query(ChatMessage).filter(
         ChatMessage.user_id == user_id,
-        ChatMessage.created_at < cutoff,
     ).delete()
     db.commit()
