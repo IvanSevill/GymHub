@@ -9,64 +9,6 @@ ALGORITHM = "HS256"
 
 
 @pytest.mark.anyio
-async def test_register_user(client):
-    response = await client.post(
-        "/auth/register",
-        json={"email": "test@example.com", "name": "Test User", "password": "password123"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["email"] == "test@example.com"
-    assert data["name"] == "Test User"
-    assert "id" in data
-
-
-@pytest.mark.anyio
-async def test_register_duplicate_email(client):
-    await client.post(
-        "/auth/register",
-        json={"email": "test@example.com", "name": "Test User", "password": "password123"},
-    )
-    response = await client.post(
-        "/auth/register",
-        json={"email": "test@example.com", "name": "Another User", "password": "password456"},
-    )
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Email already registered"
-
-
-@pytest.mark.anyio
-async def test_login_success(client):
-    await client.post(
-        "/auth/register",
-        json={"email": "test@example.com", "name": "Test User", "password": "password123"},
-    )
-    response = await client.post(
-        "/auth/login",
-        json={"email": "test@example.com", "password": "password123"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
-    assert data["user"]["email"] == "test@example.com"
-
-
-@pytest.mark.anyio
-async def test_login_wrong_password(client):
-    await client.post(
-        "/auth/register",
-        json={"email": "test@example.com", "name": "Test User", "password": "password123"},
-    )
-    response = await client.post(
-        "/auth/login",
-        json={"email": "test@example.com", "password": "wrongpassword"},
-    )
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect email or password"
-
-
-@pytest.mark.anyio
 async def test_get_me(client, auth_headers):
     response = await client.get("/auth/me", headers=auth_headers)
     assert response.status_code == 200
@@ -122,14 +64,25 @@ async def test_expired_token_returns_401(client):
 
 @pytest.mark.anyio
 async def test_refresh_token(client):
-    await client.post(
-        "/auth/register",
-        json={"email": "refresh@test.com", "name": "Refresh", "password": "password123"},
-    )
-    login_resp = await client.post(
-        "/auth/login",
-        json={"email": "refresh@test.com", "password": "password123"},
-    )
+    # Obtain a refresh cookie through the Google OAuth flow (the only login path)
+    mock_google_response = MagicMock()
+    mock_google_response.status_code = 200
+    mock_google_response.json.return_value = {
+        "access_token": "fake-access-token",
+        "refresh_token": "fake-refresh-token",
+        "id_token": "fake-id-token",
+    }
+    mock_id_info = {
+        "email": "refresh@test.com",
+        "name": "Refresh",
+        "picture": "https://example.com/pic.jpg",
+        "sub": "google-sub-refresh",
+    }
+    with (
+        patch("app.routers.auth_routes.requests.post", return_value=mock_google_response),
+        patch("app.routers.auth_routes.id_token.verify_oauth2_token", return_value=mock_id_info),
+    ):
+        login_resp = await client.post("/auth/google", json={"code": "fake-code"})
     refresh_cookie = login_resp.cookies.get("refresh_token")
     assert refresh_cookie is not None
 

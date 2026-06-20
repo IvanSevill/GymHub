@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app import models
+from app import auth, models
 from app.routers.workouts import _expand_set_values
 
 
@@ -198,7 +198,7 @@ async def test_update_workout_not_found(client, auth_headers):
 
 
 @pytest.mark.anyio
-async def test_update_workout_wrong_user(client, auth_headers):
+async def test_update_workout_wrong_user(client, auth_headers, db):
     create_resp = await client.post(
         "/workouts",
         headers=auth_headers,
@@ -211,15 +211,11 @@ async def test_update_workout_wrong_user(client, auth_headers):
     )
     workout_id = create_resp.json()["id"]
 
-    await client.post(
-        "/auth/register",
-        json={"email": "user2@test.com", "name": "User 2", "password": "password123"},
-    )
-    login_resp = await client.post(
-        "/auth/login",
-        json={"email": "user2@test.com", "password": "password123"},
-    )
-    headers2 = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+    # Second user (Google-only auth): create directly and mint a JWT
+    user2 = models.User(email="user2@test.com", name="User 2")
+    db.add(user2)
+    db.commit()
+    headers2 = {"Authorization": f"Bearer {auth.create_access_token(data={'sub': user2.email})}"}
 
     resp = await client.put(
         f"/workouts/{workout_id}",

@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from . import database, models
@@ -25,8 +24,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 _PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
 _COOKIE_SAMESITE = "none" if _PRODUCTION else "lax"
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/google", auto_error=False)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
