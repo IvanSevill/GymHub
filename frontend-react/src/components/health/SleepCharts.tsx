@@ -5,6 +5,7 @@ import SectionHeader from "./components/SectionHeader";
 import SleepTrendChart from "./SleepTrendChart";
 import EfficiencyHistogram from "./EfficiencyHistogram";
 import SleepStagesChart from "./SleepStagesChart";
+import SleepLastEntry from "./SleepLastEntry";
 
 interface Props {
   data: SleepLog[];
@@ -29,6 +30,8 @@ const SleepCharts: React.FC<Props> = ({ data }) => {
         }
         title="Sueño"
       />
+
+      <SleepLastEntry data={data} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <SleepTrendChart data={data} />

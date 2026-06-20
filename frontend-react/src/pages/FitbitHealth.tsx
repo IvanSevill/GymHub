@@ -6,7 +6,6 @@ import { PERIOD_OPTIONS } from "../constants/periods";
 import HealthKpiCards from "../components/health/HealthKpiCards";
 import ActivityCharts from "../components/health/ActivityCharts";
 import SleepCharts from "../components/health/SleepCharts";
-import SleepLastEntry from "../components/health/SleepLastEntry";
 import WeightSection from "../components/health/WeightSection";
 import { useFitbitHealthData } from "../components/health/hooks/useFitbitHealthData";
 import NotConnectedState from "../components/health/components/NotConnectedState";
@@ -129,8 +128,6 @@ const FitbitHealth: React.FC = () => {
           />
 
           <ActivityCharts data={currentDaily} />
-
-          <SleepLastEntry data={currentSleep} />
 
           <SleepCharts data={currentSleep} />
 
