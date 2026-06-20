@@ -155,17 +155,3 @@ class WeightLog(Base):
     body_fat_pct = Column(Float, nullable=True)
     created_at = Column(DateTime, nullable=True)
     __table_args__ = (UniqueConstraint("user_id", "date", name="uq_weight_log_user_date"),)
-
-
-class Goal(Base):
-    __tablename__ = "goals"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    goal_type = Column(String, nullable=False)
-    target_value = Column(Float, nullable=True)
-    target_date = Column(String, nullable=True)
-    metric_unit = Column(String, nullable=True)
-    description = Column(Text, nullable=False, default="")
-    status = Column(String, nullable=False, default="active")
-    created_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, nullable=True)

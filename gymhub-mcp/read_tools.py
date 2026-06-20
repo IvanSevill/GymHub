@@ -614,73 +614,6 @@ def get_weight_logs(args: dict, user_id: str, db: Session) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def get_goal_progress(args: dict, user_id: str, db: Session) -> dict:
-    """Return progress for all active goals (or a specific one by goal_id)."""
-    goal_id: str | None = args.get("goal_id")
-
-    query = db.query(models.Goal).filter(models.Goal.user_id == user_id)
-    if goal_id:
-        query = query.filter(models.Goal.id == goal_id)
-    else:
-        query = query.filter(models.Goal.status == "active")
-    goals = query.all()
-
-    result = []
-    for g in goals:
-        current_value = None
-        if g.goal_type == "weight":
-            latest = (
-                db.query(models.WeightLog)
-                .filter(models.WeightLog.user_id == user_id)
-                .order_by(models.WeightLog.date.desc())
-                .first()
-            )
-            if latest:
-                current_value = latest.weight_kg
-        elif g.goal_type == "strength":
-            if g.description:
-                sets = (
-                    db.query(models.ExerciseSet.value)
-                    .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
-                    .join(models.Exercise, models.ExerciseSet.exercise_id == models.Exercise.id)
-                    .filter(models.Workout.user_id == user_id)
-                    .filter(models.Exercise.name.ilike(f"%{g.description}%"))
-                    .filter(models.ExerciseSet.value != "")
-                    .all()
-                )
-                if sets:
-                    current_value = max(_parse_exercise_value(s.value) for s in sets)
-        elif g.goal_type == "sleep":
-            cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=14)).strftime("%Y-%m-%d")
-            rows = (
-                db.query(func.avg(models.SleepLog.duration_ms))
-                .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= cutoff)
-                .scalar()
-            )
-            if rows:
-                current_value = round(rows / 3_600_000, 2)
-        elif g.goal_type == "cardio":
-            current_value = None
-
-        pct_complete = None
-        if current_value is not None and g.target_value and g.target_value > 0:
-            pct_complete = round((current_value / g.target_value) * 100, 1)
-
-        result.append({
-            "id": g.id,
-            "goal_type": g.goal_type,
-            "description": g.description,
-            "target_value": g.target_value,
-            "current_value": current_value,
-            "target_date": g.target_date,
-            "metric_unit": g.metric_unit,
-            "pct_complete": pct_complete,
-            "status": g.status,
-        })
-
-    return {"goals": result}
-
-
 def analyze_performance_correlation(args: dict, user_id: str, db: Session) -> dict:
     """Pearson correlation between two health/performance metrics."""
     metric1: str = args.get("metric1", "")
@@ -979,16 +912,6 @@ def generate_workout_plan(args: dict, user_id: str, db: Session) -> dict:
     )
     muscle_balance = {name: round(float(vol), 1) for name, vol in balance_rows if vol is not None}
 
-    active_goals = (
-        db.query(models.Goal)
-        .filter(models.Goal.user_id == user_id, models.Goal.status == "active")
-        .all()
-    )
-    goals_data = [
-        {"goal_type": g.goal_type, "description": g.description, "target_value": g.target_value}
-        for g in active_goals
-    ]
-
     return {
         "focus_muscle_groups": focus_groups,
         "goal": goal,
@@ -996,7 +919,6 @@ def generate_workout_plan(args: dict, user_id: str, db: Session) -> dict:
         "exercises_by_muscle": exercises_by_muscle,
         "personal_records": prs,
         "muscle_balance": muscle_balance,
-        "active_goals": goals_data,
     }
 
 

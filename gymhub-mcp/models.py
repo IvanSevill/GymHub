@@ -175,22 +175,5 @@ class WeightLog(Base):
     __table_args__ = (UniqueConstraint("user_id", "date", name="uq_weight_log_user_date"),)
 
 
-class Goal(Base):
-    """Fitness goal set by the user or AI."""
-
-    __tablename__ = "goals"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    goal_type = Column(String, nullable=False)
-    target_value = Column(Float, nullable=True)
-    target_date = Column(String, nullable=True)
-    metric_unit = Column(String, nullable=True)
-    description = Column(String, nullable=False, default="")
-    status = Column(String, nullable=False, default="active")
-    created_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, nullable=True)
-
-
 # Suppress unused import warning — datetime is used via Column(DateTime, default=datetime.utcnow)
 _ = datetime

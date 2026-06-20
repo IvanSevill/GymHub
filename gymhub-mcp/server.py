@@ -373,25 +373,8 @@ async def delete_weight_log(date: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# New read tools (goals, analytics, recovery, planning)
+# New read tools (analytics, recovery, planning)
 # ---------------------------------------------------------------------------
-
-
-@mcp.tool()
-def get_goal_progress(goal_id: Optional[str] = None) -> dict:
-    """Progreso de los objetivos de fitness del usuario.
-
-    Si se especifica goal_id devuelve solo ese objetivo; si no, todos los activos.
-    Para cada objetivo calcula el valor actual según el tipo (peso, fuerza, sueño, etc.)
-    e incluye el porcentaje completado.
-    """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_goal_progress({"goal_id": goal_id}, USER_ID, db)
-    finally:
-        db.close()
 
 
 @mcp.tool()
@@ -494,36 +477,6 @@ def get_overtraining_risk_assessment(days: int = 14) -> dict:
         )
     finally:
         db.close()
-
-
-# ---------------------------------------------------------------------------
-# New write tools (goals — DB direct, no HTTP)
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool()
-async def set_goal(
-    goal_type: str,
-    target_value: Optional[float] = None,
-    target_date: Optional[str] = None,
-    metric_unit: Optional[str] = None,
-    description: str = "",
-) -> dict:
-    """Crea o actualiza un objetivo de fitness para el usuario.
-
-    goal_type: weight, strength, sleep, cardio, custom
-    Si ya existe un objetivo activo del mismo tipo, lo actualiza.
-    """
-    return await write_tools.set_goal(
-        {
-            "goal_type": goal_type,
-            "target_value": target_value,
-            "target_date": target_date,
-            "metric_unit": metric_unit,
-            "description": description,
-        },
-        USER_ID,
-    )
 
 
 if __name__ == "__main__":
