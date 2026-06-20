@@ -122,6 +122,20 @@ class ChatMessage(Base):
     __table_args__ = (Index("ix_chat_messages_user_created", "user_id", "created_at"),)
 
 
+class ChatUsage(Base):
+    """Append-only log of user message timestamps for rate limiting.
+
+    Decoupled from ChatMessage on purpose: clearing the visible chat history
+    (delete_history) must not reset the user's message allowance, so the
+    rate-limit counters read from this table instead of from ChatMessage.
+    """
+    __tablename__ = "chat_usage"
+    id = Column(String, primary_key=True, default=_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    __table_args__ = (Index("ix_chat_usage_user_created", "user_id", "created_at"),)
+
+
 class ChatMemory(Base):
     __tablename__ = "chat_memories"
     id = Column(String, primary_key=True, default=_uuid)
