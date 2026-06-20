@@ -105,7 +105,8 @@ async def test_summary_with_workouts(client, auth_headers, analytics_data):
     assert resp.status_code == 200
     data = resp.json()
     assert data["workout_count"] == 2
-    assert data["total_volume_kg"] == 110.0
+    # Volume = per-exercise mean weight x 4 series: (50*4) + (60*4) = 440
+    assert data["total_volume_kg"] == 440.0
     assert data["pr_count"] == 1
     assert data["avg_duration_min"] == 75.0
 
@@ -130,7 +131,8 @@ async def test_volume_trend(client, auth_headers, analytics_data):
     data = resp.json()
     assert len(data) == 2
     volumes = sorted(p["volume"] for p in data)
-    assert volumes == [50.0, 60.0]
+    # Per-exercise mean weight x 4 series: 50*4 = 200, 60*4 = 240
+    assert volumes == [200.0, 240.0]
 
 
 @pytest.mark.anyio
