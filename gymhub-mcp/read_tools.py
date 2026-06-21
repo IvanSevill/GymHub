@@ -3,18 +3,14 @@
 Tools no longer touch the database directly; they call the backend via
 ``backend_client`` (authenticated with the user's JWT from the environment).
 The ``user_id``/``db`` parameters are kept in the signatures for backward
-compatibility with the server wrappers but are ignored by migrated tools.
+compatibility with the server wrappers but are ignored.
 """
 
 import re
 import statistics
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import desc, func
-from sqlalchemy.orm import Session
-
 import backend_client
-import models
 
 
 def _days_cutoff_str(days: int) -> str:
@@ -22,114 +18,63 @@ def _days_cutoff_str(days: int) -> str:
     return (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 
-# ---------------------------------------------------------------------------
-# Helpers copied verbatim from backend/app/routers/analytics.py
-# ---------------------------------------------------------------------------
-
-
 def _parse_exercise_value(value_str: str) -> float:
-    """Return the single numeric weight stored in an ExerciseSet value.
+    """Return the numeric weight stored in an ExerciseSet value.
 
-    Each set stores one weight, so the only normalization required is the
-    Spanish decimal comma. Non-numeric values (e.g. 'bodyweight') yield 0.0.
+    Normalises Spanish decimal comma. Non-numeric values yield 0.0.
     """
     m = re.match(r"\s*(\d+\.?\d*)", value_str.replace(",", "."))
     return float(m.group(1)) if m else 0.0
 
 
-def _compute_workout_count(
-    db: Session, user_id: str, period_start: datetime, period_end: datetime
-) -> int:
-    return (
-        db.query(func.count(models.Workout.id))
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time >= period_start,
-            models.Workout.start_time < period_end,
-        )
-        .scalar()
-        or 0
-    )
+def _find_exercise_by_name(exercise_name: str) -> tuple:
+    """Return (exercise_id, resolved_name) by partial name match via REST."""
+    data = backend_client.get("/exercises")
+    if backend_client.is_error(data) or not isinstance(data, list):
+        return None, None
+    n = exercise_name.lower()
+    for ex in data:
+        if n in ex.get("name", "").lower():
+            return ex.get("id"), ex.get("name")
+    return None, None
 
 
-def _compute_volume(
-    db: Session, user_id: str, period_start: datetime, period_end: datetime
-) -> float:
-    sets = (
-        db.query(models.ExerciseSet.value)
-        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time >= period_start,
-            models.Workout.start_time < period_end,
-            models.ExerciseSet.value != "",
-        )
-        .all()
-    )
-    return sum(_parse_exercise_value(s.value) for s in sets)
+def _duration_min_from_workout(w: dict):
+    """Compute duration in minutes from a REST workout dict."""
+    fitbit = w.get("fitbit_data") or {}
+    dur_ms = fitbit.get("duration_ms") or 0
+    if dur_ms > 0:
+        return round(dur_ms / 60_000, 1)
+    start = w.get("start_time", "")
+    end = w.get("end_time", "")
+    if start and end and end > start:
+        try:
+            s = datetime.fromisoformat(start.rstrip("Z"))
+            e = datetime.fromisoformat(end.rstrip("Z"))
+            return round((e - s).total_seconds() / 60, 1)
+        except Exception:
+            pass
+    return None
 
 
-def _compute_avg_duration(
-    db: Session, user_id: str, period_start: datetime, period_end: datetime
-) -> float | None:
-    rows = (
-        db.query(
-            models.Workout.start_time,
-            models.Workout.end_time,
-            models.FitbitData.duration_ms,
-        )
-        .outerjoin(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time >= period_start,
-            models.Workout.start_time < period_end,
-        )
-        .all()
-    )
-    durations = []
-    for start_time, end_time, fitbit_ms in rows:
-        if fitbit_ms and fitbit_ms > 0:
-            durations.append(fitbit_ms / 60000)
-        elif end_time and end_time > start_time:
-            durations.append((end_time - start_time).total_seconds() / 60)
-    return round(sum(durations) / len(durations), 1) if durations else None
+def _group_sets(w: dict) -> dict:
+    """Group exercise sets by exercise name into {name: ['80 kg', ...]}."""
+    exercises: dict = {}
+    for s in w.get("exercise_sets", []):
+        ex = s.get("exercise") or {}
+        name = ex.get("name", "Unknown")
+        label = f"{s.get('value', '')} {s.get('measurement', '')}".strip()
+        exercises.setdefault(name, []).append(label)
+    return exercises
 
 
-def _compute_prs(
-    db: Session, user_id: str, period_start: datetime, period_end: datetime
-) -> int:
-    period_sets = (
-        db.query(models.ExerciseSet.exercise_id, models.ExerciseSet.value)
-        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time >= period_start,
-            models.Workout.start_time < period_end,
-            models.ExerciseSet.value != "",
-        )
-        .all()
-    )
-    pre_sets = (
-        db.query(models.ExerciseSet.exercise_id, models.ExerciseSet.value)
-        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time < period_start,
-            models.ExerciseSet.value != "",
-        )
-        .all()
-    )
-    pre_max: dict = {}
-    for ex_id, val in pre_sets:
-        v = _parse_exercise_value(val)
-        if v > 0:
-            pre_max[ex_id] = max(pre_max.get(ex_id, 0.0), v)
-    period_max: dict = {}
-    for ex_id, val in period_sets:
-        v = _parse_exercise_value(val)
-        if v > 0:
-            period_max[ex_id] = max(period_max.get(ex_id, 0.0), v)
-    return sum(1 for ex_id, mv in period_max.items() if mv > pre_max.get(ex_id, 0.0))
+def _volume_from_workouts(workouts_list: list) -> float:
+    """Sum parsed weight values across all sets in a list of REST workout dicts."""
+    total = 0.0
+    for w in workouts_list:
+        for s in w.get("exercise_sets", []):
+            total += _parse_exercise_value(s.get("value", ""))
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -137,67 +82,41 @@ def _compute_prs(
 # ---------------------------------------------------------------------------
 
 
-def get_workouts(args: dict, user_id: str, db: Session) -> dict:
+def get_workouts(args: dict, user_id: str, db) -> dict:
     """Return recent workouts with exercise sets and Fitbit data."""
-    days: int = int(args.get("days", 30))
-    limit: int = int(args.get("limit", 20))
+    days = int(args.get("days", 30))
+    limit = int(args.get("limit", 20))
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
-
-    workouts = (
-        db.query(models.Workout)
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time >= cutoff,
-        )
-        .order_by(desc(models.Workout.start_time))
-        .limit(limit)
-        .all()
-    )
-
+    data = backend_client.get("/workouts", {"start_date": cutoff.isoformat()})
+    if backend_client.is_error(data):
+        return data
+    workouts = data if isinstance(data, list) else []
     result = []
-    for w in workouts:
-        # Calculate duration
-        fitbit = w.fitbit_data
-        if fitbit and fitbit.duration_ms and fitbit.duration_ms > 0:
-            duration_min = round(fitbit.duration_ms / 60000, 1)
-        elif w.end_time and w.end_time > w.start_time:
-            duration_min = round((w.end_time - w.start_time).total_seconds() / 60, 1)
-        else:
-            duration_min = None
-
-        # Group sets by exercise name
-        exercises: dict = {}
-        for s in w.exercise_sets:
-            ex_name = s.exercise.name if s.exercise else "Unknown"
-            label = f"{s.value} {s.measurement}".strip()
-            exercises.setdefault(ex_name, []).append(label)
-
+    for w in workouts[:limit]:
+        fitbit = w.get("fitbit_data") or {}
         fitbit_dict = None
-        if fitbit:
+        if any(fitbit.get(k) for k in ("calories", "heart_rate_avg", "duration_ms", "distance_km")):
             fitbit_dict = {
-                "calories": fitbit.calories,
-                "heart_rate_avg": fitbit.heart_rate_avg,
-                "distance_km": fitbit.distance_km,
-                "azm_fat_burn": fitbit.azm_fat_burn,
-                "azm_cardio": fitbit.azm_cardio,
-                "azm_peak": fitbit.azm_peak,
+                "calories": fitbit.get("calories"),
+                "heart_rate_avg": fitbit.get("heart_rate_avg"),
+                "distance_km": fitbit.get("distance_km"),
+                "azm_fat_burn": fitbit.get("azm_fat_burn"),
+                "azm_cardio": fitbit.get("azm_cardio"),
+                "azm_peak": fitbit.get("azm_peak"),
             }
-
-        result.append(
-            {
-                "id": w.id,
-                "title": w.title,
-                "date": w.start_time.strftime("%Y-%m-%d %H:%M"),
-                "duration_min": duration_min,
-                "exercises": exercises,
-                "fitbit": fitbit_dict,
-            }
-        )
-
+        start_str = w.get("start_time", "")
+        result.append({
+            "id": w.get("id"),
+            "title": w.get("title"),
+            "date": start_str[:16].replace("T", " ") if start_str else "",
+            "duration_min": _duration_min_from_workout(w),
+            "exercises": _group_sets(w),
+            "fitbit": fitbit_dict,
+        })
     return {"workouts": result, "total": len(result)}
 
 
-def get_exercise_prs(args: dict, user_id: str, db: Session) -> dict:
+def get_exercise_prs(args: dict, user_id: str, db) -> dict:
     """All-time personal records per exercise (optionally a single exercise)."""
     exercise_name = args.get("exercise_name")
     data = backend_client.get("/analytics/max-lifts", {"days": 3650})
@@ -210,7 +129,7 @@ def get_exercise_prs(args: dict, user_id: str, db: Session) -> dict:
     return {"prs": items}
 
 
-def get_analytics_summary(args: dict, user_id: str, db: Session) -> dict:
+def get_analytics_summary(args: dict, user_id: str, db) -> dict:
     """Return KPI summary (current vs previous period) from the backend."""
     days = int(args.get("days", 30))
     data = backend_client.get("/analytics/summary", {"days": days})
@@ -220,7 +139,7 @@ def get_analytics_summary(args: dict, user_id: str, db: Session) -> dict:
     return data
 
 
-def get_exercise_frequency(args: dict, user_id: str, db: Session) -> dict:
+def get_exercise_frequency(args: dict, user_id: str, db) -> dict:
     """Most-trained exercises in the period (optionally filtered by muscle)."""
     days = int(args.get("days", 90))
     muscle_name = args.get("muscle_name")
@@ -234,95 +153,48 @@ def get_exercise_frequency(args: dict, user_id: str, db: Session) -> dict:
     return {"exercises": items}
 
 
-def get_exercise_history(args: dict, user_id: str, db: Session) -> dict:
+def get_exercise_history(args: dict, user_id: str, db) -> dict:
     """Return all sets for a specific exercise grouped by session date."""
-    exercise_name: str = args.get("exercise_name", "")
-    days: int = int(args.get("days", 90))
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    exercise_name = args.get("exercise_name", "")
+    days = int(args.get("days", 90))
+    cutoff = _days_cutoff_str(days)
 
-    exercise = (
-        db.query(models.Exercise)
-        .filter(models.Exercise.name.ilike(f"%{exercise_name}%"))
-        .first()
-    )
-    if not exercise:
+    exercise_id, resolved_name = _find_exercise_by_name(exercise_name)
+    if not exercise_id:
         return {"error": f"Exercise not found: {exercise_name}"}
 
-    rows = (
-        db.query(
-            models.Workout.start_time,
-            models.ExerciseSet.value,
-            models.ExerciseSet.measurement,
-        )
-        .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
-        .filter(models.Workout.user_id == user_id)
-        .filter(models.ExerciseSet.exercise_id == exercise.id)
-        .filter(models.Workout.start_time >= cutoff)
-        .order_by(desc(models.Workout.start_time))
-        .all()
-    )
+    data = backend_client.get(f"/analytics/exercise-history/{exercise_id}")
+    if backend_client.is_error(data):
+        return data
 
+    rows = [r for r in (data if isinstance(data, list) else []) if str(r.get("date", ""))[:10] >= cutoff]
     by_date: dict = {}
-    for start_time, value, measurement in rows:
-        date_key = start_time.strftime("%Y-%m-%d")
-        by_date.setdefault(date_key, []).append({"value": value, "measurement": measurement})
-
-    history = [
-        {"date": date, "sets": sets_list} for date, sets_list in sorted(by_date.items(), reverse=True)
-    ]
-    return {"exercise": exercise.name, "history": history}
+    for r in rows:
+        date_key = str(r.get("date", ""))[:10]
+        by_date.setdefault(date_key, []).append({"value": r.get("value"), "measurement": r.get("measurement")})
+    history = [{"date": d, "sets": sets_list} for d, sets_list in sorted(by_date.items(), reverse=True)]
+    return {"exercise": resolved_name, "history": history}
 
 
-def get_weight_progress(args: dict, user_id: str, db: Session) -> dict:
+def get_weight_progress(args: dict, user_id: str, db) -> dict:
     """Return daily maximum value for a specific exercise over time."""
-    exercise_name: str = args.get("exercise_name", "")
-    days: int = int(args.get("days", 60))
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    cutoff = now - timedelta(days=days)
+    exercise_name = args.get("exercise_name", "")
+    days = int(args.get("days", 60))
 
-    exercise = (
-        db.query(models.Exercise)
-        .filter(models.Exercise.name.ilike(f"%{exercise_name}%"))
-        .first()
-    )
-    if not exercise:
+    exercise_id, resolved_name = _find_exercise_by_name(exercise_name)
+    if not exercise_id:
         return {"error": f"Exercise not found: {exercise_name}"}
 
-    rows = (
-        db.query(
-            models.Workout.start_time,
-            models.ExerciseSet.value,
-            models.ExerciseSet.measurement,
-        )
-        .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
-        .filter(models.Workout.user_id == user_id)
-        .filter(models.ExerciseSet.exercise_id == exercise.id)
-        .filter(models.Workout.start_time >= cutoff)
-        .filter(models.Workout.start_time <= now)
-        .filter(models.ExerciseSet.value != "")
-        .filter(models.ExerciseSet.value != "0")
-        .order_by(models.Workout.start_time)
-        .all()
-    )
+    data = backend_client.get("/analytics/weight-progress", {"exercise_id": exercise_id, "days": days})
+    if backend_client.is_error(data):
+        return data
 
-    daily_data: dict = {}
-    unit: str = ""
-    for start_time, value_str, measurement in rows:
-        max_val = _parse_exercise_value(value_str)
-        if max_val == 0.0:
-            continue
-        date_key = start_time.strftime("%Y-%m-%d")
-        if date_key not in daily_data or max_val > daily_data[date_key]:
-            daily_data[date_key] = max_val
-            unit = measurement
-
-    data = [
-        {"date": date, "max_value": val} for date, val in sorted(daily_data.items())
-    ]
-    return {"exercise": exercise.name, "unit": unit, "data": data}
+    points = data if isinstance(data, list) else []
+    result_data = [{"date": str(p.get("date", ""))[:10], "max_value": p.get("value")} for p in points]
+    return {"exercise": resolved_name, "unit": "kg", "data": result_data}
 
 
-def get_daily_health(args: dict, user_id: str, db: Session) -> dict:
+def get_daily_health(args: dict, user_id: str, db) -> dict:
     """Return Fitbit daily health data (steps, calories, active minutes, etc.)."""
     days = int(args.get("days", 14))
     cutoff = _days_cutoff_str(days)
@@ -335,7 +207,7 @@ def get_daily_health(args: dict, user_id: str, db: Session) -> dict:
     return {"data": rows, "avg_steps": avg_steps, "avg_calories": avg_calories}
 
 
-def get_sleep_logs(args: dict, user_id: str, db: Session) -> dict:
+def get_sleep_logs(args: dict, user_id: str, db) -> dict:
     """Return Fitbit sleep logs with duration, efficiency, and stage breakdown."""
     days = int(args.get("days", 14))
     cutoff = _days_cutoff_str(days)
@@ -360,7 +232,7 @@ def get_sleep_logs(args: dict, user_id: str, db: Session) -> dict:
     return {"logs": logs, "avg_duration_h": avg_duration_h, "avg_efficiency": avg_efficiency}
 
 
-def get_muscle_balance(args: dict, user_id: str, db: Session) -> dict:
+def get_muscle_balance(args: dict, user_id: str, db) -> dict:
     """Return training volume per muscle group per ISO week (from the backend)."""
     days = int(args.get("days", 90))
     data = backend_client.get("/analytics/muscle-balance", {"days": days})
@@ -375,70 +247,44 @@ def get_muscle_balance(args: dict, user_id: str, db: Session) -> dict:
     return {"balance": balance, "totals_by_muscle": totals_by_muscle}
 
 
-def get_workout_count_in_period(args: dict, user_id: str, db: Session) -> dict:
+def get_workout_count_in_period(args: dict, user_id: str, db) -> dict:
     """Count workouts between two dates (inclusive). Dates as YYYY-MM-DD."""
     start_date: str = args["start_date"]
     end_date: str = args["end_date"]
-    start = datetime.strptime(start_date, "%Y-%m-%d")
-    end = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-    count = (
-        db.query(func.count(models.Workout.id))
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time >= start,
-            models.Workout.start_time < end,
-        )
-        .scalar()
-        or 0
-    )
+    start_iso = datetime.strptime(start_date, "%Y-%m-%d").isoformat()
+    end_iso = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).isoformat()
+    data = backend_client.get("/workouts", {"start_date": start_iso, "end_date": end_iso})
+    if backend_client.is_error(data):
+        return data
+    count = len(data) if isinstance(data, list) else 0
     return {"count": count, "start_date": start_date, "end_date": end_date}
 
 
-def get_workouts_in_period(args: dict, user_id: str, db: Session) -> list:
+def get_workouts_in_period(args: dict, user_id: str, db) -> list:
     """Return workouts with full exercise detail between two dates (inclusive)."""
     start_date: str = args["start_date"]
     end_date: str = args["end_date"]
-    start = datetime.strptime(start_date, "%Y-%m-%d")
-    end = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-
-    workouts = (
-        db.query(models.Workout)
-        .filter(
-            models.Workout.user_id == user_id,
-            models.Workout.start_time >= start,
-            models.Workout.start_time < end,
-        )
-        .order_by(models.Workout.start_time)
-        .all()
-    )
-
+    start_iso = datetime.strptime(start_date, "%Y-%m-%d").isoformat()
+    end_iso = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).isoformat()
+    data = backend_client.get("/workouts", {"start_date": start_iso, "end_date": end_iso})
+    if backend_client.is_error(data):
+        return data
     result = []
-    for w in workouts:
-        duration_min: int | None = None
-        if w.fitbit_data and w.fitbit_data.duration_ms:
-            duration_min = round(w.fitbit_data.duration_ms / 60_000)
-        elif w.start_time and w.end_time:
-            duration_min = round((w.end_time - w.start_time).total_seconds() / 60)
-
-        exercises: dict = {}
-        for s in w.exercise_sets:
-            name = s.exercise.name if s.exercise else "Unknown"
-            exercises.setdefault(name, []).append(f"{s.value} {s.measurement}".strip())
-
+    for w in (data if isinstance(data, list) else []):
+        start_str = w.get("start_time", "")
         result.append({
-            "id": w.id,
-            "title": w.title,
-            "date": w.start_time.strftime("%Y-%m-%d"),
-            "start_time": w.start_time.isoformat(),
-            "end_time": w.end_time.isoformat(),
-            "duration_min": duration_min,
-            "exercises": exercises,
+            "id": w.get("id"),
+            "title": w.get("title"),
+            "date": start_str[:10] if start_str else "",
+            "start_time": start_str,
+            "end_time": w.get("end_time", ""),
+            "duration_min": _duration_min_from_workout(w),
+            "exercises": _group_sets(w),
         })
-
     return result
 
 
-def get_user_profile(args: dict, user_id: str, db: Session) -> dict:
+def get_user_profile(args: dict, user_id: str, db) -> dict:
     """Return the user's profile plus their latest weight/body fat."""
     profile = backend_client.get("/auth/me")
     if backend_client.is_error(profile):
@@ -454,7 +300,7 @@ def get_user_profile(args: dict, user_id: str, db: Session) -> dict:
     }
 
 
-def get_weight_logs(args: dict, user_id: str, db: Session) -> dict:
+def get_weight_logs(args: dict, user_id: str, db) -> dict:
     """Return the user's weight and body fat history (from the backend)."""
     days = int(args.get("days", 90))
     cutoff = _days_cutoff_str(days)
@@ -477,69 +323,68 @@ def get_weight_logs(args: dict, user_id: str, db: Session) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 6 new read tools for GymChat
+# Advanced analysis tools (compute via REST data)
 # ---------------------------------------------------------------------------
 
 
-def analyze_performance_correlation(args: dict, user_id: str, db: Session) -> dict:
+def analyze_performance_correlation(args: dict, user_id: str, db) -> dict:
     """Pearson correlation between two health/performance metrics."""
     metric1: str = args.get("metric1", "")
     metric2: str = args.get("metric2", "")
     days: int = int(args.get("days", 60))
+    cutoff = _days_cutoff_str(days)
 
-    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
-
-    def _get_series(metric: str) -> dict[str, float]:
-        series: dict[str, float] = {}
+    def _get_series(metric: str) -> dict:
+        series: dict = {}
         if metric in ("sleep_duration", "sleep_efficiency"):
-            col = models.SleepLog.duration_ms if metric == "sleep_duration" else models.SleepLog.efficiency
-            rows = (
-                db.query(models.SleepLog.date, col)
-                .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= cutoff)
-                .all()
-            )
-            for date, val in rows:
-                if val is not None:
-                    v = val / 3_600_000 if metric == "sleep_duration" else float(val)
-                    series[date] = v
-        elif metric == "resting_hr":
-            rows = (
-                db.query(models.DailyHealth.date, models.DailyHealth.resting_heart_rate)
-                .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= cutoff)
-                .all()
-            )
-            for date, val in rows:
-                if val and val > 0:
-                    series[date] = float(val)
-        elif metric == "steps":
-            rows = (
-                db.query(models.DailyHealth.date, models.DailyHealth.steps)
-                .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= cutoff)
-                .all()
-            )
-            for date, val in rows:
-                if val and val > 0:
+            data = backend_client.get("/fitbit-health/sleep", {"days": days})
+            if backend_client.is_error(data) or not isinstance(data, list):
+                return series
+            for r in data:
+                date = str(r.get("date", ""))[:10]
+                if date < cutoff:
+                    continue
+                if metric == "sleep_duration":
+                    ms = r.get("duration_ms") or 0
+                    if ms > 0:
+                        series[date] = ms / 3_600_000
+                else:
+                    eff = r.get("efficiency")
+                    if eff is not None:
+                        series[date] = float(eff)
+        elif metric in ("resting_hr", "steps"):
+            data = backend_client.get("/fitbit-health/daily", {"days": days})
+            if backend_client.is_error(data) or not isinstance(data, list):
+                return series
+            field = "resting_heart_rate" if metric == "resting_hr" else "steps"
+            for r in data:
+                date = str(r.get("date", ""))[:10]
+                if date < cutoff:
+                    continue
+                val = r.get(field) or 0
+                if val > 0:
                     series[date] = float(val)
         elif metric == "workout_volume":
-            rows = (
-                db.query(models.Workout.start_time, models.ExerciseSet.value)
-                .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
-                .filter(models.Workout.user_id == user_id, models.Workout.start_time >= datetime.strptime(cutoff, "%Y-%m-%d"))
-                .filter(models.ExerciseSet.value != "")
-                .all()
-            )
-            daily_vol: dict[str, float] = {}
-            for start_time, value_str in rows:
-                date_key = start_time.strftime("%Y-%m-%d")
-                daily_vol[date_key] = daily_vol.get(date_key, 0.0) + _parse_exercise_value(value_str)
-            series.update(daily_vol)
+            cutoff_dt = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+            data = backend_client.get("/workouts", {"start_date": cutoff_dt.isoformat()})
+            if backend_client.is_error(data) or not isinstance(data, list):
+                return series
+            for w in data:
+                date = str(w.get("start_time", ""))[:10]
+                if not date or date < cutoff:
+                    continue
+                vol = _volume_from_workouts([w])
+                if vol > 0:
+                    series[date] = series.get(date, 0.0) + vol
         elif metric == "weight":
-            rows = (
-                db.query(models.WeightLog.date, models.WeightLog.weight_kg)
-                .filter(models.WeightLog.user_id == user_id, models.WeightLog.date >= cutoff)
-                .all()
-            )
-            for date, val in rows:
+            data = backend_client.get("/weight")
+            if backend_client.is_error(data) or not isinstance(data, list):
+                return series
+            for r in data:
+                date = str(r.get("date", ""))[:10]
+                if date < cutoff:
+                    continue
+                val = r.get("weight_kg")
                 if val:
                     series[date] = float(val)
         return series
@@ -587,42 +432,29 @@ def analyze_performance_correlation(args: dict, user_id: str, db: Session) -> di
     }
 
 
-def predict_performance_trend(args: dict, user_id: str, db: Session) -> dict:
+def predict_performance_trend(args: dict, user_id: str, db) -> dict:
     """Simple OLS linear regression to predict exercise performance trend."""
     exercise_name: str = args.get("exercise_name", "")
     days: int = int(args.get("days", 30))
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
-    exercise = (
-        db.query(models.Exercise)
-        .filter(models.Exercise.name.ilike(f"%{exercise_name}%"))
-        .first()
-    )
-    if not exercise:
+    exercise_id, resolved_name = _find_exercise_by_name(exercise_name)
+    if not exercise_id:
         return {"error": f"Exercise not found: {exercise_name}"}
 
-    rows = (
-        db.query(models.Workout.start_time, models.ExerciseSet.value)
-        .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
-        .filter(models.Workout.user_id == user_id)
-        .filter(models.ExerciseSet.exercise_id == exercise.id)
-        .filter(models.Workout.start_time >= cutoff)
-        .filter(models.ExerciseSet.value != "")
-        .filter(models.ExerciseSet.value != "0")
-        .order_by(models.Workout.start_time)
-        .all()
-    )
+    data = backend_client.get("/analytics/weight-progress", {"exercise_id": exercise_id, "days": days})
+    if backend_client.is_error(data):
+        return data
 
-    daily_max: dict[str, float] = {}
-    for start_time, value_str in rows:
-        val = _parse_exercise_value(value_str)
+    daily_max: dict = {}
+    for p in (data if isinstance(data, list) else []):
+        date_key = str(p.get("date", ""))[:10]
+        val = float(p.get("value") or 0)
         if val > 0:
-            date_key = start_time.strftime("%Y-%m-%d")
             daily_max[date_key] = max(daily_max.get(date_key, 0.0), val)
 
     if len(daily_max) < 2:
         return {
-            "exercise": exercise.name,
+            "exercise": resolved_name,
             "data_points": len(daily_max),
             "slope_per_week": None,
             "current_max": max(daily_max.values()) if daily_max else None,
@@ -641,7 +473,6 @@ def predict_performance_trend(args: dict, user_id: str, db: Session) -> dict:
 
     slope = num / den if den != 0 else 0.0
     slope_per_week = slope * 7
-
     current_max = values[-1]
     projected = current_max + slope * 30
 
@@ -653,7 +484,7 @@ def predict_performance_trend(args: dict, user_id: str, db: Session) -> dict:
         trend = "bajando"
 
     return {
-        "exercise": exercise.name,
+        "exercise": resolved_name,
         "data_points": n,
         "slope_per_week": round(slope_per_week, 4),
         "current_max": current_max,
@@ -662,52 +493,39 @@ def predict_performance_trend(args: dict, user_id: str, db: Session) -> dict:
     }
 
 
-def suggest_recovery_protocol(args: dict, user_id: str, db: Session) -> dict:
+def suggest_recovery_protocol(args: dict, user_id: str, db) -> dict:
     """Evaluate recovery signals: last 3 workouts, sleep, resting HR."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff_14d = (now - timedelta(days=14)).isoformat()
 
-    workout_cutoff = now - timedelta(days=14)
-    workouts = (
-        db.query(models.Workout)
-        .filter(models.Workout.user_id == user_id, models.Workout.start_time >= workout_cutoff)
-        .order_by(models.Workout.start_time.desc())
-        .limit(3)
-        .all()
-    )
+    workouts_data = backend_client.get("/workouts", {"start_date": cutoff_14d})
+    workouts = (workouts_data if isinstance(workouts_data, list) else [])[-3:]
 
-    total_volume = 0.0
+    total_volume = _volume_from_workouts(workouts)
     total_duration = 0.0
     for w in workouts:
-        for s in w.exercise_sets:
-            total_volume += _parse_exercise_value(s.value)
-        if w.fitbit_data and w.fitbit_data.duration_ms:
-            total_duration += w.fitbit_data.duration_ms / 60000
-        elif w.end_time and w.start_time:
-            total_duration += (w.end_time - w.start_time).total_seconds() / 60
+        total_duration += (_duration_min_from_workout(w) or 0)
 
-    sleep_cutoff = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-    sleep_rows = (
-        db.query(models.SleepLog.efficiency, models.SleepLog.duration_ms)
-        .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= sleep_cutoff)
-        .all()
-    )
-
+    sleep_data = backend_client.get("/fitbit-health/sleep", {"days": 7})
+    sleep_rows = [
+        s for s in (sleep_data if isinstance(sleep_data, list) else [])
+        if s.get("efficiency") is not None
+    ]
     avg_sleep_efficiency = (
-        round(sum(r.efficiency for r in sleep_rows) / len(sleep_rows)) if sleep_rows else None
+        round(sum(r["efficiency"] for r in sleep_rows) / len(sleep_rows)) if sleep_rows else None
     )
     avg_sleep_duration_h = (
-        round(sum(r.duration_ms for r in sleep_rows) / len(sleep_rows) / 3_600_000, 2) if sleep_rows else None
+        round(sum((r.get("duration_ms") or 0) for r in sleep_rows) / len(sleep_rows) / 3_600_000, 2)
+        if sleep_rows else None
     )
 
-    health_cutoff = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-    health_rows = (
-        db.query(models.DailyHealth.resting_heart_rate)
-        .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= health_cutoff)
-        .filter(models.DailyHealth.resting_heart_rate > 0)
-        .all()
-    )
+    health_data = backend_client.get("/fitbit-health/daily", {"days": 7})
+    health_rows = [
+        r for r in (health_data if isinstance(health_data, list) else [])
+        if (r.get("resting_heart_rate") or 0) > 0
+    ]
     avg_resting_hr = (
-        round(sum(r.resting_heart_rate for r in health_rows) / len(health_rows)) if health_rows else None
+        round(sum(r["resting_heart_rate"] for r in health_rows) / len(health_rows)) if health_rows else None
     )
 
     sleep_deficit = avg_sleep_duration_h is not None and avg_sleep_duration_h < 7.0
@@ -723,61 +541,47 @@ def suggest_recovery_protocol(args: dict, user_id: str, db: Session) -> dict:
     }
 
 
-def generate_workout_plan(args: dict, user_id: str, db: Session) -> dict:
+def generate_workout_plan(args: dict, user_id: str, db) -> dict:
     """Gather data for LLM to build a personalized workout plan."""
     focus_groups: list = args.get("focus_muscle_groups", [])
     goal: str = args.get("goal", "")
     intensity_level: str = args.get("intensity_level", "moderate")
 
-    exercises_by_muscle = {}
-    for muscle_name in focus_groups:
-        exercises = (
-            db.query(models.Exercise.name)
-            .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
-            .filter(models.Muscle.name.ilike(f"%{muscle_name}%"))
-            .all()
-        )
-        exercises_by_muscle[muscle_name] = [e.name for e in exercises]
+    exercises_data = backend_client.get("/exercises")
+    exercises_list = exercises_data if isinstance(exercises_data, list) else []
+
+    exercises_by_muscle: dict = {}
+    for focus in focus_groups:
+        f = focus.lower()
+        exercises_by_muscle[focus] = [
+            ex["name"] for ex in exercises_list
+            if f in (ex.get("muscle") or {}).get("name", "").lower()
+        ]
+
+    prs_data = backend_client.get("/analytics/max-lifts")
+    prs_list = prs_data if isinstance(prs_data, list) else []
 
     prs = []
-    for muscle_name in focus_groups:
-        pr_rows = (
-            db.query(
-                models.Exercise.name,
-                models.ExerciseSet.value,
-                models.ExerciseSet.measurement,
-                models.Workout.start_time,
-            )
-            .join(models.ExerciseSet, models.Exercise.id == models.ExerciseSet.exercise_id)
-            .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
-            .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
-            .filter(models.Workout.user_id == user_id)
-            .filter(models.Muscle.name.ilike(f"%{muscle_name}%"))
-            .filter(models.ExerciseSet.value != "")
-            .filter(models.ExerciseSet.value != "0")
-            .all()
-        )
+    for focus in focus_groups:
+        f = focus.lower()
         pr_map: dict = {}
-        for ex_name, val, meas, _ in pr_rows:
-            v = _parse_exercise_value(val)
-            if v > 0 and (ex_name not in pr_map or v > pr_map[ex_name]["value"]):
-                pr_map[ex_name] = {"value": v, "measurement": meas}
-        for ex_name, data in pr_map.items():
-            prs.append({"exercise": ex_name, "max_value": data["value"], "unit": data["measurement"]})
+        for pr in prs_list:
+            muscle_name = (pr.get("muscle_name") or "").lower()
+            if f in muscle_name:
+                ex_name = pr.get("exercise_name") or pr.get("exercise", "")
+                val = pr.get("max_value") or 0
+                if val > 0 and (ex_name not in pr_map or val > pr_map[ex_name]["value"]):
+                    pr_map[ex_name] = {"value": val, "measurement": pr.get("measurement", "kg")}
+        for ex_name, d in pr_map.items():
+            prs.append({"exercise": ex_name, "max_value": d["value"], "unit": d["measurement"]})
 
-    days = 90
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
-    balance_rows = (
-        db.query(models.Muscle.name, func.sum(_parse_exercise_value(models.ExerciseSet.value)))
-        .join(models.Exercise, models.Muscle.id == models.Exercise.muscle_id)
-        .join(models.ExerciseSet, models.Exercise.id == models.ExerciseSet.exercise_id)
-        .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
-        .filter(models.Workout.user_id == user_id, models.Workout.start_time >= cutoff)
-        .filter(models.ExerciseSet.value != "")
-        .group_by(models.Muscle.name)
-        .all()
-    )
-    muscle_balance = {name: round(float(vol), 1) for name, vol in balance_rows if vol is not None}
+    balance_data = backend_client.get("/analytics/muscle-balance", {"days": 90})
+    balance_list = balance_data if isinstance(balance_data, list) else []
+    muscle_balance: dict = {}
+    for entry in balance_list:
+        m = entry.get("muscle")
+        vol = entry.get("volume_kg") or entry.get("volume") or 0
+        muscle_balance[m] = round(muscle_balance.get(m, 0.0) + vol, 1)
 
     return {
         "focus_muscle_groups": focus_groups,
@@ -789,18 +593,23 @@ def generate_workout_plan(args: dict, user_id: str, db: Session) -> dict:
     }
 
 
-def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> dict:
+def get_overtraining_risk_assessment(args: dict, user_id: str, db) -> dict:
     """Assess overtraining risk based on volume, HR and sleep trends."""
     days: int = int(args.get("days", 14))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     cutoff = now - timedelta(days=days)
     mid = now - timedelta(days=days // 2)
 
-    recent_volume = _compute_volume(db, user_id, mid, now)
-    previous_volume = _compute_volume(db, user_id, cutoff, mid)
+    recent_data = backend_client.get("/workouts", {"start_date": mid.isoformat()})
+    prev_data = backend_client.get("/workouts", {"start_date": cutoff.isoformat(), "end_date": mid.isoformat()})
 
-    recent_count = _compute_workout_count(db, user_id, mid, now)
-    previous_count = _compute_workout_count(db, user_id, cutoff, mid)
+    recent_workouts = recent_data if isinstance(recent_data, list) else []
+    prev_workouts = prev_data if isinstance(prev_data, list) else []
+
+    recent_volume = _volume_from_workouts(recent_workouts)
+    previous_volume = _volume_from_workouts(prev_workouts)
+    recent_count = len(recent_workouts)
+    previous_count = len(prev_workouts)
 
     risk_factors = []
     if previous_volume > 0 and recent_volume > previous_volume * 1.2:
@@ -808,30 +617,29 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> d
             f"Aumento de volumen >20% ({previous_volume:.0f} → {recent_volume:.0f} kg)"
         )
 
-    health_cutoff = (now - timedelta(days=14)).strftime("%Y-%m-%d")
-    health_rows = (
-        db.query(models.DailyHealth.date, models.DailyHealth.resting_heart_rate)
-        .filter(models.DailyHealth.user_id == user_id, models.DailyHealth.date >= health_cutoff)
-        .filter(models.DailyHealth.resting_heart_rate > 0)
-        .order_by(models.DailyHealth.date)
-        .all()
+    health_data = backend_client.get("/fitbit-health/daily", {"days": days})
+    health_rows = sorted(
+        [r for r in (health_data if isinstance(health_data, list) else [])
+         if (r.get("resting_heart_rate") or 0) > 0],
+        key=lambda r: r.get("date", ""),
     )
     if len(health_rows) >= 4:
-        first_hr = sum(r.resting_heart_rate for r in health_rows[: len(health_rows) // 2]) / (len(health_rows) // 2)
-        last_hr = sum(r.resting_heart_rate for r in health_rows[len(health_rows) // 2 :]) / (len(health_rows) - len(health_rows) // 2)
+        half = len(health_rows) // 2
+        first_hr = sum(r["resting_heart_rate"] for r in health_rows[:half]) / half
+        last_hr = sum(r["resting_heart_rate"] for r in health_rows[half:]) / (len(health_rows) - half)
         if last_hr > first_hr * 1.05:
             risk_factors.append(
                 f"FC en reposo en aumento ({first_hr:.0f} → {last_hr:.0f} bpm)"
             )
 
-    sleep_cutoff = (now - timedelta(days=14)).strftime("%Y-%m-%d")
-    sleep_rows = (
-        db.query(models.SleepLog.efficiency)
-        .filter(models.SleepLog.user_id == user_id, models.SleepLog.is_main_sleep.is_(True), models.SleepLog.date >= sleep_cutoff)
-        .all()
-    )
+    sleep_data = backend_client.get("/fitbit-health/sleep", {"days": days})
+    sleep_rows = [
+        s for s in (sleep_data if isinstance(sleep_data, list) else [])
+        if s.get("efficiency") is not None
+    ]
+    avg_eff = None
     if sleep_rows:
-        avg_eff = sum(r.efficiency for r in sleep_rows) / len(sleep_rows)
+        avg_eff = sum(r["efficiency"] for r in sleep_rows) / len(sleep_rows)
         if avg_eff < 80:
             risk_factors.append(f"Eficiencia de sueño baja ({avg_eff:.0f}%)")
 
@@ -843,9 +651,10 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> d
         risk_level = "bajo"
 
     recommendations = []
-    if "volumen" in " ".join(risk_factors).lower():
+    combined = " ".join(risk_factors).lower()
+    if "volumen" in combined:
         recommendations.append("Reducir el volumen de entrenamiento un 20% esta semana.")
-    if "sueño" in " ".join(risk_factors).lower():
+    if "sueño" in combined:
         recommendations.append("Priorizar descanso: mínimo 7-8 horas de sueño.")
     if "FC" in " ".join(risk_factors):
         recommendations.append("Tomar una semana de descarga o actividad ligera.")
@@ -861,6 +670,6 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db: Session) -> d
             "previous_workout_count": previous_count,
             "recent_volume_kg": round(recent_volume, 1),
             "previous_volume_kg": round(previous_volume, 1),
-            "avg_sleep_efficiency": round(avg_eff, 1) if sleep_rows else None,
+            "avg_sleep_efficiency": round(avg_eff, 1) if avg_eff is not None else None,
         },
     }

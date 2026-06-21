@@ -929,3 +929,20 @@ async def sync_cardio_to_calendar(
             failed += 1
 
     return {"synced": synced, "failed": failed, "already_synced": already_synced}
+
+
+@router.get("/{workout_id}", response_model=schemas.Workout)
+async def get_workout(
+    workout_id: str,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Get a single workout by ID (must belong to current user)."""
+    workout = (
+        db.query(models.Workout)
+        .filter(models.Workout.id == workout_id, models.Workout.user_id == current_user.id)
+        .first()
+    )
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    return workout

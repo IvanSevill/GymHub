@@ -22,7 +22,7 @@ def _recent(days_ago: int) -> str:
 def test_summary_calls_endpoint_with_days(fake):
     fake.set("/analytics/summary", {"workout_count": 5, "total_volume_kg": 440.0})
     out = read_tools.get_analytics_summary({"days": 30}, "u", None)
-    assert fake.calls == [("/analytics/summary", {"days": 30})]
+    assert fake.calls == [("GET", "/analytics/summary", {"days": 30})]
     assert out["workout_count"] == 5
     assert out["period_days"] == 30
 

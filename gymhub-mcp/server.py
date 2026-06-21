@@ -1,4 +1,4 @@
-"""GymHub MCP Server — exposes 13 tools (9 read + 4 write) over stdio."""
+"""GymHub MCP Server — exposes 26 tools (19 read + 7 write) over stdio."""
 
 import os
 from typing import Optional
@@ -18,7 +18,7 @@ mcp = FastMCP("gymhub-mcp")
 
 
 # ---------------------------------------------------------------------------
-# Read tools (synchronous — DB access)
+# Read tools (all via backend REST — no DB access)
 # ---------------------------------------------------------------------------
 
 
@@ -29,13 +29,7 @@ def get_workouts(days: int = 30, limit: int = 20) -> dict:
     Devuelve título, fecha, duración, ejercicios agrupados con sus series y métricas Fitbit
     (calorías, FC media, zonas AZM). Útil para responder preguntas sobre sesiones recientes.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_workouts({"days": days, "limit": limit}, USER_ID, db)
-    finally:
-        db.close()
+    return read_tools.get_workouts({"days": days, "limit": limit}, USER_ID, None)
 
 
 @mcp.tool()
@@ -45,13 +39,7 @@ def get_exercise_prs(exercise_name: Optional[str] = None) -> dict:
     Si se especifica exercise_name se filtra por nombre (búsqueda parcial).
     Incluye músculo trabajado, valor máximo, unidad y fecha del récord.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_exercise_prs({"exercise_name": exercise_name}, USER_ID, db)
-    finally:
-        db.close()
+    return read_tools.get_exercise_prs({"exercise_name": exercise_name}, USER_ID, None)
 
 
 @mcp.tool()
@@ -61,13 +49,7 @@ def get_analytics_summary(days: int = 30) -> dict:
     Permite detectar tendencias de mejora o bajada en el rendimiento.
     El campo 'previous' contiene los mismos KPIs del periodo equivalente anterior.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_analytics_summary({"days": days}, USER_ID, db)
-    finally:
-        db.close()
+    return read_tools.get_analytics_summary({"days": days}, USER_ID, None)
 
 
 @mcp.tool()
@@ -77,15 +59,9 @@ def get_exercise_frequency(days: int = 90, muscle_name: Optional[str] = None) ->
     Opcionalmente filtrado por grupo muscular (búsqueda parcial por nombre).
     Útil para identificar qué ejercicios se entrenan más o menos.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_exercise_frequency(
-            {"days": days, "muscle_name": muscle_name}, USER_ID, db
-        )
-    finally:
-        db.close()
+    return read_tools.get_exercise_frequency(
+        {"days": days, "muscle_name": muscle_name}, USER_ID, None
+    )
 
 
 @mcp.tool()
@@ -95,15 +71,9 @@ def get_exercise_history(exercise_name: str, days: int = 90) -> dict:
     Devuelve cada sesión con su fecha y lista de sets (valor y unidad).
     Usa búsqueda parcial por nombre; devuelve error si no se encuentra el ejercicio.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_exercise_history(
-            {"exercise_name": exercise_name, "days": days}, USER_ID, db
-        )
-    finally:
-        db.close()
+    return read_tools.get_exercise_history(
+        {"exercise_name": exercise_name, "days": days}, USER_ID, None
+    )
 
 
 @mcp.tool()
@@ -113,15 +83,9 @@ def get_weight_progress(exercise_name: str, days: int = 60) -> dict:
     Devuelve una serie de puntos {date, max_value} ordenados cronológicamente.
     Útil para visualizar progresión de fuerza o detectar estancamientos.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_weight_progress(
-            {"exercise_name": exercise_name, "days": days}, USER_ID, db
-        )
-    finally:
-        db.close()
+    return read_tools.get_weight_progress(
+        {"exercise_name": exercise_name, "days": days}, USER_ID, None
+    )
 
 
 @mcp.tool()
@@ -131,13 +95,7 @@ def get_daily_health(days: int = 14) -> dict:
     Incluye promedios de pasos y calorías del periodo.
     Útil para responder preguntas sobre actividad general o comparar días.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_daily_health({"days": days}, USER_ID, db)
-    finally:
-        db.close()
+    return read_tools.get_daily_health({"days": days}, USER_ID, None)
 
 
 @mcp.tool()
@@ -147,13 +105,7 @@ def get_sleep_logs(days: int = 14) -> dict:
     Solo incluye el sueño principal de cada noche (is_main_sleep=True).
     Devuelve también promedios de duración y eficiencia del periodo.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_sleep_logs({"days": days}, USER_ID, db)
-    finally:
-        db.close()
+    return read_tools.get_sleep_logs({"days": days}, USER_ID, None)
 
 
 @mcp.tool()
@@ -163,22 +115,59 @@ def get_muscle_balance(days: int = 90) -> dict:
     Permite detectar desequilibrios musculares (e.g. mucho pecho, poca espalda).
     Incluye totales acumulados por músculo en el periodo completo.
     """
-    from database import SessionLocal
+    return read_tools.get_muscle_balance({"days": days}, USER_ID, None)
 
-    db = SessionLocal()
-    try:
-        return read_tools.get_muscle_balance({"days": days}, USER_ID, db)
-    finally:
-        db.close()
+
+@mcp.tool()
+def get_workout_count_in_period(start_date: str, end_date: str) -> dict:
+    """Cuenta el número exacto de entrenamientos entre dos fechas (inclusivo).
+
+    start_date / end_date: formato YYYY-MM-DD.
+    Devuelve {count, start_date, end_date}.
+    """
+    return read_tools.get_workout_count_in_period(
+        {"start_date": start_date, "end_date": end_date}, USER_ID, None
+    )
+
+
+@mcp.tool()
+def get_workouts_in_period(start_date: str, end_date: str) -> list:
+    """Devuelve los entrenamientos completos con ejercicios y series entre dos fechas.
+
+    start_date / end_date: formato YYYY-MM-DD.
+    Cada workout incluye id, título, fecha, duración en minutos y ejercicios agrupados con sus series.
+    """
+    return read_tools.get_workouts_in_period(
+        {"start_date": start_date, "end_date": end_date}, USER_ID, None
+    )
+
+
+@mcp.tool()
+def get_user_profile() -> dict:
+    """Devuelve el perfil del usuario: nombre, altura y último registro de peso y % grasa.
+
+    Útil para contextualizar recomendaciones de carga, IMC o progreso corporal.
+    """
+    return read_tools.get_user_profile({}, USER_ID, None)
+
+
+@mcp.tool()
+def get_weight_logs(days: int = 90) -> dict:
+    """Historial de peso corporal y porcentaje de grasa del usuario.
+
+    Devuelve una lista de entradas con fecha, peso (kg) y % grasa (si se registró),
+    más los valores más recientes como campos de acceso rápido.
+    """
+    return read_tools.get_weight_logs({"days": days}, USER_ID, None)
 
 
 # ---------------------------------------------------------------------------
-# Write tools (async — HTTP calls to backend)
+# Write tools (sync — via backend_client)
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
-async def create_workout(
+def create_workout(
     title: str,
     start_time: str,
     end_time: str,
@@ -192,7 +181,7 @@ async def create_workout(
     exercises: lista de objetos con {exercise_name, sets: [{value, measurement}]}
     start_time / end_time: formato ISO 8601, e.g. '2025-03-15T18:30:00'
     """
-    return await write_tools.create_workout(
+    return write_tools.create_workout(
         {
             "title": title,
             "start_time": start_time,
@@ -204,7 +193,7 @@ async def create_workout(
 
 
 @mcp.tool()
-async def add_set_to_workout(
+def add_set_to_workout(
     workout_id: str,
     exercise_name: str,
     value: str,
@@ -212,13 +201,13 @@ async def add_set_to_workout(
 ) -> dict:
     """Añade un set a un workout existente sin eliminar los sets actuales.
 
-    Lee el workout de la DB, añade el nuevo set al final y envía el PUT al backend.
+    Lee el workout del backend, añade el nuevo set al final y envía el PUT al backend.
     El backend re-sincroniza Calendar y Fitbit automáticamente.
 
     value: e.g. '80' o '80-70' (rango de peso)
     measurement: 'kg', 'rep', 's', 'min'
     """
-    return await write_tools.add_set_to_workout(
+    return write_tools.add_set_to_workout(
         {
             "workout_id": workout_id,
             "exercise_name": exercise_name,
@@ -230,27 +219,27 @@ async def add_set_to_workout(
 
 
 @mcp.tool()
-async def sync_pending_cardio(days: int = 30) -> dict:
+def sync_pending_cardio(days: int = 30) -> dict:
     """Sube al historial las actividades cardio de Fitbit que aún no tienen workout en GymHub.
 
     El backend detecta automáticamente cuáles actividades Fitbit no tienen workout asociado
     y las crea. Devuelve cuántas actividades fueron subidas.
     """
-    return await write_tools.sync_pending_cardio({"days": days}, TOKEN)
+    return write_tools.sync_pending_cardio({"days": days}, TOKEN)
 
 
 @mcp.tool()
-async def sync_fitbit_to_workout(workout_id: str) -> dict:
+def sync_fitbit_to_workout(workout_id: str) -> dict:
     """Asocia los datos de Fitbit (calorías, FC media, zonas AZM) a un workout específico.
 
     El backend busca la actividad Fitbit más cercana en tiempo y la vincula al workout.
     Devuelve calorías, FC media y duración tras la sincronización.
     """
-    return await write_tools.sync_fitbit_to_workout({"workout_id": workout_id}, TOKEN)
+    return write_tools.sync_fitbit_to_workout({"workout_id": workout_id}, TOKEN)
 
 
 @mcp.tool()
-async def save_memory(key: str, value: str) -> dict:
+def save_memory(key: str, value: str) -> dict:
     """Guarda un hecho importante sobre el usuario en memoria persistente.
 
     Úsalo cuando el usuario mencione objetivos, lesiones, preferencias o cualquier
@@ -260,97 +249,20 @@ async def save_memory(key: str, value: str) -> dict:
     key: etiqueta corta, e.g. 'objetivo', 'lesion_hombro', 'dias_entrenamiento'
     value: descripción, e.g. 'ganar masa muscular', 'lesión en hombro izquierdo'
     """
-    return await write_tools.save_memory({"key": key, "value": value}, TOKEN)
+    return write_tools.save_memory({"key": key, "value": value}, TOKEN)
 
 
 @mcp.tool()
-async def get_memories() -> dict:
+def get_memories() -> dict:
     """Recupera todos los recuerdos guardados del usuario.
 
     Devuelve una lista de memorias con su clave, valor y fecha de creación.
     """
-    return await write_tools.get_memories({}, TOKEN)
-
-
-# ---------------------------------------------------------------------------
-# New read tools
-# ---------------------------------------------------------------------------
+    return write_tools.get_memories({}, TOKEN)
 
 
 @mcp.tool()
-def get_workout_count_in_period(start_date: str, end_date: str) -> dict:
-    """Cuenta el número exacto de entrenamientos entre dos fechas (inclusivo).
-
-    start_date / end_date: formato YYYY-MM-DD.
-    Devuelve {count, start_date, end_date}.
-    """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_workout_count_in_period(
-            {"start_date": start_date, "end_date": end_date}, USER_ID, db
-        )
-    finally:
-        db.close()
-
-
-@mcp.tool()
-def get_workouts_in_period(start_date: str, end_date: str) -> list:
-    """Devuelve los entrenamientos completos con ejercicios y series entre dos fechas.
-
-    start_date / end_date: formato YYYY-MM-DD.
-    Cada workout incluye id, título, fecha, duración en minutos y ejercicios agrupados con sus series.
-    """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_workouts_in_period(
-            {"start_date": start_date, "end_date": end_date}, USER_ID, db
-        )
-    finally:
-        db.close()
-
-
-@mcp.tool()
-def get_user_profile() -> dict:
-    """Devuelve el perfil del usuario: nombre, altura y último registro de peso y % grasa.
-
-    Útil para contextualizar recomendaciones de carga, IMC o progreso corporal.
-    """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_user_profile({}, USER_ID, db)
-    finally:
-        db.close()
-
-
-@mcp.tool()
-def get_weight_logs(days: int = 90) -> dict:
-    """Historial de peso corporal y porcentaje de grasa del usuario.
-
-    Devuelve una lista de entradas con fecha, peso (kg) y % grasa (si se registró),
-    más los valores más recientes como campos de acceso rápido.
-    """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_weight_logs({"days": days}, USER_ID, db)
-    finally:
-        db.close()
-
-
-# ---------------------------------------------------------------------------
-# New write tools
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool()
-async def log_weight(date: str, weight_kg: float, body_fat_pct: Optional[float] = None) -> dict:
+def log_weight(date: str, weight_kg: float, body_fat_pct: Optional[float] = None) -> dict:
     """Registra o actualiza el peso corporal y el % de grasa de una fecha concreta.
 
     Si ya existe un registro para esa fecha, lo sobreescribe (upsert).
@@ -358,22 +270,22 @@ async def log_weight(date: str, weight_kg: float, body_fat_pct: Optional[float] 
     weight_kg: peso en kilogramos
     body_fat_pct: porcentaje de grasa corporal (opcional, 1–70)
     """
-    return await write_tools.log_weight(
+    return write_tools.log_weight(
         {"date": date, "weight_kg": weight_kg, "body_fat_pct": body_fat_pct}, TOKEN
     )
 
 
 @mcp.tool()
-async def delete_weight_log(date: str) -> dict:
+def delete_weight_log(date: str) -> dict:
     """Elimina el registro de peso de una fecha concreta (para corregir errores).
 
     date: formato YYYY-MM-DD
     """
-    return await write_tools.delete_weight_log({"date": date}, TOKEN)
+    return write_tools.delete_weight_log({"date": date}, TOKEN)
 
 
 # ---------------------------------------------------------------------------
-# New read tools (analytics, recovery, planning)
+# Advanced analysis tools (via REST data)
 # ---------------------------------------------------------------------------
 
 
@@ -385,15 +297,9 @@ def analyze_performance_correlation(metric1: str, metric2: str, days: int = 60) 
     workout_volume, weight.
     Devuelve el coeficiente r, tamaño de muestra e interpretación en español.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.analyze_performance_correlation(
-            {"metric1": metric1, "metric2": metric2, "days": days}, USER_ID, db
-        )
-    finally:
-        db.close()
+    return read_tools.analyze_performance_correlation(
+        {"metric1": metric1, "metric2": metric2, "days": days}, USER_ID, None
+    )
 
 
 @mcp.tool()
@@ -403,15 +309,9 @@ def predict_performance_trend(exercise_name: str, days: int = 30) -> dict:
     Devuelve la pendiente semanal, el valor máximo actual, la proyección futura
     y la dirección de la tendencia (mejorando/estable/bajando).
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.predict_performance_trend(
-            {"exercise_name": exercise_name, "days": days}, USER_ID, db
-        )
-    finally:
-        db.close()
+    return read_tools.predict_performance_trend(
+        {"exercise_name": exercise_name, "days": days}, USER_ID, None
+    )
 
 
 @mcp.tool()
@@ -421,13 +321,7 @@ def suggest_recovery_protocol(reason: str = "") -> dict:
     Analiza últimos 3 entrenamientos (volumen + duración), sueño (7 días) y
     frecuencia cardíaca en reposo para detectar fatiga acumulada.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.suggest_recovery_protocol({"reason": reason}, USER_ID, db)
-    finally:
-        db.close()
+    return read_tools.suggest_recovery_protocol({"reason": reason}, USER_ID, None)
 
 
 @mcp.tool()
@@ -439,26 +333,19 @@ def generate_workout_plan(
 ) -> dict:
     """Genera un plan de entrenamiento personalizado basado en datos reales del usuario.
 
-    Consulta ejercicios disponibles por grupo muscular, PRs del usuario,
-    equilibrio muscular y objetivos activos. Devuelve datos estructurados
-    para que el LLM construya el plan.
+    Consulta ejercicios disponibles por grupo muscular, PRs del usuario y
+    equilibrio muscular. Devuelve datos estructurados para que el LLM construya el plan.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.generate_workout_plan(
-            {
-                "duration_weeks": duration_weeks,
-                "focus_muscle_groups": focus_muscle_groups,
-                "goal": goal,
-                "intensity_level": intensity_level,
-            },
-            USER_ID,
-            db,
-        )
-    finally:
-        db.close()
+    return read_tools.generate_workout_plan(
+        {
+            "duration_weeks": duration_weeks,
+            "focus_muscle_groups": focus_muscle_groups,
+            "goal": goal,
+            "intensity_level": intensity_level,
+        },
+        USER_ID,
+        None,
+    )
 
 
 @mcp.tool()
@@ -468,15 +355,9 @@ def get_overtraining_risk_assessment(days: int = 14) -> dict:
     Analiza tendencias de volumen de entrenamiento, FC en reposo y eficiencia de sueño.
     Devuelve nivel de riesgo (bajo/moderado/alto), factores detectados y recomendaciones.
     """
-    from database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        return read_tools.get_overtraining_risk_assessment(
-            {"days": days}, USER_ID, db
-        )
-    finally:
-        db.close()
+    return read_tools.get_overtraining_risk_assessment(
+        {"days": days}, USER_ID, None
+    )
 
 
 if __name__ == "__main__":
