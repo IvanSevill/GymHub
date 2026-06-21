@@ -8,6 +8,7 @@ tools trivial to test (only this module talks to the network).
 """
 
 import os
+from urllib.parse import urlparse, urljoin
 
 import httpx
 
@@ -35,13 +36,17 @@ def _request(method: str, path: str, *, params: dict | None = None, json: dict |
                              headers=_headers(), timeout=timeout,
                              follow_redirects=False)
         # Follow same-origin redirects for GET only (handles FastAPI trailing-slash 307).
-        # POST/PUT/DELETE never follow redirects to avoid forwarding credentials to unintended targets.
+        # POST/PUT/DELETE never follow redirects — prevents credential forwarding to unintended targets.
+        # Use URL parsing (not string prefix) to validate same scheme+host+port.
         if method.upper() == "GET" and resp.status_code in (301, 302, 307, 308):
             location = resp.headers.get("location", "")
             base = _base_url()
-            if location.startswith("/") or location.startswith(base):
-                redirect_url = location if location.startswith("http") else f"{base}{location}"
-                resp = httpx.request("GET", redirect_url, headers=_headers(),
+            base_p = urlparse(base)
+            abs_url = urljoin(base + "/", location)
+            tgt = urlparse(abs_url)
+            if (tgt.scheme in ("http", "https") and
+                    (tgt.scheme, tgt.hostname, tgt.port) == (base_p.scheme, base_p.hostname, base_p.port)):
+                resp = httpx.request("GET", abs_url, headers=_headers(),
                                      timeout=timeout, follow_redirects=False)
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
