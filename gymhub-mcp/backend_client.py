@@ -32,7 +32,8 @@ def _request(method: str, path: str, *, params: dict | None = None, json: dict |
     url = f"{_base_url()}{path}"
     try:
         resp = httpx.request(method, url, params=params, json=json,
-                             headers=_headers(), timeout=timeout)
+                             headers=_headers(), timeout=timeout,
+                             follow_redirects=True)
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
             return {}

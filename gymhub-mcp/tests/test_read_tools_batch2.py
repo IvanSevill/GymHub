@@ -1,4 +1,4 @@
-"""Tests for MCP read tools migrated in batch 2 (workout / exercise / advanced tools)."""
+﻿"""Tests for MCP read tools migrated in batch 2 (workout / exercise / advanced tools)."""
 
 import read_tools
 import write_tools
@@ -202,12 +202,12 @@ def test_weight_progress_passes_exercise_id(fake):
 # ---------------------------------------------------------------------------
 
 def test_correlation_sleep_steps(fake):
-    fake.set("/fitbit-health/sleep", [
+    fake.set("/fitbit/sleep", [
         {"date": "2026-06-19", "duration_ms": 7_200_000, "efficiency": 88},
         {"date": "2026-06-20", "duration_ms": 6_000_000, "efficiency": 82},
         {"date": "2026-06-21", "duration_ms": 8_000_000, "efficiency": 90},
     ])
-    fake.set("/fitbit-health/daily", [
+    fake.set("/fitbit/daily", [
         {"date": "2026-06-19", "steps": 8000, "resting_heart_rate": 55},
         {"date": "2026-06-20", "steps": 6000, "resting_heart_rate": 58},
         {"date": "2026-06-21", "steps": 10000, "resting_heart_rate": 54},
@@ -221,8 +221,8 @@ def test_correlation_sleep_steps(fake):
 
 
 def test_correlation_insufficient_data(fake):
-    fake.set("/fitbit-health/sleep", [])
-    fake.set("/fitbit-health/daily", [])
+    fake.set("/fitbit/sleep", [])
+    fake.set("/fitbit/daily", [])
     out = read_tools.analyze_performance_correlation(
         {"metric1": "sleep_duration", "metric2": "resting_hr", "days": 7}, "u", None
     )
@@ -236,7 +236,7 @@ def test_correlation_weight_metric(fake):
         {"date": "2026-06-20", "weight_kg": 89.5},
         {"date": "2026-06-21", "weight_kg": 89.0},
     ])
-    fake.set("/fitbit-health/sleep", [
+    fake.set("/fitbit/sleep", [
         {"date": "2026-06-19", "duration_ms": 7_200_000, "efficiency": 88},
         {"date": "2026-06-20", "duration_ms": 7_000_000, "efficiency": 85},
         {"date": "2026-06-21", "duration_ms": 7_500_000, "efficiency": 90},
@@ -284,10 +284,10 @@ def test_predict_trend_not_found(fake):
 def test_suggest_recovery_aggregates(fake):
     s = _set(value="100", measurement="kg")
     fake.set("/workouts", [_workout(sets=[s, s], fitbit={"duration_ms": 3_600_000, "calories": 400})])
-    fake.set("/fitbit-health/sleep", [
+    fake.set("/fitbit/sleep", [
         {"date": "2026-06-21", "duration_ms": 6_000_000, "efficiency": 75}
     ])
-    fake.set("/fitbit-health/daily", [
+    fake.set("/fitbit/daily", [
         {"date": "2026-06-21", "resting_heart_rate": 60}
     ])
     out = read_tools.suggest_recovery_protocol({}, "u", None)
@@ -300,8 +300,8 @@ def test_suggest_recovery_aggregates(fake):
 
 def test_suggest_recovery_no_data(fake):
     fake.set("/workouts", [])
-    fake.set("/fitbit-health/sleep", [])
-    fake.set("/fitbit-health/daily", [])
+    fake.set("/fitbit/sleep", [])
+    fake.set("/fitbit/daily", [])
     out = read_tools.suggest_recovery_protocol({}, "u", None)
     assert out["workout_count"] == 0
     assert out["avg_sleep_efficiency"] is None
@@ -354,13 +354,13 @@ def test_overtraining_risk_low(fake):
         [_workout(sets=[s])],   # recent half
         [_workout(sets=[s])],   # previous half
     ])
-    fake.set("/fitbit-health/daily", [
+    fake.set("/fitbit/daily", [
         {"date": "2026-06-18", "resting_heart_rate": 58},
         {"date": "2026-06-19", "resting_heart_rate": 57},
         {"date": "2026-06-20", "resting_heart_rate": 58},
         {"date": "2026-06-21", "resting_heart_rate": 57},
     ])
-    fake.set("/fitbit-health/sleep", [
+    fake.set("/fitbit/sleep", [
         {"date": "2026-06-20", "efficiency": 85},
         {"date": "2026-06-21", "efficiency": 87},
     ])
@@ -376,8 +376,8 @@ def test_overtraining_risk_volume_spike(fake):
         [_workout(sets=heavy)],   # recent: 200 * 5 = 1000 kg
         [_workout(sets=light)],   # previous: 50 kg
     ])
-    fake.set("/fitbit-health/daily", [])
-    fake.set("/fitbit-health/sleep", [])
+    fake.set("/fitbit/daily", [])
+    fake.set("/fitbit/sleep", [])
     out = read_tools.get_overtraining_risk_assessment({"days": 14}, "u", None)
     assert out["risk_level"] in ("moderado", "alto")
     assert any("volumen" in f.lower() for f in out["risk_factors"])

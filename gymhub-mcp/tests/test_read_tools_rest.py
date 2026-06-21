@@ -1,4 +1,4 @@
-"""Tests for the read tools migrated to the backend REST API.
+﻿"""Tests for the read tools migrated to the backend REST API.
 
 Each tool must (1) hit the correct backend endpoint with the right params,
 (2) adapt the response, (3) propagate the backend error envelope, and
@@ -115,7 +115,7 @@ def test_prs_name_filter(fake):
 # --------------------------------------------------------------------------
 
 def test_daily_health_filters_and_averages(fake):
-    fake.set("/fitbit-health/daily", [
+    fake.set("/fitbit/daily", [
         {"date": _recent(2), "steps": 10000, "calories_out": 2000},
         {"date": _recent(1), "steps": 8000, "calories_out": 2200},
         {"date": _recent(40), "steps": 5000, "calories_out": 1000},  # outside 14-day cutoff
@@ -127,7 +127,7 @@ def test_daily_health_filters_and_averages(fake):
 
 
 def test_daily_health_empty(fake):
-    fake.set("/fitbit-health/daily", [])
+    fake.set("/fitbit/daily", [])
     out = read_tools.get_daily_health({}, "u", None)
     assert out == {"data": [], "avg_steps": 0, "avg_calories": 0}
 
@@ -137,7 +137,7 @@ def test_daily_health_empty(fake):
 # --------------------------------------------------------------------------
 
 def test_sleep_logs_adaptation(fake):
-    fake.set("/fitbit-health/sleep", [
+    fake.set("/fitbit/sleep", [
         {"date": _recent(1), "duration_ms": 7_200_000, "efficiency": 90, "minutes_deep": 60,
          "minutes_rem": 50, "minutes_light": 100, "minutes_wake": 10},
     ])
@@ -149,7 +149,7 @@ def test_sleep_logs_adaptation(fake):
 
 
 def test_sleep_logs_empty(fake):
-    fake.set("/fitbit-health/sleep", [])
+    fake.set("/fitbit/sleep", [])
     out = read_tools.get_sleep_logs({}, "u", None)
     assert out["logs"] == [] and out["avg_efficiency"] == 0
 
@@ -181,20 +181,20 @@ def test_weight_logs_empty(fake):
 # --------------------------------------------------------------------------
 
 def test_user_profile_combines_sources(fake):
-    fake.set("/auth/me", {"name": "Iván", "height_cm": 188})
+    fake.set("/auth/me", {"name": "IvÃ¡n", "height_cm": 188})
     fake.set("/weight", [
         {"date": "2026-06-01", "weight_kg": 89.0, "body_fat_pct": 22.0},
         {"date": "2026-06-10", "weight_kg": 88.0, "body_fat_pct": 21.0},
     ])
     out = read_tools.get_user_profile({}, "u", None)
-    assert out["name"] == "Iván"
+    assert out["name"] == "IvÃ¡n"
     assert out["height_cm"] == 188
     assert out["weight_kg"] == 88.0
     assert out["weight_date"] == "2026-06-10"
 
 
 def test_user_profile_no_weight(fake):
-    fake.set("/auth/me", {"name": "Iván", "height_cm": 188})
+    fake.set("/auth/me", {"name": "IvÃ¡n", "height_cm": 188})
     fake.set("/weight", [])
     out = read_tools.get_user_profile({}, "u", None)
     assert out["weight_kg"] is None
