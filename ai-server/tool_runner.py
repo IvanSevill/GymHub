@@ -26,13 +26,10 @@ from models import (
 # ---------------------------------------------------------------------------
 
 def _parse_value(value_str: str) -> float:
-    parts = re.split(r"[-/]", value_str.replace(",", "."))
-    nums = []
-    for p in parts:
-        m = re.search(r"^\s*(\d+\.?\d*)", p)
-        if m:
-            nums.append(float(m.group(1)))
-    return max(nums) if nums else 0.0
+    # Each set stores a single weight; only the Spanish decimal comma needs
+    # normalizing. Non-numeric values (e.g. 'bodyweight') yield 0.0.
+    m = re.match(r"\s*(\d+\.?\d*)", value_str.replace(",", "."))
+    return float(m.group(1)) if m else 0.0
 
 
 def _count_workouts(db: Session, uid: str, start: datetime, end: datetime) -> int:

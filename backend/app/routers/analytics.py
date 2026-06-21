@@ -10,20 +10,20 @@ from .. import auth, database, models, schemas
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
+# Fixed number of series per exercise in the routine. Volume is computed as the
+# per-exercise mean weight times this value, so the multi-weight expansion of a
+# single entry (e.g. "12-15" into two rows) does not inflate the result.
+SETS_PER_EXERCISE = 4
+
 
 def _parse_exercise_value(value_str: str) -> float:
-    """Return the max numeric value from a string like '50', '45-40', '40/35', '42.5'.
+    """Return the single numeric weight stored in an ExerciseSet value.
 
-    Handles comma as decimal separator and range notation with '-' or '/'.
-    Returns 0.0 if no numeric value can be extracted.
+    Each set stores one weight, so the only normalization required is the
+    Spanish decimal comma. Non-numeric values (e.g. 'bodyweight') yield 0.0.
     """
-    parts = re.split(r"[-/]", value_str.replace(",", "."))
-    nums = []
-    for p in parts:
-        m = re.search(r"^\s*(\d+\.?\d*)", p)
-        if m:
-            nums.append(float(m.group(1)))
-    return max(nums) if nums else 0.0
+    m = re.match(r"\s*(\d+\.?\d*)", value_str.replace(",", "."))
+    return float(m.group(1)) if m else 0.0
 
 
 @router.get("/weight-progress", response_model=List[schemas.WeightProgressPoint])
@@ -163,11 +163,31 @@ def _compute_workout_count(
     )
 
 
+def _grouped_volume(rows) -> float:
+    """Volume = sum over (workout, exercise) groups of mean(weight) * SETS_PER_EXERCISE.
+
+    Each row is (group_key, value_str). Taking the per-exercise mean (instead of
+    summing every stored row) makes the volume independent of how many rows the
+    multi-weight expansion produced, so an entry like "12-15" is not double
+    counted. The mean is then scaled by the fixed number of series of the routine.
+    """
+    groups: dict = {}
+    for key, value_str in rows:
+        v = _parse_exercise_value(value_str)
+        if v > 0:
+            groups.setdefault(key, []).append(v)
+    return sum((sum(vals) / len(vals)) * SETS_PER_EXERCISE for vals in groups.values())
+
+
 def _compute_volume(
     db: Session, user_id: str, period_start: datetime, period_end: datetime
 ) -> float:
-    sets = (
-        db.query(models.ExerciseSet.value)
+    rows = (
+        db.query(
+            models.ExerciseSet.workout_id,
+            models.ExerciseSet.exercise_id,
+            models.ExerciseSet.value,
+        )
         .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
         .filter(
             models.Workout.user_id == user_id,
@@ -177,7 +197,7 @@ def _compute_volume(
         )
         .all()
     )
-    return sum(_parse_exercise_value(s.value) for s in sets)
+    return _grouped_volume(((wid, eid), value) for wid, eid, value in rows)
 
 
 def _compute_avg_duration(
@@ -325,7 +345,12 @@ async def get_volume_trend(
     """Total exercise volume (kg) per session, sorted chronologically."""
     cutoff = datetime.utcnow() - timedelta(days=days)
     rows = (
-        db.query(models.Workout.start_time, models.ExerciseSet.value)
+        db.query(
+            models.Workout.start_time,
+            models.ExerciseSet.workout_id,
+            models.ExerciseSet.exercise_id,
+            models.ExerciseSet.value,
+        )
         .join(models.ExerciseSet, models.Workout.id == models.ExerciseSet.workout_id)
         .filter(
             models.Workout.user_id == current_user.id,
@@ -335,12 +360,17 @@ async def get_volume_trend(
         .order_by(models.Workout.start_time)
         .all()
     )
-    volume_by_date: dict = {}
-    for start_time, value_str in rows:
+    # Group weights per (date, workout, exercise) so the per-exercise mean can be
+    # scaled by SETS_PER_EXERCISE, matching the summary volume calculation.
+    grouped: dict = {}
+    for start_time, workout_id, exercise_id, value_str in rows:
         v = _parse_exercise_value(value_str)
         if v > 0:
-            date_key = start_time.date()
-            volume_by_date[date_key] = volume_by_date.get(date_key, 0.0) + v
+            grouped.setdefault((start_time.date(), workout_id, exercise_id), []).append(v)
+    volume_by_date: dict = {}
+    for (date_key, _wid, _eid), vals in grouped.items():
+        contribution = (sum(vals) / len(vals)) * SETS_PER_EXERCISE
+        volume_by_date[date_key] = volume_by_date.get(date_key, 0.0) + contribution
     return [
         {"date": datetime.combine(d, datetime.min.time()), "volume": round(v, 1)}
         for d, v in sorted(volume_by_date.items())

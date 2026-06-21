@@ -1,426 +1,189 @@
-"""Write tools — call the GymHub backend API via httpx (requires auth token)."""
+"""Write tools — call the GymHub backend API via backend_client."""
 
-import json
 import os
-from datetime import datetime
 
 import httpx
 
-import models
-from database import SessionLocal
-from read_tools import _parse_exercise_value
+import backend_client
 
 
-def _get_backend_url() -> str:
-    return os.environ.get("BACKEND_URL", "http://localhost:8000")
+def _resolve_exercise_id(exercise_name: str) -> str | None:
+    """Look up an exercise by partial name match via the backend REST API."""
+    data = backend_client.get("/exercises")
+    if backend_client.is_error(data) or not isinstance(data, list):
+        return None
+    n = exercise_name.lower()
+    for ex in data:
+        if n in ex.get("name", "").lower():
+            return ex.get("id")
+    return None
 
 
-def _auth_headers(token: str) -> dict:
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _resolve_exercise_id(exercise_name: str, db) -> str | None:
-    """Look up an exercise by partial name match and return its ID."""
-    exercise = (
-        db.query(models.Exercise)
-        .filter(models.Exercise.name.ilike(f"%{exercise_name}%"))
-        .first()
-    )
-    return exercise.id if exercise else None
-
-
-async def create_workout(args: dict, token: str) -> dict:
+def create_workout(args: dict, token: str) -> dict:
     """Create a new workout with exercises and sets via the backend API."""
     title: str = args.get("title", "Workout")
     start_time: str = args.get("start_time", "")
     end_time: str = args.get("end_time", "")
     exercises: list = args.get("exercises", [])
 
-    db = SessionLocal()
-    try:
-        exercise_sets = []
-        for ex_entry in exercises:
-            ex_name = ex_entry.get("exercise_name", "")
-            ex_id = _resolve_exercise_id(ex_name, db)
-            if not ex_id:
-                return {"error": f"Exercise not found: {ex_name}"}
-            for s in ex_entry.get("sets", []):
-                exercise_sets.append(
-                    {
-                        "exercise_id": ex_id,
-                        "value": s.get("value", ""),
-                        "measurement": s.get("measurement", "kg"),
-                        "is_completed": True,
-                    }
-                )
-    finally:
-        db.close()
+    exercise_sets = []
+    for ex_entry in exercises:
+        ex_name = ex_entry.get("exercise_name", "")
+        ex_id = _resolve_exercise_id(ex_name)
+        if not ex_id:
+            return {"error": f"Exercise not found: {ex_name}"}
+        for s in ex_entry.get("sets", []):
+            exercise_sets.append({
+                "exercise_id": ex_id,
+                "value": s.get("value", ""),
+                "measurement": s.get("measurement", "kg"),
+                "is_completed": True,
+            })
 
-    payload = {
+    data = backend_client.post("/workouts", json={
         "title": title,
         "start_time": start_time,
         "end_time": end_time,
         "exercise_sets": exercise_sets,
+    })
+    if backend_client.is_error(data):
+        return data
+    return {
+        "success": True,
+        "workout_id": data.get("id"),
+        "title": data.get("title"),
+        "sets_created": len(exercise_sets),
     }
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                f"{_get_backend_url()}/workouts",
-                json=payload,
-                headers=_auth_headers(token),
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return {
-                "success": True,
-                "workout_id": data.get("id"),
-                "title": data.get("title"),
-                "sets_created": len(exercise_sets),
-            }
-        except httpx.HTTPStatusError as exc:
-            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
-        except Exception as exc:
-            return {"error": str(exc)}
 
-
-async def add_set_to_workout(args: dict, token: str) -> dict:
+def add_set_to_workout(args: dict, token: str) -> dict:
     """Append a single set to an existing workout without losing existing sets."""
     workout_id: str = args.get("workout_id", "")
     exercise_name: str = args.get("exercise_name", "")
     value: str = args.get("value", "")
     measurement: str = args.get("measurement", "kg")
 
-    db = SessionLocal()
-    try:
-        # Read the current workout from DB
-        workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
-        if not workout:
-            return {"error": f"Workout not found: {workout_id}"}
+    workout = backend_client.get(f"/workouts/{workout_id}")
+    if backend_client.is_error(workout):
+        return {"error": f"Workout not found: {workout_id}"}
 
-        # Build existing sets list
-        existing_sets = [
-            {
-                "exercise_id": s.exercise_id,
-                "value": s.value,
-                "measurement": s.measurement,
-                "is_completed": s.is_completed,
-            }
-            for s in workout.exercise_sets
-        ]
-
-        # Resolve exercise name to ID
-        ex_id = _resolve_exercise_id(exercise_name, db)
-        if not ex_id:
-            return {"error": f"Exercise not found: {exercise_name}"}
-
-        exercise = db.query(models.Exercise).filter(models.Exercise.id == ex_id).first()
-        resolved_name = exercise.name if exercise else exercise_name
-
-        new_set = {
-            "exercise_id": ex_id,
-            "value": value,
-            "measurement": measurement,
-            "is_completed": True,
+    existing_sets = [
+        {
+            "exercise_id": s["exercise_id"],
+            "value": s["value"],
+            "measurement": s["measurement"],
+            "is_completed": s.get("is_completed", True),
         }
-        updated_sets = existing_sets + [new_set]
+        for s in workout.get("exercise_sets", [])
+    ]
 
-        payload = {
-            "title": workout.title,
-            "start_time": workout.start_time.isoformat(),
-            "end_time": workout.end_time.isoformat(),
-            "exercise_sets": updated_sets,
-        }
-    finally:
-        db.close()
+    ex_id = _resolve_exercise_id(exercise_name)
+    if not ex_id:
+        return {"error": f"Exercise not found: {exercise_name}"}
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.put(
-                f"{_get_backend_url()}/workouts/{workout_id}",
-                json=payload,
-                headers=_auth_headers(token),
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return {
-                "success": True,
-                "exercise": resolved_name,
-                "set_added": f"{value} {measurement}".strip(),
-                "total_sets": len(updated_sets),
-            }
-        except httpx.HTTPStatusError as exc:
-            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
-        except Exception as exc:
-            return {"error": str(exc)}
+    exercises_data = backend_client.get("/exercises")
+    resolved_name = exercise_name
+    if isinstance(exercises_data, list):
+        for ex in exercises_data:
+            if ex.get("id") == ex_id:
+                resolved_name = ex.get("name", exercise_name)
+                break
+
+    new_set = {"exercise_id": ex_id, "value": value, "measurement": measurement, "is_completed": True}
+    updated_sets = existing_sets + [new_set]
+
+    data = backend_client.put(f"/workouts/{workout_id}", json={
+        "title": workout.get("title", ""),
+        "start_time": workout.get("start_time", ""),
+        "end_time": workout.get("end_time", ""),
+        "exercise_sets": updated_sets,
+    })
+    if backend_client.is_error(data):
+        return data
+    return {
+        "success": True,
+        "exercise": resolved_name,
+        "set_added": f"{value} {measurement}".strip(),
+        "total_sets": len(updated_sets),
+    }
 
 
-async def sync_pending_cardio(args: dict, token: str) -> dict:
+def sync_pending_cardio(args: dict, token: str) -> dict:
     """Upload pending Fitbit cardio activities that have no workout in GymHub."""
     days: int = int(args.get("days", 30))
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                f"{_get_backend_url()}/workouts/sync-fitbit-create-missing?days={days}",
-                headers=_auth_headers(token),
-                timeout=60.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            created = data.get("created", 0)
-            return {
-                "success": True,
-                "created": created,
-                "message": f"{created} actividades cardio subidas desde Fitbit.",
-            }
-        except httpx.HTTPStatusError as exc:
-            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
-        except Exception as exc:
-            return {"error": str(exc)}
+    data = backend_client.post("/workouts/sync-fitbit-create-missing", params={"days": days})
+    if backend_client.is_error(data):
+        return data
+    created = data.get("created", 0)
+    return {"success": True, "created": created, "message": f"{created} actividades cardio subidas desde Fitbit."}
 
 
-async def sync_fitbit_to_workout(args: dict, token: str) -> dict:
+def sync_fitbit_to_workout(args: dict, token: str) -> dict:
     """Associate Fitbit activity data (calories, HR, AZM zones) with a specific workout."""
     workout_id: str = args.get("workout_id", "")
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                f"{_get_backend_url()}/workouts/{workout_id}/sync-fitbit",
-                headers=_auth_headers(token),
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            fitbit = data.get("fitbit_data") or {}
-            duration_min = None
-            if fitbit.get("duration_ms") and fitbit["duration_ms"] > 0:
-                duration_min = round(fitbit["duration_ms"] / 60000, 1)
-            return {
-                "success": True,
-                "calories": fitbit.get("calories"),
-                "heart_rate_avg": fitbit.get("heart_rate_avg"),
-                "duration_min": duration_min,
-            }
-        except httpx.HTTPStatusError as exc:
-            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
-        except Exception as exc:
-            return {"error": str(exc)}
+    data = backend_client.post(f"/workouts/{workout_id}/sync-fitbit")
+    if backend_client.is_error(data):
+        return data
+    fitbit = data.get("fitbit_data") or {}
+    duration_min = round(fitbit["duration_ms"] / 60000, 1) if (fitbit.get("duration_ms") or 0) > 0 else None
+    return {
+        "success": True,
+        "calories": fitbit.get("calories"),
+        "heart_rate_avg": fitbit.get("heart_rate_avg"),
+        "duration_min": duration_min,
+    }
 
 
-async def save_memory(args: dict, token: str) -> dict:
+def save_memory(args: dict, token: str) -> dict:
     """Save a memory fact for the current user via the ai-server."""
     ai_url = os.environ.get("AI_SERVER_URL", "http://localhost:8001")
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(
-                f"{ai_url}/chat/memory",
-                json={"key": args["key"], "value": args["value"]},
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:
-            return {"error": str(exc)}
+    try:
+        r = httpx.post(
+            f"{ai_url}/chat/memory",
+            json={"key": args["key"], "value": args["value"]},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10.0,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
-async def get_memories(args: dict, token: str) -> dict:  # noqa: ARG001
+def get_memories(args: dict, token: str) -> dict:
     """Retrieve all stored memory facts for the current user."""
     ai_url = os.environ.get("AI_SERVER_URL", "http://localhost:8001")
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.get(
-                f"{ai_url}/chat/memory",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-            return {"memories": resp.json()}
-        except Exception as exc:
-            return {"error": str(exc)}
+    try:
+        r = httpx.get(
+            f"{ai_url}/chat/memory",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10.0,
+        )
+        r.raise_for_status()
+        return {"memories": r.json()}
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
-async def log_weight(args: dict, token: str) -> dict:
+def log_weight(args: dict, token: str) -> dict:
     """Log or update the user's weight and optional body fat % for a date (upserts by date)."""
-    payload: dict = {
-        "date": args["date"],
-        "weight_kg": float(args["weight_kg"]),
-    }
+    payload: dict = {"date": args["date"], "weight_kg": float(args["weight_kg"])}
     if args.get("body_fat_pct") is not None:
         payload["body_fat_pct"] = float(args["body_fat_pct"])
-
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(
-                f"{_get_backend_url()}/weight",
-                json=payload,
-                headers=_auth_headers(token),
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-            return {"ok": True, "date": payload["date"], "weight_kg": payload["weight_kg"]}
-        except httpx.HTTPStatusError as exc:
-            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
-        except Exception as exc:
-            return {"error": str(exc)}
+    data = backend_client.post("/weight", json=payload)
+    if backend_client.is_error(data):
+        return data
+    return {"ok": True, "date": payload["date"], "weight_kg": payload["weight_kg"]}
 
 
-async def delete_weight_log(args: dict, token: str) -> dict:
+def delete_weight_log(args: dict, token: str) -> dict:
     """Delete the weight log entry for a specific date."""
     date: str = args["date"]
-    async with httpx.AsyncClient() as client:
-        try:
-            r = await client.get(
-                f"{_get_backend_url()}/weight",
-                params={"date": date},
-                headers=_auth_headers(token),
-                timeout=10.0,
-            )
-            r.raise_for_status()
-            entries = r.json()
-            if not entries:
-                return {"ok": False, "error": f"No weight entry found for {date}"}
-            entry_id = entries[0]["id"]
-            r2 = await client.delete(
-                f"{_get_backend_url()}/weight/{entry_id}",
-                headers=_auth_headers(token),
-                timeout=10.0,
-            )
-            r2.raise_for_status()
-            return {"ok": True, "deleted_date": date}
-        except httpx.HTTPStatusError as exc:
-            return {"error": f"Backend error {exc.response.status_code}: {exc.response.text}"}
-        except Exception as exc:
-            return {"error": str(exc)}
-
-
-# ---------------------------------------------------------------------------
-# New write tools — direct DB access (no HTTP), user_id from env or caller
-# ---------------------------------------------------------------------------
-
-
-async def set_goal(args: dict, user_id: str) -> dict:
-    """Create or update a fitness goal (upsert by goal_type for active goals)."""
-    goal_type: str = args["goal_type"]
-    target_value: float | None = args.get("target_value")
-    target_date: str | None = args.get("target_date")
-    metric_unit: str | None = args.get("metric_unit")
-    description: str = args.get("description", "")
-
-    db = SessionLocal()
-    try:
-        existing = (
-            db.query(models.Goal)
-            .filter(
-                models.Goal.user_id == user_id,
-                models.Goal.goal_type == goal_type,
-                models.Goal.status == "active",
-            )
-            .first()
-        )
-        now = datetime.utcnow()
-        if existing:
-            existing.target_value = target_value
-            existing.target_date = target_date
-            existing.metric_unit = metric_unit
-            existing.description = description
-            existing.updated_at = now
-            db.commit()
-            return {"id": existing.id, "goal_type": goal_type, "description": description, "status": existing.status, "updated": True}
-
-        goal = models.Goal(
-            user_id=user_id,
-            goal_type=goal_type,
-            target_value=target_value,
-            target_date=target_date,
-            metric_unit=metric_unit,
-            description=description,
-            status="active",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(goal)
-        db.commit()
-        return {"id": goal.id, "goal_type": goal_type, "description": description, "status": "active", "created": True}
-    finally:
-        db.close()
-
-
-async def log_nutrition(args: dict, user_id: str) -> dict:
-    """Log a nutrition/meal entry."""
-    date: str = args["date"]
-    meal_type: str = args["meal_type"]
-    food_items: list = args.get("food_items", [])
-    calories: int | None = args.get("calories")
-    protein_g: float | None = args.get("protein_g")
-    carbs_g: float | None = args.get("carbs_g")
-    fats_g: float | None = args.get("fats_g")
-
-    db = SessionLocal()
-    try:
-        entry = models.NutritionLog(
-            user_id=user_id,
-            date=date,
-            meal_type=meal_type,
-            food_items=json.dumps(food_items, ensure_ascii=False),
-            calories=calories,
-            protein_g=protein_g,
-            carbs_g=carbs_g,
-            fats_g=fats_g,
-            created_at=datetime.utcnow(),
-        )
-        db.add(entry)
-        db.commit()
-        return {
-            "id": entry.id,
-            "date": date,
-            "meal_type": meal_type,
-            "calories": calories,
-            "summary": f"{meal_type} registrado para {date}",
-        }
-    finally:
-        db.close()
-
-
-async def log_mood_and_energy(args: dict, user_id: str) -> dict:
-    """Log or update daily mood and energy rating (upsert on date)."""
-    date: str = args["date"]
-    mood_rating: int = int(args["mood_rating"])
-    energy_rating: int = int(args["energy_rating"])
-    notes: str | None = args.get("notes")
-
-    db = SessionLocal()
-    try:
-        existing = (
-            db.query(models.MoodEnergyLog)
-            .filter(models.MoodEnergyLog.user_id == user_id, models.MoodEnergyLog.date == date)
-            .first()
-        )
-        if existing:
-            existing.mood_rating = mood_rating
-            existing.energy_rating = energy_rating
-            if notes is not None:
-                existing.notes = notes
-            db.commit()
-            return {"date": date, "mood_rating": mood_rating, "energy_rating": energy_rating, "saved": True, "updated": True}
-
-        entry = models.MoodEnergyLog(
-            user_id=user_id,
-            date=date,
-            mood_rating=mood_rating,
-            energy_rating=energy_rating,
-            notes=notes,
-            created_at=datetime.utcnow(),
-        )
-        db.add(entry)
-        db.commit()
-        return {"date": date, "mood_rating": mood_rating, "energy_rating": energy_rating, "saved": True, "created": True}
-    finally:
-        db.close()
-
-
-# Suppress unused import warning
-_ = _parse_exercise_value
+    entries = backend_client.get("/weight", params={"date": date})
+    if backend_client.is_error(entries) or not isinstance(entries, list) or not entries:
+        return {"ok": False, "error": f"No weight entry found for {date}"}
+    entry_id = entries[0]["id"]
+    data = backend_client.delete(f"/weight/{entry_id}")
+    if backend_client.is_error(data):
+        return data
+    return {"ok": True, "deleted_date": date}

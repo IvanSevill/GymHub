@@ -9,10 +9,16 @@ from sqlalchemy.pool import StaticPool
 # Must be set before app.main is imported — main.py calls Base.metadata.create_all at module level
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing")
+os.environ.setdefault("TESTING", "true")
 
 from app.main import app  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
-from app import models  # noqa: E402
+from app import auth, models  # noqa: E402
+
+@pytest.fixture(params=["asyncio"])
+def anyio_backend(request):
+    return request.param
+
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 
@@ -50,33 +56,21 @@ async def client(db):
 
 
 @pytest.fixture
-async def auth_headers(client):
-    await client.post(
-        "/auth/register",
-        json={"email": "user@test.com", "name": "Test User", "password": "password123"},
-    )
-    resp = await client.post(
-        "/auth/login",
-        json={"email": "user@test.com", "password": "password123"},
-    )
-    token = resp.json()["access_token"]
+async def auth_headers(client, db):
+    # Authentication is Google-only; create the user directly and mint a JWT.
+    user = models.User(email="user@test.com", name="Test User")
+    db.add(user)
+    db.commit()
+    token = auth.create_access_token(data={"sub": user.email})
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 async def root_headers(client, db):
-    await client.post(
-        "/auth/register",
-        json={"email": "root@test.com", "name": "Root User", "password": "password123"},
-    )
-    user = db.query(models.User).filter(models.User.email == "root@test.com").first()
-    user.is_root = 1
+    user = models.User(email="root@test.com", name="Root User", is_root=1)
+    db.add(user)
     db.commit()
-    resp = await client.post(
-        "/auth/login",
-        json={"email": "root@test.com", "password": "password123"},
-    )
-    token = resp.json()["access_token"]
+    token = auth.create_access_token(data={"sub": user.email})
     return {"Authorization": f"Bearer {token}"}
 
 

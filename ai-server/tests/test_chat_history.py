@@ -104,15 +104,18 @@ def test_count_excludes_messages_older_than_window(db):
     assert count == 1
 
 
-def test_delete_history_clears_messages(db):
+def test_delete_history_clears_messages_but_preserves_rate_limit(db):
     uid = _user_id()
     save_message(uid, "user", "hello", db)
     save_message(uid, "assistant", "world", db)
 
     delete_history(uid, db)
 
+    # Visible history is emptied...
     assert get_history(uid, db) == []
-    assert count_recent_user_messages(uid, db) == 0
+    # ...but the rate-limit allowance is preserved (decoupled via ChatUsage),
+    # so clearing the chat cannot be used to bypass the message limit.
+    assert count_recent_user_messages(uid, db) == 1
 
 
 def test_history_isolated_between_users(db):

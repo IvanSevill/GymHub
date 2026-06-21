@@ -122,6 +122,20 @@ class ChatMessage(Base):
     __table_args__ = (Index("ix_chat_messages_user_created", "user_id", "created_at"),)
 
 
+class ChatUsage(Base):
+    """Append-only log of user message timestamps for rate limiting.
+
+    Decoupled from ChatMessage on purpose: clearing the visible chat history
+    (delete_history) must not reset the user's message allowance, so the
+    rate-limit counters read from this table instead of from ChatMessage.
+    """
+    __tablename__ = "chat_usage"
+    id = Column(String, primary_key=True, default=_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    __table_args__ = (Index("ix_chat_usage_user_created", "user_id", "created_at"),)
+
+
 class ChatMemory(Base):
     __tablename__ = "chat_memories"
     id = Column(String, primary_key=True, default=_uuid)
@@ -141,43 +155,3 @@ class WeightLog(Base):
     body_fat_pct = Column(Float, nullable=True)
     created_at = Column(DateTime, nullable=True)
     __table_args__ = (UniqueConstraint("user_id", "date", name="uq_weight_log_user_date"),)
-
-
-class Goal(Base):
-    __tablename__ = "goals"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    goal_type = Column(String, nullable=False)
-    target_value = Column(Float, nullable=True)
-    target_date = Column(String, nullable=True)
-    metric_unit = Column(String, nullable=True)
-    description = Column(Text, nullable=False, default="")
-    status = Column(String, nullable=False, default="active")
-    created_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, nullable=True)
-
-
-class NutritionLog(Base):
-    __tablename__ = "nutrition_logs"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    date = Column(String, nullable=False)
-    meal_type = Column(String, nullable=False)
-    food_items = Column(Text, nullable=False, default="[]")
-    calories = Column(Integer, nullable=True)
-    protein_g = Column(Float, nullable=True)
-    carbs_g = Column(Float, nullable=True)
-    fats_g = Column(Float, nullable=True)
-    created_at = Column(DateTime, nullable=True)
-
-
-class MoodEnergyLog(Base):
-    __tablename__ = "mood_energy_logs"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    date = Column(String, nullable=False)
-    mood_rating = Column(Integer, nullable=False)
-    energy_rating = Column(Integer, nullable=False)
-    notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=True)
-    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_mood_energy_user_date"),)

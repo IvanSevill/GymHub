@@ -4,7 +4,7 @@ import os
 from typing import Optional
 
 import requests
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
@@ -240,58 +240,6 @@ async def disconnect_fitbit(
 
     db.commit()
     return {"message": "Fitbit disconnected and data removed"}
-
-
-@router.post("/register", response_model=schemas.User)
-async def register_user(
-    user_create: schemas.UserCreate, db: Session = Depends(database.get_db)
-):
-    """Register a new user with email and password."""
-    db_user = db.query(models.User).filter(models.User.email == user_create.email).first()
-    if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
-        )
-
-    hashed_password = auth.pwd_context.hash(user_create.password)
-    new_user = models.User(
-        email=user_create.email, name=user_create.name, hashed_password=hashed_password
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return _build_user_schema(new_user, None)
-
-
-@router.post("/login", response_model=schemas.Token)
-async def login_for_access_token(
-    user_login: schemas.UserLogin,
-    response: Response,
-    db: Session = Depends(database.get_db),
-):
-    """Authenticate with email/password and return a JWT access token."""
-    user = db.query(models.User).filter(models.User.email == user_login.email).first()
-    if not user or not user.hashed_password or not auth.pwd_context.verify(
-        user_login.password, user.hashed_password
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    access_token = auth.create_access_token(data={"sub": user.email})
-    refresh_token = auth.create_refresh_token(data={"sub": user.email})
-    auth.set_refresh_cookie(response, refresh_token)
-
-    user_tokens = (
-        db.query(models.UserTokens).filter(models.UserTokens.user_id == user.id).first()
-    )
-    return schemas.Token(
-        access_token=access_token,
-        token_type="bearer",
-        user=_build_user_schema(user, user_tokens),
-    )
 
 
 @router.get("/me", response_model=schemas.User)
