@@ -33,7 +33,16 @@ def _request(method: str, path: str, *, params: dict | None = None, json: dict |
     try:
         resp = httpx.request(method, url, params=params, json=json,
                              headers=_headers(), timeout=timeout,
-                             follow_redirects=True)
+                             follow_redirects=False)
+        # Follow same-origin redirects for GET only (handles FastAPI trailing-slash 307).
+        # POST/PUT/DELETE never follow redirects to avoid forwarding credentials to unintended targets.
+        if method.upper() == "GET" and resp.status_code in (301, 302, 307, 308):
+            location = resp.headers.get("location", "")
+            base = _base_url()
+            if location.startswith("/") or location.startswith(base):
+                redirect_url = location if location.startswith("http") else f"{base}{location}"
+                resp = httpx.request("GET", redirect_url, headers=_headers(),
+                                     timeout=timeout, follow_redirects=False)
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
             return {}
