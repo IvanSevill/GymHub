@@ -62,6 +62,32 @@ def test_muscle_balance_empty(fake):
 
 
 # --------------------------------------------------------------------------
+# get_pending_cardio
+# --------------------------------------------------------------------------
+
+def test_pending_cardio_lists(fake):
+    fake.set("/workouts/fitbit-pending", [
+        {"log_id": "1", "activity_name": "Run", "date": "2026-06-15 08:00", "duration_min": 30.0},
+    ])
+    out = read_tools.get_pending_cardio({"days": 30}, "u", None)
+    assert fake.params_for("/workouts/fitbit-pending") == {"days": 30}
+    assert out["total"] == 1
+    assert out["pending"][0]["activity_name"] == "Run"
+
+
+def test_pending_cardio_default_days(fake):
+    fake.set("/workouts/fitbit-pending", [])
+    read_tools.get_pending_cardio({}, "u", None)
+    assert fake.params_for("/workouts/fitbit-pending") == {"days": 30}
+
+
+def test_pending_cardio_propagates_error(fake):
+    fake.set("/workouts/fitbit-pending", {"error": "backend HTTP 500"})
+    out = read_tools.get_pending_cardio({}, "u", None)
+    assert out == {"error": "backend HTTP 500"}
+
+
+# --------------------------------------------------------------------------
 # get_exercise_frequency
 # --------------------------------------------------------------------------
 

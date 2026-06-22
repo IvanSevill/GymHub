@@ -207,6 +207,16 @@ def get_daily_health(args: dict, user_id: str, db) -> dict:
     return {"data": rows, "avg_steps": avg_steps, "avg_calories": avg_calories}
 
 
+def get_pending_cardio(args: dict, user_id: str, db) -> dict:
+    """List Fitbit activities (last N days) not yet imported as GymHub workouts."""
+    days = int(args.get("days", 30))
+    data = backend_client.get("/workouts/fitbit-pending", {"days": days})
+    if backend_client.is_error(data):
+        return data
+    pending = data if isinstance(data, list) else []
+    return {"pending": pending, "total": len(pending)}
+
+
 def get_sleep_logs(args: dict, user_id: str, db) -> dict:
     """Return Fitbit sleep logs with duration, efficiency, and stage breakdown."""
     days = int(args.get("days", 14))

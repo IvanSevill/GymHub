@@ -110,6 +110,7 @@ Model Context Protocol server launched as a subprocess by `ai-server` (one insta
 | `get_exercise_history` | read | Time-series of sets for one exercise |
 | `get_weight_progress` | read | Daily max weight trend for one exercise |
 | `get_daily_health` | read | Fitbit daily activity (steps, calories, AZM) |
+| `get_pending_cardio` | read | Fitbit cardio activities not yet imported as workouts (preview) |
 | `get_sleep_logs` | read | Fitbit sleep records with stage breakdown |
 | `get_muscle_balance` | read | Weekly training volume per muscle group |
 | `get_workout_count_in_period` | read | Count workouts between two dates |
