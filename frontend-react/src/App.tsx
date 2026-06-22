@@ -54,11 +54,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
           window.location.href = "/";
         }}
         onCreateCalendar={async (name) => {
-          const { id } = await workoutService.createCalendar(name);
-          localStorage.setItem(CALENDAR_CACHE_KEY, id);
-          await workoutService.setCalendar(id);
-          await workoutService.syncAllFromCalendar().catch(() => {});
-          window.location.href = "/";
+          // Only create the calendar and return it. Selecting it (setCalendar +
+          // sync + continue) happens via onSelect after the user confirms.
+          const created = await workoutService.createCalendar(name);
+          return { id: created.id, summary: created.summary };
         }}
       />
     );
