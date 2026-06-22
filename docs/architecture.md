@@ -96,9 +96,9 @@ Chat persistence lives in the backend: see `backend/app/routers/assistant.py` (h
 
 Model Context Protocol server launched as a subprocess by `ai-server` (one instance per chat request, stdio transport). Receives `GYMHUB_USER_ID`, `GYMHUB_TOKEN`, `BACKEND_URL`, and `AI_SERVER_URL` via environment variables injected at spawn time. Like the AI server, it reaches all data through the backend REST API.
 
-- **`server.py`** — FastMCP entry point, registers 22 tools (13 original + 6 new reads + 3 new writes).
-- **`read_tools.py`** — 15 read tools that query the DB directly via SQLAlchemy (no HTTP round-trip).
-- **`write_tools.py`** — 7 write tools: 4 call the backend REST API via `httpx`, 3 access the DB directly (set_goal, log_nutrition, log_mood_and_energy).
+- **`server.py`** — FastMCP entry point, registers **27 tools** (20 read + 7 write).
+- **`read_tools.py`** — the read tools; all fetch the user's data through the backend REST API via `backend_client` (no direct DB access).
+- **`write_tools.py`** — the write tools (create/update workouts, sync Fitbit cardio, log weight, save/recall memory); all call the backend REST API via `backend_client`.
 
 | Tool | Type | Description |
 |---|---|---|
