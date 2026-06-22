@@ -91,7 +91,9 @@ export function useFitbitHealthData(
 
   const syncData = async (): Promise<void> => {
     const d = Number(days);
-    await fitbitService.sync();
+    // Manual sync forces a full re-fetch so days stored incomplete earlier
+    // (late-arriving Fitbit data) get corrected, not just the recent delta.
+    await fitbitService.sync(true);
     await fetchData(d);
   };
 
