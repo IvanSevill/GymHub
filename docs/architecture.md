@@ -75,27 +75,26 @@ Key libraries: TanStack Query (server state), Recharts v3 (charts), Framer Motio
 
 ## AI Server (`ai-server/`)
 
-Standalone FastAPI service on port 8001. Uses the same PostgreSQL/SQLite database as the backend (read-only for most operations) and validates the same JWT tokens.
+Standalone FastAPI service on port 8001. **Never touches the database directly** — chat history, memory, rate-limit usage, the user profile and workout data are all read and written through the backend REST API (`/assistant/*`, `/auth/me`, `/workouts`), authenticated with the end user's JWT. It validates the same JWT tokens as the backend (shared `SECRET_KEY`).
 
-- **`main.py`** — Bootstrap: loads `.env`, creates `chat_messages`, `goals`, `nutrition_logs`, `mood_energy_logs` tables on startup, configures CORS for the frontend origin, exposes `/health`.
-- **`auth.py`** — Decodes JWT tokens issued by `backend/app/auth.py` (same `SECRET_KEY`). Returns an `AuthUser` dataclass with `id`, `name`, `token`, `is_root`.
-- **`chat.py`** — Four endpoints:
-  - `POST /chat` — validates rate limit, then returns a `text/event-stream` SSE response. SSE event types: `thinking`, `text`, `error`, `done`.
-  - `GET /chat/history` — last 10 messages for the current user.
-  - `DELETE /chat/history` — clears all messages for the current user.
-  - `GET /chat/usage` — returns `{used, limit, reset_hours, is_root}` for rate-limit display.
-  
-  The streaming generator spawns a MCP subprocess per request via `stdio_client`, converts MCP tool schemas to Gemini `FunctionDeclaration` objects, and runs a tool-call loop (max 6 iterations).
-  
-  The **system prompt** now enforces a strict fitness-coach personality: direct, data-driven, demanding but fair. Off-topic questions get an in-character refusal. Mentions goals, nutrition, and mood/energy tracking as available features.
-- **`chat_history.py`** — DB persistence: `save_message`, `get_history` (last 10 messages, oldest first), `count_recent_user_messages` (rate-limit window: 5 messages / 2 hours), `delete_history`. Delete only removes messages older than the rate-limit window (frontend delete now only clears local state).
-- **`models.py`** — Read-only mirror of the main backend's ORM models (Workout, Exercise, etc.) plus the `ChatMessage` table owned by this service. Also defines `Goal`, `NutritionLog`, and `MoodEnergyLog` tables for the new tracking features.
+- **`main.py`** — Bootstrap: loads `.env`, configures CORS for the frontend origin, exposes `/health`. No database engine or table creation.
+- **`backend_client.py`** — Thin `httpx` wrapper (`get`/`post`/`delete`) that calls the backend with a per-request user token. Follows only same-origin GET redirects so the token is never forwarded off-host.
+- **`auth.py`** — Decodes the JWT locally (fast reject), then resolves the user via the backend `GET /auth/me`. Returns an `AuthUser` dataclass with `id`, `name`, `token`, `is_root`. No DB lookup.
+- **`chat.py`** — Endpoints (all persistence delegated to the backend):
+  - `POST /chat` — checks the rate limit via `GET /assistant/usage`, then returns a `text/event-stream` SSE response. SSE event types: `thinking`, `text`, `error`, `done`.
+  - `GET`/`DELETE /chat/history` — proxy to `/assistant/history`.
+  - `GET`/`POST /chat/memory`, `DELETE /chat/memory/{id}` — proxy to `/assistant/memory`.
+  - `GET /chat/usage` — proxies `/assistant/usage` (`{used, limit, reset_at, is_root}`).
+
+  The streaming generator spawns a MCP subprocess per request via `stdio_client`, converts MCP tool schemas to Gemini `FunctionDeclaration` objects, and runs a tool-call loop (max 6 iterations). The **system prompt** enforces a strict fitness-coach personality: direct, data-driven, demanding but fair; off-topic questions get an in-character refusal.
+
+Chat persistence lives in the backend: see `backend/app/routers/assistant.py` (history, memory, and the `chat_usage`-based rate limit: 5 messages / 2 hours) backed by the `ChatMessage`, `ChatMemory` and `ChatUsage` models.
 
 ---
 
 ## MCP Server (`gymhub-mcp/`)
 
-Model Context Protocol server launched as a subprocess by `ai-server` (one instance per chat request, stdio transport). Receives `GYMHUB_USER_ID`, `GYMHUB_TOKEN`, `DATABASE_URL`, and `BACKEND_URL` via environment variables injected at spawn time.
+Model Context Protocol server launched as a subprocess by `ai-server` (one instance per chat request, stdio transport). Receives `GYMHUB_USER_ID`, `GYMHUB_TOKEN`, `BACKEND_URL`, and `AI_SERVER_URL` via environment variables injected at spawn time. Like the AI server, it reaches all data through the backend REST API.
 
 - **`server.py`** — FastMCP entry point, registers 22 tools (13 original + 6 new reads + 3 new writes).
 - **`read_tools.py`** — 15 read tools that query the DB directly via SQLAlchemy (no HTTP round-trip).

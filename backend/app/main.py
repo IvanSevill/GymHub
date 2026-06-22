@@ -15,7 +15,7 @@ from slowapi.middleware import SlowAPIMiddleware  # noqa: E402
 from slowapi.util import get_remote_address  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from .database import Base, engine  # noqa: E402
-from .routers import analytics, auth_routes, exercise_requests, exercises, feedback, fitbit_health, fitbit_sync, weight, workouts  # noqa: E402
+from .routers import analytics, assistant, auth_routes, exercise_requests, exercises, feedback, fitbit_health, fitbit_sync, weight, workouts  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -136,6 +136,7 @@ app.include_router(workouts.router)
 app.include_router(analytics.router)
 app.include_router(weight.router)
 app.include_router(feedback.router)
+app.include_router(assistant.router)
 
 @app.get("/")
 async def read_root():

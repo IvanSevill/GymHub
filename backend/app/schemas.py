@@ -356,3 +356,35 @@ class ExerciseRequestResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+# ---------------------------------------------------------------------------
+# AI assistant (GymChat) schemas
+# ---------------------------------------------------------------------------
+
+class ChatMessageItem(BaseModel):
+    """A single chat message exchanged with the assistant."""
+    role: str = Field(..., description="Message role: 'user' or 'assistant'")
+    content: str = Field(..., description="Message text content")
+
+
+class ChatMemoryCreate(BaseModel):
+    """Payload to upsert a memory fact (by key) for the current user."""
+    key: str = Field(..., description="Short label, e.g. 'objetivo'")
+    value: str = Field(..., description="Fact to remember")
+
+
+class ChatMemoryItem(BaseModel):
+    """A stored memory fact returned to the assistant."""
+    id: str
+    key: str
+    value: str
+    created_at: Optional[str] = None
+
+
+class ChatUsageInfo(BaseModel):
+    """Rate-limit usage for the current user within the active time window."""
+    used: int = Field(..., description="Messages sent in the current window")
+    limit: Optional[int] = Field(None, description="Allowed messages per window (None = unlimited)")
+    reset_at: Optional[str] = Field(None, description="ISO timestamp when the window resets")
+    is_root: bool = Field(False, description="Root users are exempt from the limit")

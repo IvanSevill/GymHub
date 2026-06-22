@@ -7,15 +7,10 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from database import Base, engine  # noqa: E402
-from models import ChatMessage, ChatMemory, ChatUsage  # noqa: E402, F401 — ensure tables are registered
 from chat import router as chat_router  # noqa: E402
 
-Base.metadata.create_all(bind=engine, tables=[
-    Base.metadata.tables["chat_messages"],
-    Base.metadata.tables["chat_memories"],
-    Base.metadata.tables["chat_usage"],
-])
+# The AI server holds no database: chat history, memory and usage are owned by
+# the backend and reached through its REST API (see backend_client).
 
 app = FastAPI(title="GymHub AI Server")
 
