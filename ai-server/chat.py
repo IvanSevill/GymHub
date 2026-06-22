@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncIterator
 
+import httpx
 from google import genai
 from google.genai import types as genai_types
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,20 +16,8 @@ from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from pydantic import BaseModel
 
+import backend_client
 from auth import AuthUser, get_current_user
-from chat_history import (
-    RATE_LIMIT_COUNT,
-    RATE_LIMIT_HOURS,
-    count_recent_user_messages,
-    delete_history,
-    get_history,
-    get_window_info,
-    save_message,
-)
-from database import SessionLocal
-import memory as memory_module
-from sqlalchemy import desc
-import models as db_models
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -96,81 +85,67 @@ def _mcp_to_genai_tools(mcp_tools: list) -> list[genai_types.Tool]:
 
 
 # ---------------------------------------------------------------------------
-# DB helpers (sync, called via asyncio.to_thread)
+# Backend data access (sync httpx, called via asyncio.to_thread)
+#
+# The AI server never reads or writes the database directly: chat history,
+# memory, usage and workout data all go through the backend REST API.
 # ---------------------------------------------------------------------------
 
-def _load_history(user_id: str) -> list[dict]:
-    db = SessionLocal()
+def _load_history(token: str) -> list[dict]:
     try:
-        return get_history(user_id, db)
-    finally:
-        db.close()
+        return backend_client.get("/assistant/history", token) or []
+    except Exception as exc:
+        logger.warning("Failed to load chat history: %s", exc)
+        return []
 
 
-def _save_msg(user_id: str, role: str, content: str) -> None:
-    db = SessionLocal()
+def _save_msg(token: str, role: str, content: str) -> None:
     try:
-        save_message(user_id, role, content, db)
-    finally:
-        db.close()
+        backend_client.post("/assistant/history", token, json={"role": role, "content": content})
+    except Exception as exc:
+        logger.warning("Failed to save chat message: %s", exc)
 
 
-def _count_recent(user_id: str) -> int:
-    db = SessionLocal()
+def _get_usage(token: str) -> dict:
     try:
-        return count_recent_user_messages(user_id, db)
-    finally:
-        db.close()
+        return backend_client.get("/assistant/usage", token) or {}
+    except Exception as exc:
+        logger.warning("Failed to read chat usage: %s", exc)
+        return {}
 
 
-def _get_window_info(user_id: str) -> tuple[int, datetime | None]:
-    db = SessionLocal()
+def _load_memories(token: str) -> list[dict]:
     try:
-        return get_window_info(user_id, db)
-    finally:
-        db.close()
+        return backend_client.get("/assistant/memory", token) or []
+    except Exception as exc:
+        logger.warning("Failed to load memories: %s", exc)
+        return []
 
 
-def _clear_history(user_id: str) -> None:
-    db = SessionLocal()
+def _load_recent_workouts(token: str, days: int = 7, limit: int = 5) -> list[dict]:
+    """Load recent workouts (via backend) for context inclusion in the system prompt."""
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).isoformat()
     try:
-        delete_history(user_id, db)
-    finally:
-        db.close()
+        workouts = backend_client.get("/workouts", token, params={"start_date": cutoff}) or []
+    except Exception as exc:
+        logger.warning("Failed to load recent workouts: %s", exc)
+        return []
 
-
-def _load_recent_workouts(user_id: str, days: int = 7, limit: int = 5) -> list[dict]:
-    """Load recent workouts for context inclusion in system prompt."""
-    db = SessionLocal()
-    try:
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
-        workouts = (
-            db.query(db_models.Workout)
-            .filter(
-                db_models.Workout.user_id == user_id,
-                db_models.Workout.start_time >= cutoff,
-            )
-            .order_by(desc(db_models.Workout.start_time))
-            .limit(limit)
-            .all()
-        )
-
-        result = []
-        for w in workouts:
-            exercises: dict = {}
-            for s in w.exercise_sets:
-                ex_name = s.exercise.name if s.exercise else "Unknown"
-                label = f"{s.value} {s.measurement}".strip()
-                exercises.setdefault(ex_name, []).append(label)
-
-            result.append({
-                "date": w.start_time.strftime("%Y-%m-%d"),
-                "title": w.title,
-                "exercises": exercises,
-            })
-        return result
-    finally:
-        db.close()
+    result = []
+    for w in workouts[:limit]:
+        exercises: dict = {}
+        for s in w.get("exercise_sets", []):
+            ex = s.get("exercise") or {}
+            ex_name = ex.get("name", "Unknown")
+            label = f"{s.get('value', '')} {s.get('measurement', '')}".strip()
+            exercises.setdefault(ex_name, []).append(label)
+        start = w.get("start_time", "")
+        result.append({
+            "date": start[:10] if start else "",
+            "title": w.get("title", ""),
+            "exercises": exercises,
+        })
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -238,26 +213,17 @@ class ChatRequest(BaseModel):
 # Streaming generator
 # ---------------------------------------------------------------------------
 
-def _load_memories(user_id: str) -> list[dict]:
-    db = SessionLocal()
-    try:
-        return memory_module.get_memories(user_id, db)
-    finally:
-        db.close()
-
-
 async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
     try:
-        history = await asyncio.to_thread(_load_history, user.id)
-        memories = await asyncio.to_thread(_load_memories, user.id)
-        recent_workouts = await asyncio.to_thread(_load_recent_workouts, user.id)
-        await asyncio.to_thread(_save_msg, user.id, "user", message)
+        history = await asyncio.to_thread(_load_history, user.token)
+        memories = await asyncio.to_thread(_load_memories, user.token)
+        recent_workouts = await asyncio.to_thread(_load_recent_workouts, user.token)
+        await asyncio.to_thread(_save_msg, user.token, "user", message)
 
         mcp_env = {
             **dict(os.environ),
             "GYMHUB_USER_ID": user.id,
             "GYMHUB_TOKEN": user.token,
-            "DATABASE_URL": os.getenv("DATABASE_URL", ""),
             "BACKEND_URL": os.getenv("BACKEND_URL", "http://localhost:8000"),
             "AI_SERVER_URL": os.getenv("AI_SERVER_URL", f"http://localhost:{os.getenv('PORT', '8001')}"),
         }
@@ -335,7 +301,7 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
 
                     else:
                         text = response.text or ""
-                        await asyncio.to_thread(_save_msg, user.id, "assistant", text)
+                        await asyncio.to_thread(_save_msg, user.token, "assistant", text)
                         yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
                         produced_text = True
                         break
@@ -353,16 +319,12 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
 
 
 # ---------------------------------------------------------------------------
-# Endpoints
+# Endpoints — all persistence is delegated to the backend REST API
 # ---------------------------------------------------------------------------
 
 @router.get("/chat/memory")
 async def get_memory_endpoint(user: AuthUser = Depends(get_current_user)):
-    db = SessionLocal()
-    try:
-        return memory_module.get_memories(user.id, db)
-    finally:
-        db.close()
+    return await asyncio.to_thread(_load_memories, user.token)
 
 
 @router.post("/chat/memory")
@@ -370,11 +332,15 @@ async def save_memory_endpoint(
     data: dict,
     user: AuthUser = Depends(get_current_user),
 ):
-    db = SessionLocal()
     try:
-        return memory_module.save_memory(user.id, data["key"], data["value"], db)
-    finally:
-        db.close()
+        return await asyncio.to_thread(
+            backend_client.post, "/assistant/memory", user.token,
+            {"key": data["key"], "value": data["value"]},
+        )
+    except KeyError:
+        raise HTTPException(status_code=400, detail="key y value son obligatorios")
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Error al guardar memoria")
 
 
 @router.delete("/chat/memory/{memory_id}", status_code=204)
@@ -382,46 +348,36 @@ async def delete_memory_endpoint(
     memory_id: str,
     user: AuthUser = Depends(get_current_user),
 ):
-    db = SessionLocal()
     try:
-        ok = memory_module.delete_memory(user.id, memory_id, db)
-        if not ok:
+        await asyncio.to_thread(backend_client.delete, f"/assistant/memory/{memory_id}", user.token)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
             raise HTTPException(status_code=404, detail="Memory not found")
-    finally:
-        db.close()
+        raise HTTPException(status_code=exc.response.status_code, detail="Error al borrar memoria")
 
 
 @router.get("/chat/usage")
 async def chat_usage_endpoint(user: AuthUser = Depends(get_current_user)):
-    if user.is_root:
-        return {
-            "used": 0,
-            "limit": None,
-            "reset_at": None,
-            "is_root": True,
-        }
-
-    used, window_start = await asyncio.to_thread(_get_window_info, user.id)
-    reset_at: str | None = None
-    if window_start is not None:
-        reset_dt = window_start + timedelta(hours=RATE_LIMIT_HOURS)
-        reset_at = reset_dt.isoformat() + "Z"
+    usage = await asyncio.to_thread(_get_usage, user.token)
     return {
-        "used": used,
-        "limit": RATE_LIMIT_COUNT,
-        "reset_at": reset_at,
-        "is_root": False,
+        "used": usage.get("used", 0),
+        "limit": usage.get("limit"),
+        "reset_at": usage.get("reset_at"),
+        "is_root": bool(usage.get("is_root")),
     }
 
 
 @router.get("/chat/history")
 async def chat_history_endpoint(user: AuthUser = Depends(get_current_user)):
-    return await asyncio.to_thread(_load_history, user.id)
+    return await asyncio.to_thread(_load_history, user.token)
 
 
 @router.delete("/chat/history")
 async def clear_chat_history_endpoint(user: AuthUser = Depends(get_current_user)):
-    await asyncio.to_thread(_clear_history, user.id)
+    try:
+        await asyncio.to_thread(backend_client.delete, "/assistant/history", user.token)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Error al borrar historial")
     return {"cleared": True}
 
 
@@ -436,13 +392,13 @@ async def chat(
     if not os.getenv("GEMINI_API_KEY"):
         raise HTTPException(status_code=503, detail="AI assistant not configured — set GEMINI_API_KEY")
 
-    if not user.is_root:
-        recent = await asyncio.to_thread(_count_recent, user.id)
-        if recent >= RATE_LIMIT_COUNT:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Límite de {RATE_LIMIT_COUNT} consultas cada {RATE_LIMIT_HOURS} horas alcanzado.",
-            )
+    usage = await asyncio.to_thread(_get_usage, user.token)
+    limit = usage.get("limit")
+    if not usage.get("is_root") and limit is not None and usage.get("used", 0) >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Límite de {limit} consultas alcanzado. Vuelve a intentarlo más tarde.",
+        )
 
     return StreamingResponse(
         _generate(request.message, user),

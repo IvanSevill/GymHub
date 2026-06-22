@@ -1,4 +1,9 @@
-"""Test configuration and fixtures for the ai-server test suite."""
+"""Test configuration and fixtures for the ai-server test suite.
+
+The AI server no longer touches a database: every data access goes through the
+backend REST API via ``backend_client``. Tests replace that module's functions
+with an in-memory fake, so no DB or live backend is needed.
+"""
 
 import os
 import sys
@@ -8,108 +13,102 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-# ---------------------------------------------------------------------------
-# Env vars MUST be set before importing any ai-server module that reads them
-# at module level (database.py uses os.environ["DATABASE_URL"] immediately;
-# auth.py raises RuntimeError if SECRET_KEY is missing).
-# ---------------------------------------------------------------------------
+# Env vars must be set before importing modules that read them at import time
+# (auth.py raises if SECRET_KEY is missing).
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing")
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("BACKEND_URL", "http://localhost:8000")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
-# Add ai-server root to sys.path so modules resolve without a package prefix
 _AI_SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _AI_SERVER_DIR not in sys.path:
     sys.path.insert(0, _AI_SERVER_DIR)
 
-# ---------------------------------------------------------------------------
-# Build the shared in-memory test engine BEFORE importing any app module,
-# so that all SessionLocal instances can be patched to use it.
-# ---------------------------------------------------------------------------
-_TEST_DB_URL = "sqlite:///:memory:"
-_engine = create_engine(
-    _TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-_TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
-
-# Now import app modules — they read DATABASE_URL (already set above)
-import auth as _auth_module  # noqa: E402
-import chat as _chat_module  # noqa: E402
-from database import Base, get_db  # noqa: E402
+import backend_client as _backend_client  # noqa: E402
 from main import app  # noqa: E402
-from models import User  # noqa: E402
 
 SECRET_KEY = "test-secret-key-for-testing"
 ALGORITHM = "HS256"
 
 
-@pytest.fixture(autouse=True)
-def _setup_tables():
-    """Create all tables on the test engine and patch module-level SessionLocals."""
-    Base.metadata.create_all(bind=_engine)
+class FakeBackend:
+    """In-memory stand-in for the backend REST API used by the AI server."""
 
-    # Patch every SessionLocal that bypasses FastAPI DI (auth.py, chat.py helpers)
-    _auth_module.SessionLocal = _TestingSessionLocal
-    _chat_module.SessionLocal = _TestingSessionLocal
+    def __init__(self):
+        self.history: list[dict] = []
+        self.memories: list[dict] = []
+        self.usage_count = 0
+        self.is_root = False
+        self.user = {"id": "user-1", "name": "Test User", "is_root": 0}
+        self.workouts: list[dict] = []
 
-    yield
+    def get(self, path, token, params=None, timeout=30.0):
+        if path == "/auth/me":
+            return self.user
+        if path == "/assistant/history":
+            return list(self.history)
+        if path == "/assistant/memory":
+            return list(self.memories)
+        if path == "/assistant/usage":
+            return {
+                "used": self.usage_count,
+                "limit": None if self.is_root else 5,
+                "reset_at": None,
+                "is_root": self.is_root,
+            }
+        if path == "/workouts":
+            return list(self.workouts)
+        raise AssertionError(f"unexpected GET {path}")
 
-    Base.metadata.drop_all(bind=_engine)
+    def post(self, path, token, json=None, timeout=30.0):
+        if path == "/assistant/history":
+            self.history.append({"role": json["role"], "content": json["content"]})
+            if json["role"] == "user":
+                self.usage_count += 1
+            return {"ok": True}
+        if path == "/assistant/memory":
+            for m in self.memories:
+                if m["key"] == json["key"]:
+                    m["value"] = json["value"]
+                    return m
+            mem = {"id": str(uuid.uuid4()), "key": json["key"], "value": json["value"], "created_at": "now"}
+            self.memories.append(mem)
+            return mem
+        raise AssertionError(f"unexpected POST {path}")
+
+    def delete(self, path, token, timeout=30.0):
+        if path == "/assistant/history":
+            self.history.clear()
+            return None
+        if path.startswith("/assistant/memory/"):
+            mid = path.rsplit("/", 1)[1]
+            self.memories = [m for m in self.memories if m["id"] != mid]
+            return None
+        raise AssertionError(f"unexpected DELETE {path}")
 
 
 @pytest.fixture
-def db(_setup_tables):
-    """Yield a test DB session sharing the in-memory engine."""
-    session = _TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+def fake_backend(monkeypatch):
+    fb = FakeBackend()
+    monkeypatch.setattr(_backend_client, "get", fb.get)
+    monkeypatch.setattr(_backend_client, "post", fb.post)
+    monkeypatch.setattr(_backend_client, "delete", fb.delete)
+    return fb
 
 
 @pytest.fixture
-async def async_client(db):
-    """Async HTTPX client that overrides the get_db dependency."""
-
-    def _override_get_db():
-        try:
-            yield db
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = _override_get_db
+async def async_client(fake_backend):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def test_user(db):
-    """Create a User in the test DB and return user metadata + a valid JWT."""
-    user_id = str(uuid.uuid4())
+def test_user():
+    """Return a valid JWT and auth headers for a standard (non-root) user."""
     email = "testuser@example.com"
-
-    user = User(id=user_id, email=email, name="Test User", is_root=0)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    token_payload = {
-        "sub": email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-    }
-    token = jwt.encode(token_payload, SECRET_KEY, algorithm=ALGORITHM)
-
-    return {
-        "user_id": user_id,
-        "email": email,
-        "token": token,
-        "headers": {"Authorization": f"Bearer {token}"},
-    }
+    token = jwt.encode(
+        {"sub": email, "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+    return {"email": email, "token": token, "headers": {"Authorization": f"Bearer {token}"}}
