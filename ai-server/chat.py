@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+# Max model⇄tool round-trips before giving up. A complex question can chain
+# many tool calls (one per metric), so this must be generous enough to leave
+# the model a turn to write its final answer after gathering data.
+MAX_TOOL_ITERATIONS = 12
 MCP_SERVER_PATH = Path(
     os.getenv("MCP_SERVER_PATH", str(Path(__file__).parent.parent / "gymhub-mcp" / "server.py"))
 ).resolve()
@@ -261,7 +265,7 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                 ))
 
                 produced_text = False
-                for _ in range(6):
+                for _ in range(MAX_TOOL_ITERATIONS):
                     response = await asyncio.to_thread(
                         client.models.generate_content,
                         model=MODEL,
@@ -307,7 +311,37 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                         break
 
                 if not produced_text:
-                    yield f'data: {json.dumps({"type": "error", "message": "El asistente no pudo generar una respuesta. Inténtalo de nuevo."})}\n\n'
+                    # The model used up every tool round without writing an answer.
+                    # Force one final turn WITHOUT tools so it summarizes the data
+                    # it already gathered instead of failing outright.
+                    try:
+                        final_config = genai_types.GenerateContentConfig(
+                            system_instruction=_system_prompt(user.name, memories, recent_workouts),
+                            temperature=0.7,
+                            max_output_tokens=2048,
+                        )
+                        contents.append(genai_types.Content(
+                            role="user",
+                            parts=[genai_types.Part(text=(
+                                "Responde ahora al usuario con la información que ya has "
+                                "recopilado. No llames a más herramientas."
+                            ))],
+                        ))
+                        final = await asyncio.to_thread(
+                            client.models.generate_content,
+                            model=MODEL,
+                            contents=contents,
+                            config=final_config,
+                        )
+                        text = (final.text or "").strip()
+                    except Exception:
+                        text = ""
+
+                    if text:
+                        await asyncio.to_thread(_save_msg, user.token, "assistant", text)
+                        yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
+                    else:
+                        yield f'data: {json.dumps({"type": "error", "message": "El asistente no pudo generar una respuesta. Inténtalo de nuevo."})}\n\n'
 
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
