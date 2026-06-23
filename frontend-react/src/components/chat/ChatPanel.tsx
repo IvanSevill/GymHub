@@ -32,6 +32,9 @@ const AI_HEALTH_URL = `${import.meta.env.VITE_AI_URL ?? "http://localhost:8001"}
 const HEALTH_POLL_INTERVAL_MS = 3000;
 const WAKEUP_SHOW_DELAY_MS = 1500;
 const HEALTH_CHECK_TIMEOUT_MS = 5000;
+// After this long without the ai-server becoming healthy, stop pretending it is
+// "waking up" and surface an explicit error with a retry action.
+const WAKEUP_FAIL_SECONDS = 75;
 
 interface ChatPanelProps {
   open: boolean;
@@ -139,6 +142,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
   const [aiReady, setAiReady] = useState(false);
   const [aiWaking, setAiWaking] = useState(false);
   const [aiElapsed, setAiElapsed] = useState(0);
+  const [retryKey, setRetryKey] = useState(0);
   const aiReadyRef = useRef(false);
   const aiStartRef = useRef(0);
 
@@ -156,6 +160,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     let showTimer: ReturnType<typeof setTimeout>;
     let elapsedTimer: ReturnType<typeof setInterval>;
     aiStartRef.current = Date.now();
+    setAiElapsed(0);
+    setAiWaking(false);
 
     let retryDelay = 1000;
     let retryTimer: ReturnType<typeof setTimeout>;
@@ -204,7 +210,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
       clearTimeout(showTimer);
       clearInterval(elapsedTimer);
     };
-  }, [open]);
+  }, [open, retryKey]);
 
   // Load history and usage once (on first ready), then never auto-reload
   useEffect(() => {
@@ -330,8 +336,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     hasLoadedHistoryRef.current = false;
   };
 
+  const handleRetryWakeup = () => {
+    aiReadyRef.current = false;
+    setAiReady(false);
+    setAiWaking(false);
+    setAiElapsed(0);
+    setRetryKey((k) => k + 1);
+  };
+
   const rateLimitReached =
     !usage?.is_root && usage !== null && usage.used >= usage.limit;
+  // The ai-server never became healthy within the expected window.
+  const aiFailed = !aiReady && aiElapsed >= WAKEUP_FAIL_SECONDS;
   const isEmpty = messages.length === 0 && !streaming && !errorMessage;
   const isInputBlocked = streaming || !aiReady || rateLimitReached;
 
@@ -611,6 +627,29 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                       </div>
                     </div>
                   ))}
+                </div>
+              ) : isEmpty && aiFailed ? (
+                /* The ai-server never responded — surface an explicit error */
+                <div className="flex flex-col items-center justify-center h-full gap-4 py-8">
+                  <div className="w-14 h-14 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center">
+                    <Bot size={24} className="text-red-400" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-white font-semibold text-sm">
+                      No se pudo iniciar el asistente
+                    </p>
+                    <p className="text-slate-400 text-xs mt-1.5 max-w-[240px] leading-relaxed">
+                      GymChat no responde tras {aiElapsed}s. El servicio puede
+                      estar caído o reiniciándose. Inténtalo de nuevo en unos
+                      segundos.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleRetryWakeup}
+                    className="btn-primary px-4 py-2 rounded-xl text-sm font-semibold"
+                  >
+                    Reintentar
+                  </button>
                 </div>
               ) : isEmpty && aiWaking && !aiReady ? (
                 /* Wakeup state — ai-server cold start on Render */
