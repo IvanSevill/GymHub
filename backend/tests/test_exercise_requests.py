@@ -282,11 +282,10 @@ async def test_cannot_reject_already_approved(
 
 
 # ---------------------------------------------------------------------------
-# Delete (sprint 3 endpoints not yet merged)
+# Delete
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="requires sprint 3 merge (feat/exercise-requests-crud)")
 @pytest.mark.anyio
 async def test_delete_own_pending_request(client, auth_headers, db, sample_muscle):
     create_resp = await client.post(
@@ -307,7 +306,6 @@ async def test_delete_own_pending_request(client, auth_headers, db, sample_muscl
     assert response.status_code == 204
 
 
-@pytest.mark.skip(reason="requires sprint 3 merge (feat/exercise-requests-crud)")
 @pytest.mark.anyio
 async def test_cannot_delete_others_request(client, auth_headers, root_headers, db, sample_muscle):
     create_resp = await client.post(
@@ -328,7 +326,6 @@ async def test_cannot_delete_others_request(client, auth_headers, root_headers, 
     assert response.status_code in (403, 404)
 
 
-@pytest.mark.skip(reason="requires sprint 3 merge (feat/exercise-requests-crud)")
 @pytest.mark.anyio
 async def test_cannot_delete_approved_request(
     client, auth_headers, root_headers, db, sample_muscle
@@ -357,11 +354,10 @@ async def test_cannot_delete_approved_request(
 
 
 # ---------------------------------------------------------------------------
-# Edit (sprint 3 endpoints not yet merged)
+# Edit
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="requires sprint 3 merge (feat/exercise-requests-crud)")
 @pytest.mark.anyio
 async def test_edit_own_pending_request(client, auth_headers, db, sample_muscle):
     create_resp = await client.post(
@@ -387,7 +383,6 @@ async def test_edit_own_pending_request(client, auth_headers, db, sample_muscle)
     assert response.json()["exercise_name"] == "Nombre Corregido"
 
 
-@pytest.mark.skip(reason="requires sprint 3 merge (feat/exercise-requests-crud)")
 @pytest.mark.anyio
 async def test_cannot_edit_approved_request(
     client, auth_headers, root_headers, db, sample_muscle

@@ -67,6 +67,17 @@ async def test_usage_only_counts_user_messages(client, auth_headers):
 
 
 @pytest.mark.anyio
+async def test_usage_no_messages_yet(client, auth_headers):
+    """A standard user with no messages: used=0, limit set, no reset window."""
+    resp = await client.get("/assistant/usage", headers=auth_headers)
+    body = resp.json()
+    assert body["used"] == 0
+    assert body["limit"] == 5
+    assert body["reset_at"] is None
+    assert body["is_root"] is False
+
+
+@pytest.mark.anyio
 async def test_usage_root_is_unlimited(client, root_headers):
     resp = await client.get("/assistant/usage", headers=root_headers)
     body = resp.json()
