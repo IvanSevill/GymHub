@@ -26,6 +26,12 @@ env/
 .pytest_cache/
 .ruff_cache/
 
+# Coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # Node
 node_modules/
 dist/
