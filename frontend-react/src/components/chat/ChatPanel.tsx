@@ -18,6 +18,7 @@ import {
   type ChatMemoryItem,
   type ChatMessage,
   type ChatUsage,
+  clearHistory,
   deleteMemoryItem,
   getHistory,
   getMemories,
@@ -329,11 +330,19 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
     setMessages([]);
     setErrorMessage(null);
     setStreamingContent("");
     hasLoadedHistoryRef.current = false;
+    // Physically delete the messages on the backend. The usage counter lives in
+    // a separate table and is intentionally preserved, so clearing the chat does
+    // not reset the rate limit.
+    try {
+      await clearHistory();
+    } catch {
+      // The local view is already cleared; ignore a backend failure here.
+    }
   };
 
   const handleRetryWakeup = () => {
