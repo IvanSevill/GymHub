@@ -315,6 +315,48 @@ async def test_sync_fitbit_create_missing_invalid_start_time(client, auth_header
 
 
 # ---------------------------------------------------------------------------
+# list_fitbit_pending — GET /workouts/fitbit-pending
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_fitbit_pending_no_tokens(client, auth_headers):
+    resp = await client.get("/workouts/fitbit-pending", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.anyio
+async def test_fitbit_pending_lists_unimported(client, auth_headers, db):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    activities = [
+        {
+            "logId": 5001,
+            "activityName": "Run",
+            "activityTypeId": 90009,
+            "startTime": "2026-06-15T08:00:00Z",
+            "duration": 1800000,
+            "distance": 5.0,
+            "calories": 300,
+            "hasGps": False,
+        },
+        {"activityName": "Walk", "startTime": "2026-06-15T12:00:00Z", "duration": 600000},
+    ]
+    with patch(
+        "app.routers.fitbit_sync.fitbit_utils.get_fitbit_activities_range",
+        return_value=activities,
+    ):
+        resp = await client.get("/workouts/fitbit-pending", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    # Walk is skipped by _should_skip_activity; only the Run is pending.
+    assert len(data) == 1
+    assert data[0]["activity_name"] == "Run"
+    assert data[0]["log_id"] == "5001"
+
+
+# ---------------------------------------------------------------------------
 # sync_fitbit_to_workout — POST /workouts/{workout_id}/sync-fitbit
 # ---------------------------------------------------------------------------
 
@@ -358,11 +400,43 @@ async def test_sync_fitbit_to_workout_success_weights(client, auth_headers, db):
         "activityName": "Weights",
         "hasGps": False,
     }
-    with patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity):
+    with (
+        patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+    ):
         resp = await client.post(f"/workouts/{w.id}/sync-fitbit", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["calories"] == 350
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_to_workout_connected_gps_sets_has_gps(client, auth_headers, db):
+    """Connected GPS reports hasGps=False in the list, but the TCX has trackpoints.
+
+    Regression for the GPS map not showing: has_gps must come from the TCX probe,
+    not the unreliable activities-list flag.
+    """
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    w = _make_workout(db, user.id)
+    mock_activity = {
+        "logId": 67890,
+        "calories": 400,
+        "averageHeartRate": 150,
+        "duration": 3600000,
+        "distance": 8.0,
+        "elevationGain": 25.0,
+        "activityName": "Run",
+        "hasGps": False,  # Connected GPS — list flag lies
+    }
+    with (
+        patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=True),
+    ):
+        resp = await client.post(f"/workouts/{w.id}/sync-fitbit", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["has_gps"] is True
 
 
 @pytest.mark.anyio
@@ -388,7 +462,10 @@ async def test_sync_fitbit_to_workout_run_creates_cardio_set(client, auth_header
         "activityName": "Run",
         "hasGps": True,
     }
-    with patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity):
+    with (
+        patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+    ):
         resp = await client.post(f"/workouts/{w.id}/sync-fitbit", headers=auth_headers)
     assert resp.status_code == 200
     db.expire_all()
@@ -412,7 +489,10 @@ async def test_sync_fitbit_to_workout_run_no_cardio_exercise(client, auth_header
         "activityName": "Run",
         "hasGps": False,
     }
-    with patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity):
+    with (
+        patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+    ):
         resp = await client.post(f"/workouts/{w.id}/sync-fitbit", headers=auth_headers)
     assert resp.status_code == 200
 
@@ -438,6 +518,7 @@ async def test_sync_fitbit_to_workout_updates_calendar(client, auth_headers, db)
     }
     with (
         patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
         patch("app.routers.fitbit_sync.update_google_calendar_event", return_value="ev-123"),
     ):
         resp = await client.post(f"/workouts/{w.id}/sync-fitbit", headers=auth_headers)
@@ -477,7 +558,10 @@ async def test_sync_fitbit_to_workout_root_creates_cardio_exercise(client, root_
         "activityName": "Run",
         "hasGps": False,
     }
-    with patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity):
+    with (
+        patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=mock_activity),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+    ):
         resp = await client.post(f"/workouts/{w.id}/sync-fitbit", headers=root_headers)
     assert resp.status_code == 200
     db.expire_all()

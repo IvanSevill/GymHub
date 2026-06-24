@@ -19,7 +19,7 @@ interface CalendarItem {
 interface Props {
   fetchCalendars: () => Promise<CalendarItem[]>;
   onSelect: (id: string) => Promise<void>;
-  onCreateCalendar: (name: string) => Promise<void>;
+  onCreateCalendar: (name: string) => Promise<CalendarItem>;
 }
 
 const CalendarSetup: React.FC<Props> = ({
@@ -37,6 +37,7 @@ const CalendarSetup: React.FC<Props> = ({
   const [newCalName, setNewCalName] = useState("GymHub");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [created, setCreated] = useState<CalendarItem | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,7 +77,16 @@ const CalendarSetup: React.FC<Props> = ({
     setCreateError("");
     setIsCreating(true);
     try {
-      await onCreateCalendar(name);
+      const newCal = await onCreateCalendar(name);
+      // Preselect the new calendar (top of the list) and ask the user to
+      // confirm before committing — selection/sync happens on confirm.
+      setCalendars((prev) => [
+        newCal,
+        ...prev.filter((c) => c.id !== newCal.id),
+      ]);
+      setCreated(newCal);
+      setShowCreate(false);
+      setIsCreating(false);
     } catch {
       setCreateError("No se pudo crear el calendario. Inténtalo de nuevo.");
       setIsCreating(false);
@@ -189,6 +199,46 @@ const CalendarSetup: React.FC<Props> = ({
                 animate={{ opacity: 1 }}
                 className="space-y-2"
               >
+                {created && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="px-5 py-4 rounded-2xl border border-primary/30 bg-primary/[0.06] space-y-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-primary/15">
+                        <Check size={16} className="text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">
+                          Calendario «{created.summary}» creado
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          ¿Usarlo para tus entrenamientos?
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSelect(created.id)}
+                        disabled={isBusy}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-bold text-neutral-950 bg-primary transition-opacity disabled:opacity-50"
+                      >
+                        {selecting === created.id
+                          ? "Configurando…"
+                          : "Usar y continuar"}
+                      </button>
+                      <button
+                        onClick={() => setCreated(null)}
+                        disabled={isBusy}
+                        className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-400 border border-white/10 disabled:opacity-50"
+                      >
+                        Elegir otro
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
                 {calendars.map((cal, i) => {
                   const isSelecting = selecting === cal.id;
                   return (

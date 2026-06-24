@@ -23,9 +23,8 @@ Copy from `ai-server/.env copy`. Required variables:
 |---|---|
 | `GEMINI_API_KEY` | Google AI Studio API key — server returns 503 on `/chat` if missing |
 | `GEMINI_MODEL` | Model ID (default: `gemini-2.0-flash`) |
-| `DATABASE_URL` | Same database as the backend — SQLite path for dev, PostgreSQL URL for prod |
 | `SECRET_KEY` | Same JWT signing key as the backend — must match exactly |
-| `BACKEND_URL` | Internal URL of the backend service (default: `http://localhost:8000`) |
+| `BACKEND_URL` | **Required.** URL of the backend service — the ai-server reads/writes all data through it (chat history, memory, usage, profile, workouts) and no longer touches the database. Default `http://localhost:8000` for dev; in production must point to the deployed backend. |
 | `FRONTEND_URL` | CORS allowed origin (default: `http://localhost:5173`) |
 | `MCP_SERVER_PATH` | Absolute path to `gymhub-mcp/server.py` (auto-detected relative to ai-server in dev) |
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 import uuid
 from .database import Base
@@ -215,3 +215,43 @@ class UserFeedback(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+# ---------------------------------------------------------------------------
+# AI assistant (GymChat) — persistence owned by the backend so the AI server
+# never touches the database directly; it reaches these through the REST API.
+# ---------------------------------------------------------------------------
+
+class ChatMessage(Base):
+    """Flat AI-chat history: one row per message, ordered by timestamp."""
+    __tablename__ = "chat_messages"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (Index("ix_chat_messages_user_created", "user_id", "created_at"),)
+
+
+class ChatUsage(Base):
+    """Append-only log of user message timestamps for AI-chat rate limiting.
+
+    Decoupled from ChatMessage on purpose: clearing the visible chat history
+    must not reset the user's message allowance.
+    """
+    __tablename__ = "chat_usage"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (Index("ix_chat_usage_user_created", "user_id", "created_at"),)
+
+
+class ChatMemory(Base):
+    """Persistent facts the AI assistant has saved about a user (upsert by key)."""
+    __tablename__ = "chat_memories"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    key = Column(String, nullable=False)
+    value = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)

@@ -198,7 +198,7 @@ def get_daily_health(args: dict, user_id: str, db) -> dict:
     """Return Fitbit daily health data (steps, calories, active minutes, etc.)."""
     days = int(args.get("days", 14))
     cutoff = _days_cutoff_str(days)
-    data = backend_client.get("/fitbit-health/daily", {"days": days})
+    data = backend_client.get("/fitbit/daily", {"days": days})
     if backend_client.is_error(data):
         return data
     rows = [d for d in data if str(d.get("date", "")) >= cutoff] if isinstance(data, list) else []
@@ -207,11 +207,21 @@ def get_daily_health(args: dict, user_id: str, db) -> dict:
     return {"data": rows, "avg_steps": avg_steps, "avg_calories": avg_calories}
 
 
+def get_pending_cardio(args: dict, user_id: str, db) -> dict:
+    """List Fitbit activities (last N days) not yet imported as GymHub workouts."""
+    days = int(args.get("days", 30))
+    data = backend_client.get("/workouts/fitbit-pending", {"days": days})
+    if backend_client.is_error(data):
+        return data
+    pending = data if isinstance(data, list) else []
+    return {"pending": pending, "total": len(pending)}
+
+
 def get_sleep_logs(args: dict, user_id: str, db) -> dict:
     """Return Fitbit sleep logs with duration, efficiency, and stage breakdown."""
     days = int(args.get("days", 14))
     cutoff = _days_cutoff_str(days)
-    data = backend_client.get("/fitbit-health/sleep", {"days": days})
+    data = backend_client.get("/fitbit/sleep", {"days": days})
     if backend_client.is_error(data):
         return data
     rows = [s for s in data if str(s.get("date", "")) >= cutoff] if isinstance(data, list) else []
@@ -337,7 +347,7 @@ def analyze_performance_correlation(args: dict, user_id: str, db) -> dict:
     def _get_series(metric: str) -> dict:
         series: dict = {}
         if metric in ("sleep_duration", "sleep_efficiency"):
-            data = backend_client.get("/fitbit-health/sleep", {"days": days})
+            data = backend_client.get("/fitbit/sleep", {"days": days})
             if backend_client.is_error(data) or not isinstance(data, list):
                 return series
             for r in data:
@@ -353,7 +363,7 @@ def analyze_performance_correlation(args: dict, user_id: str, db) -> dict:
                     if eff is not None:
                         series[date] = float(eff)
         elif metric in ("resting_hr", "steps"):
-            data = backend_client.get("/fitbit-health/daily", {"days": days})
+            data = backend_client.get("/fitbit/daily", {"days": days})
             if backend_client.is_error(data) or not isinstance(data, list):
                 return series
             field = "resting_heart_rate" if metric == "resting_hr" else "steps"
@@ -506,7 +516,7 @@ def suggest_recovery_protocol(args: dict, user_id: str, db) -> dict:
     for w in workouts:
         total_duration += (_duration_min_from_workout(w) or 0)
 
-    sleep_data = backend_client.get("/fitbit-health/sleep", {"days": 7})
+    sleep_data = backend_client.get("/fitbit/sleep", {"days": 7})
     sleep_rows = [
         s for s in (sleep_data if isinstance(sleep_data, list) else [])
         if s.get("efficiency") is not None
@@ -519,7 +529,7 @@ def suggest_recovery_protocol(args: dict, user_id: str, db) -> dict:
         if sleep_rows else None
     )
 
-    health_data = backend_client.get("/fitbit-health/daily", {"days": 7})
+    health_data = backend_client.get("/fitbit/daily", {"days": 7})
     health_rows = [
         r for r in (health_data if isinstance(health_data, list) else [])
         if (r.get("resting_heart_rate") or 0) > 0
@@ -617,7 +627,7 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db) -> dict:
             f"Aumento de volumen >20% ({previous_volume:.0f} → {recent_volume:.0f} kg)"
         )
 
-    health_data = backend_client.get("/fitbit-health/daily", {"days": days})
+    health_data = backend_client.get("/fitbit/daily", {"days": days})
     health_rows = sorted(
         [r for r in (health_data if isinstance(health_data, list) else [])
          if (r.get("resting_heart_rate") or 0) > 0],
@@ -632,7 +642,7 @@ def get_overtraining_risk_assessment(args: dict, user_id: str, db) -> dict:
                 f"FC en reposo en aumento ({first_hr:.0f} → {last_hr:.0f} bpm)"
             )
 
-    sleep_data = backend_client.get("/fitbit-health/sleep", {"days": days})
+    sleep_data = backend_client.get("/fitbit/sleep", {"days": days})
     sleep_rows = [
         s for s in (sleep_data if isinstance(sleep_data, list) else [])
         if s.get("efficiency") is not None

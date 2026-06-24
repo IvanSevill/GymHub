@@ -67,7 +67,7 @@ def _fitbit_get(
             logger.warning("Fitbit token refresh failed — cannot retry request.")
             return None
         response = requests.get(
-            url, headers={"Authorization": f"Bearer {access_token}"}
+            url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10
         )
 
     return response if response.status_code == 200 else None

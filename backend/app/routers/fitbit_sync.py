@@ -83,6 +83,100 @@ def _activity_matches_any_workout(activity: dict, workouts: list) -> bool:
     return False
 
 
+def _collect_pending_fitbit_activities(
+    db: Session,
+    user_tokens: models.UserTokens,
+    user_id: str,
+    days: int,
+) -> list:
+    """Return Fitbit activities from the last `days` with no matching GymHub workout.
+
+    Mirrors the detection used by sync-fitbit-create-missing but performs no
+    writes, so it backs both the create endpoint and a read-only preview.
+    """
+    activities = fitbit_utils.get_fitbit_activities_range(db, user_tokens, days)
+    if not activities:
+        return []
+
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=days)
+
+    existing_log_ids = {
+        fd[0]
+        for fd in db.query(models.FitbitData.fitbit_log_id)
+        .join(models.Workout, models.FitbitData.workout_id == models.Workout.id)
+        .filter(models.Workout.user_id == user_id)
+        .all()
+        if fd[0]
+    }
+    existing = (
+        db.query(models.Workout)
+        .options(joinedload(models.Workout.fitbit_data))
+        .filter(
+            models.Workout.user_id == user_id,
+            models.Workout.start_time >= cutoff,
+            models.Workout.start_time <= now,
+        )
+        .all()
+    )
+
+    pending = []
+    for activity in activities:
+        if _should_skip_activity(activity):
+            continue
+        if str(activity.get("logId", "")) in existing_log_ids:
+            continue
+        if _activity_matches_any_workout(activity, existing):
+            continue
+        pending.append(activity)
+    return pending
+
+
+@router.get("/fitbit-pending", response_model=list)
+async def list_fitbit_pending(
+    days: int = 30,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Preview Fitbit activities (last N days) not yet imported as GymHub workouts.
+
+    Read-only counterpart to sync-fitbit-create-missing: lets the UI/assistant
+    show which cardio activities are pending upload before creating anything.
+    """
+    user_tokens = (
+        db.query(models.UserTokens)
+        .filter(models.UserTokens.user_id == current_user.id)
+        .first()
+    )
+    if not user_tokens or not user_tokens.fitbit_access_token:
+        return []
+
+    pending = _collect_pending_fitbit_activities(db, user_tokens, current_user.id, days)
+    result = []
+    for activity in pending:
+        try:
+            act_start = (
+                datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
+                .astimezone(timezone.utc)
+                .replace(tzinfo=None)
+            )
+        except Exception:
+            continue
+        result.append(
+            {
+                "log_id": str(activity.get("logId", "")),
+                "activity_name": _resolve_activity_name(activity),
+                "start_time": act_start.isoformat(),
+                "date": act_start.strftime("%Y-%m-%d %H:%M"),
+                "duration_min": round(activity.get("duration", 0) / 60000, 1),
+                "distance_km": activity.get("distance", 0.0),
+                "calories": activity.get("calories", 0),
+                "has_gps": bool(activity.get("hasGps", False)),
+            }
+        )
+    return result
+
+
 @router.post("/sync-fitbit-bulk", response_model=dict)
 async def sync_fitbit_bulk(
     current_user: models.User = Depends(auth.get_current_user),
@@ -188,44 +282,15 @@ async def sync_fitbit_create_missing(
         .first()
     )
     if not user_tokens or not user_tokens.fitbit_access_token:
-        return {"created": 0}
+        return {"created": 0, "created_activities": []}
 
-    activities = fitbit_utils.get_fitbit_activities_range(db, user_tokens, days)
-    if not activities:
-        return {"created": 0}
-
-    now = datetime.utcnow()
-    cutoff = now - timedelta(days=days)
-
-    existing_log_ids = {
-        fd[0]
-        for fd in db.query(models.FitbitData.fitbit_log_id)
-        .join(models.Workout, models.FitbitData.workout_id == models.Workout.id)
-        .filter(models.Workout.user_id == current_user.id)
-        .all()
-        if fd[0]
-    }
-
-    existing = (
-        db.query(models.Workout)
-        .options(joinedload(models.Workout.fitbit_data))
-        .filter(
-            models.Workout.user_id == current_user.id,
-            models.Workout.start_time >= cutoff,
-            models.Workout.start_time <= now,
-        )
-        .all()
-    )
+    pending = _collect_pending_fitbit_activities(db, user_tokens, current_user.id, days)
+    if not pending:
+        return {"created": 0, "created_activities": []}
 
     created = 0
-    for activity in activities:
-        if _should_skip_activity(activity):
-            continue
-        if str(activity.get("logId", "")) in existing_log_ids:
-            continue
-        if _activity_matches_any_workout(activity, existing):
-            continue
-
+    created_activities = []
+    for activity in pending:
         try:
             act_start = (
                 datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
@@ -282,11 +347,13 @@ async def sync_fitbit_create_missing(
                     )
                 )
 
-        existing.append(workout)
         created += 1
+        created_activities.append(
+            {"activity_name": activity_name, "date": act_start.strftime("%Y-%m-%d %H:%M")}
+        )
 
     db.commit()
-    return {"created": created}
+    return {"created": created, "created_activities": created_activities}
 
 
 @router.post("/{workout_id}/sync-fitbit", response_model=schemas.FitbitData)
@@ -340,7 +407,15 @@ async def sync_fitbit_to_workout(
     fitbit_data.distance_km = activity.get("distance", 0.0)
     fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
     fitbit_data.activity_name = _resolve_activity_name(activity)
-    fitbit_data.has_gps = bool(activity.get("hasGps", False))
+    # The activities-list `hasGps` flag is False for Connected GPS (phone GPS
+    # paired to the watch), yet the TCX still contains trackpoints. Probe the
+    # TCX directly so manually-synced runs match the bulk/create-missing paths.
+    log_id_for_gps = str(activity.get("logId", "")) or None
+    fitbit_data.has_gps = (
+        fitbit_utils.probe_has_gps(db, user_tokens, log_id_for_gps)
+        if log_id_for_gps
+        else False
+    )
 
     azm_data = fitbit_utils.extract_azm(activity)
     fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)

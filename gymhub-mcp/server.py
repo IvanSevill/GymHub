@@ -1,4 +1,4 @@
-"""GymHub MCP Server — exposes 26 tools (19 read + 7 write) over stdio."""
+"""GymHub MCP Server — exposes 27 tools (20 read + 7 write) over stdio."""
 
 import os
 from typing import Optional
@@ -96,6 +96,17 @@ def get_daily_health(days: int = 14) -> dict:
     Útil para responder preguntas sobre actividad general o comparar días.
     """
     return read_tools.get_daily_health({"days": days}, USER_ID, None)
+
+
+@mcp.tool()
+def get_pending_cardio(days: int = 30) -> dict:
+    """Lista las actividades de cardio de Fitbit que AÚN NO están subidas como entrenamiento en GymHub.
+
+    Solo lectura: muestra qué actividades hay pendientes de subir (nombre, fecha, duración,
+    distancia, calorías) sin crear nada. Úsalo antes de sync_pending_cardio para enseñar al
+    usuario qué se subiría, o cuando pregunte qué cardio tiene sin registrar.
+    """
+    return read_tools.get_pending_cardio({"days": days}, USER_ID, None)
 
 
 @mcp.tool()

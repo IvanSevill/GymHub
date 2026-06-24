@@ -115,7 +115,12 @@ def sync_pending_cardio(args: dict, token: str) -> dict:
     if backend_client.is_error(data):
         return data
     created = data.get("created", 0)
-    return {"success": True, "created": created, "message": f"{created} actividades cardio subidas desde Fitbit."}
+    return {
+        "success": True,
+        "created": created,
+        "created_activities": data.get("created_activities", []),
+        "message": f"{created} actividades cardio subidas desde Fitbit.",
+    }
 
 
 def sync_fitbit_to_workout(args: dict, token: str) -> dict:

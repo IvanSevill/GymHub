@@ -107,11 +107,23 @@ def test_determine_sync_range_incremental():
     db.add(models.SleepLog(user_id=user.id, fitbit_log_id="log1", date="2026-05-10"))
     db.commit()
 
-    from_date, to_date = _determine_sync_range(db, user.id)
+    from_date, _ = _determine_sync_range(db, user.id)
+    # Incremental sync re-fetches a 35-day overlap before the latest known date,
+    # so late-arriving Fitbit data corrects previously stored days.
+    assert from_date == "2026-04-05"
+
+
+def test_determine_sync_range_full_override():
+    db = _make_db()
+    user = _new_user(db)
+    db.add(models.SleepLog(user_id=user.id, fitbit_log_id="log1", date="2026-05-10"))
+    db.commit()
+
+    # full=True ignores the incremental window and re-fetches the full history.
+    from_date, to_date = _determine_sync_range(db, user.id, full=True)
     from_dt = datetime.strptime(from_date, "%Y-%m-%d")
-    # Should be 1 day before 2026-05-10 = 2026-05-09
-    assert from_dt <= datetime(2026, 5, 10)
-    assert (datetime.strptime(to_date, "%Y-%m-%d") - from_dt).days < 100
+    to_dt = datetime.strptime(to_date, "%Y-%m-%d")
+    assert (to_dt - from_dt).days >= 364
 
 
 # ---------------------------------------------------------------------------

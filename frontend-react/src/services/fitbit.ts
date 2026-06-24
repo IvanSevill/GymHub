@@ -59,8 +59,8 @@ export interface WeightLogEntry {
 }
 
 export const fitbitService = {
-  sync: async (): Promise<SyncResult> => {
-    const res = await api.post<SyncResult>("/fitbit/sync");
+  sync: async (full = false): Promise<SyncResult> => {
+    const res = await api.post<SyncResult>(`/fitbit/sync?full=${full}`);
     return res.data;
   },
 

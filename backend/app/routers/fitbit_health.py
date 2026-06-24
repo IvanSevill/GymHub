@@ -53,11 +53,21 @@ def _last_synced_date(db: Session, user_id: str, model) -> Optional[str]:
     return result  # "YYYY-MM-DD" or None
 
 
-def _determine_sync_range(db: Session, user_id: str) -> tuple[str, str]:
+_FULL_SYNC_DAYS = 365
+# Re-fetch the last ~5 weeks on every incremental sync. Fitbit revises a day's
+# totals after the fact (the device syncs late, sleep stages finalize hours
+# later), so a 1-day overlap permanently strands any day that was first stored
+# incomplete. Time-series endpoints return the whole range in a single call, so
+# widening the window costs no extra API requests.
+_INCREMENTAL_OVERLAP_DAYS = 35
+
+
+def _determine_sync_range(db: Session, user_id: str, full: bool = False) -> tuple[str, str]:
     """Return (from_date, to_date) for the next sync.
 
-    First sync: last 365 days.
-    Subsequent: from 1 day before the latest known date to today (overlap to catch updates).
+    First sync or ``full=True``: last 365 days.
+    Subsequent: from ``_INCREMENTAL_OVERLAP_DAYS`` before the latest known date
+    to today, so late-arriving wearable data corrects previously stored days.
     """
     today = datetime.utcnow().date()
     to_date = today.strftime("%Y-%m-%d")
@@ -66,11 +76,14 @@ def _determine_sync_range(db: Session, user_id: str) -> tuple[str, str]:
     last_daily = _last_synced_date(db, user_id, models.DailyHealth)
 
     known_dates = [d for d in [last_sleep, last_daily] if d]
-    if not known_dates:
-        from_date = (today - timedelta(days=365)).strftime("%Y-%m-%d")
+    if full or not known_dates:
+        from_date = (today - timedelta(days=_FULL_SYNC_DAYS)).strftime("%Y-%m-%d")
     else:
         latest_known = max(known_dates)
-        overlap_date = datetime.strptime(latest_known, "%Y-%m-%d").date() - timedelta(days=1)
+        overlap_date = (
+            datetime.strptime(latest_known, "%Y-%m-%d").date()
+            - timedelta(days=_INCREMENTAL_OVERLAP_DAYS)
+        )
         from_date = overlap_date.strftime("%Y-%m-%d")
 
     return from_date, to_date
@@ -196,13 +209,15 @@ def _sync_daily_range(
 
 @router.post("/sync", response_model=dict)
 async def sync_health_data(
+    full: bool = Query(False, description="Force a full 365-day re-sync instead of incremental"),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
     """Smart incremental sync of Fitbit sleep and daily activity.
 
-    First call: fetches up to 365 days of history using batch APIs (~10 API calls).
-    Subsequent calls: fetches only from the last known date forward (1-day overlap).
+    First call (or ``full=True``): fetches up to 365 days of history using batch
+    APIs (~10 API calls). Subsequent calls: re-fetch a rolling overlap window so
+    late-arriving wearable data corrects previously stored days.
     """
     user_tokens = (
         db.query(models.UserTokens)
@@ -212,7 +227,7 @@ async def sync_health_data(
     if not user_tokens or not user_tokens.fitbit_access_token:
         return {"sleep_synced": 0, "days_synced": 0, "error": "Fitbit not connected"}
 
-    from_date, to_date = _determine_sync_range(db, current_user.id)
+    from_date, to_date = _determine_sync_range(db, current_user.id, full=full)
     logger.info("Fitbit health sync for user %s: %s → %s", current_user.id, from_date, to_date)
 
     sleep_synced = 0

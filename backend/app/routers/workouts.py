@@ -344,13 +344,19 @@ async def update_workout(
                     fitbit_data = models.FitbitData(workout_id=db_workout.id)
                     db.add(fitbit_data)
 
-                fitbit_data.fitbit_log_id = str(activity.get("logId"))
+                log_id = str(activity.get("logId", "")) or None
+                fitbit_data.fitbit_log_id = log_id
                 fitbit_data.calories = activity.get("calories", 0)
                 fitbit_data.heart_rate_avg = activity.get("averageHeartRate", 0)
                 fitbit_data.duration_ms = activity.get("duration", 0)
                 fitbit_data.distance_km = activity.get("distance", 0.0)
                 fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
                 fitbit_data.activity_name = activity.get("activityName", "Unknown")
+                # Probe the TCX for GPS trackpoints — the list `hasGps` flag is
+                # unreliable for Connected GPS (phone-paired) run activities.
+                fitbit_data.has_gps = (
+                    fitbit_utils.probe_has_gps(db, user_tokens, log_id) if log_id else False
+                )
 
                 azm_data = fitbit_utils.extract_azm(activity)
                 fitbit_data.azm_fat_burn = azm_data.get("fatBurnMinutes", 0)

@@ -757,6 +757,52 @@ async def test_sync_all_gymhub_event_creates_workout(client, auth_headers, db):
 
 
 @pytest.mark.anyio
+async def test_sync_all_root_creates_muscle_and_exercise(client, root_headers, db):
+    """As root, a parsed set with unknown muscle and exercise creates both and adds the set."""
+    root = db.query(models.User).filter(models.User.email == "root@test.com").first()
+    _add_tokens(db, root.id, google=True)
+
+    event = {
+        "id": "evt-root-new",
+        "summary": "Pierna",
+        "description": "[GymHub]\nCuadriceps - Sentadilla 100kg",
+        "status": "confirmed",
+        "start": {"dateTime": "2026-06-03T10:00:00Z"},
+        "end": {"dateTime": "2026-06-03T11:00:00Z"},
+    }
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.return_value = {
+        "items": [event],
+        "nextSyncToken": "tok-root",
+    }
+    mock_parse_result = {
+        "sets": [
+            {
+                "muscle_name": "Cuadriceps Test",
+                "exercise_name": "Sentadilla Test",
+                "value": "100",
+                "measurement": "kg",
+                "is_completed": True,
+            }
+        ],
+        "fitbit": None,
+    }
+
+    with (
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+        patch("app.routers.workouts.calendar_utils.parse_calendar_description", return_value=mock_parse_result),
+    ):
+        resp = await client.get("/workouts/sync-all", headers=root_headers)
+
+    assert resp.status_code == 200
+    db.expire_all()
+    assert db.query(models.Muscle).filter(models.Muscle.name == "Cuadriceps Test").first() is not None
+    new_ex = db.query(models.Exercise).filter(models.Exercise.name == "Sentadilla Test").first()
+    assert new_ex is not None
+
+
+@pytest.mark.anyio
 async def test_sync_all_incremental_with_sync_token(client, auth_headers, db):
     """Incremental sync uses the stored sync_token."""
     user = _get_user(db)
