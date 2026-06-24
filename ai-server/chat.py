@@ -266,27 +266,31 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
 
                 produced_text = False
                 for _ in range(MAX_TOOL_ITERATIONS):
-                    response = await asyncio.to_thread(
-                        client.models.generate_content,
+                    # Show activity immediately; text deltas clear it on the client.
+                    yield 'data: {"type":"thinking"}\n\n'
+
+                    text_buf = ""
+                    fn_parts = []
+                    stream = await client.aio.models.generate_content_stream(
                         model=MODEL,
                         contents=contents,
                         config=config,
                     )
-
-                    if not response.candidates:
-                        yield f'data: {json.dumps({"type": "error", "message": "Sin respuesta del modelo."})}\n\n'
-                        break
-
-                    candidate = response.candidates[0].content
-                    contents.append(candidate)
-
-                    fn_parts = [
-                        p for p in (candidate.parts or [])
-                        if p.function_call and p.function_call.name
-                    ]
+                    async for chunk in stream:
+                        if not chunk.candidates:
+                            continue
+                        for part in (chunk.candidates[0].content.parts or []):
+                            if part.function_call and part.function_call.name:
+                                fn_parts.append(part)
+                            elif getattr(part, "text", ""):
+                                text_buf += part.text
+                                # Stream each token chunk to the client progressively.
+                                yield f"data: {json.dumps({'type': 'text', 'text': part.text})}\n\n"
 
                     if fn_parts:
-                        yield 'data: {"type":"thinking"}\n\n'
+                        # Tool-call turn: record the model's request, run the tools,
+                        # feed the results back and loop again.
+                        contents.append(genai_types.Content(role="model", parts=fn_parts))
                         fn_responses = []
                         for part in fn_parts:
                             fn_name = part.function_call.name
@@ -302,11 +306,9 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                                 )
                             )
                         contents.append(genai_types.Content(role="user", parts=fn_responses))
-
                     else:
-                        text = response.text or ""
-                        await asyncio.to_thread(_save_msg, user.token, "assistant", text)
-                        yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
+                        # Answer turn: the text was already streamed above.
+                        await asyncio.to_thread(_save_msg, user.token, "assistant", text_buf)
                         produced_text = True
                         break
 
