@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 from dotenv import load_dotenv
 
@@ -8,7 +9,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.responses import JSONResponse, Response  # noqa: E402
 from slowapi import Limiter, _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 from slowapi.middleware import SlowAPIMiddleware  # noqa: E402
@@ -22,20 +23,41 @@ logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
-_EXERCISE_MIGRATION_COLUMNS = {"video_url_1", "video_url_2", "image_url"}
+# Lightweight additive column migrations for deployments whose schema predates
+# a column. Every (table, column, type) here is a hardcoded constant defined in
+# source — never user input — so this is not a SQL-injection vector. As
+# defense-in-depth we still validate each identifier against a strict pattern
+# before composing any DDL, and reject anything that does not match.
+_SAFE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_COLUMN_MIGRATIONS = [
+    ("exercises", "video_url_1", "TEXT"),
+    ("exercises", "video_url_2", "TEXT"),
+    ("exercises", "image_url", "TEXT"),
+    ("users", "height_cm", "FLOAT"),
+    ("chat_usage", "window_start", "TIMESTAMP"),
+]
 
-with engine.connect() as conn:
-    for col in _EXERCISE_MIGRATION_COLUMNS:
-        try:
-            conn.execute(text(f"ALTER TABLE exercises ADD COLUMN {col} TEXT"))
-            conn.commit()
-        except Exception:
-            conn.rollback()
+
+def _add_column_if_missing(conn, table: str, column: str, col_type: str) -> None:
+    """Add a column via ALTER TABLE, ignoring the error if it already exists.
+
+    Identifiers are validated against `_SAFE_IDENTIFIER` first; the column type
+    comes from the trusted constant list above, so no value is interpolated
+    from external input.
+    """
+    if not (_SAFE_IDENTIFIER.match(table) and _SAFE_IDENTIFIER.match(column)):
+        raise ValueError(f"Unsafe identifier in migration: {table}.{column}")
     try:
-        conn.execute(text("ALTER TABLE users ADD COLUMN height_cm FLOAT"))
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
         conn.commit()
     except Exception:
+        # Column already present (or otherwise non-applicable) — safe to skip.
         conn.rollback()
+
+
+with engine.connect() as conn:
+    for _table, _column, _type in _COLUMN_MIGRATIONS:
+        _add_column_if_missing(conn, _table, _column, _type)
     try:
         conn.execute(text(
             "ALTER TABLE exercise_requests ADD COLUMN exercise_id VARCHAR "
@@ -86,6 +108,37 @@ with engine.connect() as conn:
 _rate_limits = [] if os.getenv("TESTING") == "true" else ["60/minute"]
 limiter = Limiter(key_func=get_remote_address, default_limits=_rate_limits)
 
+def _is_client_disconnect(exc: BaseException) -> bool:
+    """True when *exc* (or every leaf of an ExceptionGroup) is a client
+    disconnect — the browser closing the connection mid-response. These are
+    not server errors and must not be logged as unhandled exceptions."""
+    sub = getattr(exc, "exceptions", None)
+    if sub:
+        return all(_is_client_disconnect(e) for e in sub)
+    return type(exc).__name__ in ("ClientDisconnect", "ClientDisconnected")
+
+
+class SuppressClientDisconnectMiddleware:
+    """Swallow client-disconnect errors so a browser closing a connection
+    mid-response (closing the chat panel, reloading, navigating away) does not
+    bubble up as a noisy unhandled-exception traceback. Any other exception is
+    re-raised untouched."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        except BaseException as exc:
+            if _is_client_disconnect(exc):
+                return
+            raise
+
+
 app = FastAPI(title="GymHub Backend v2")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -108,9 +161,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Added last so it is the outermost user middleware: it catches client
+# disconnects propagating from the inner layers before they reach the error
+# middleware and uvicorn.
+app.add_middleware(SuppressClientDisconnectMiddleware)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
+    # A client that disconnects mid-response is not a server error; stay quiet
+    # and do not attempt to write to a closed connection.
+    if _is_client_disconnect(exc):
+        return Response(status_code=204)
+
     logger.exception("Unhandled exception")
 
     # Ensure CORS headers are present even on error
