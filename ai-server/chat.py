@@ -10,7 +10,7 @@ from typing import AsyncIterator
 import httpx
 from google import genai
 from google.genai import types as genai_types
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -24,9 +24,11 @@ router = APIRouter()
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 # Max model⇄tool round-trips before giving up. A complex question can chain
-# many tool calls (one per metric), so this must be generous enough to leave
-# the model a turn to write its final answer after gathering data.
-MAX_TOOL_ITERATIONS = 12
+# many tool calls (one per metric), so this is intentionally generous: it must
+# leave the model plenty of turns to gather data across many tools before
+# writing its final answer. The no-tools fallback below still guarantees a
+# reply if the cap is ever reached.
+MAX_TOOL_ITERATIONS = 50
 MCP_SERVER_PATH = Path(
     os.getenv("MCP_SERVER_PATH", str(Path(__file__).parent.parent / "gymhub-mcp" / "server.py"))
 ).resolve()
@@ -110,12 +112,17 @@ def _save_msg(token: str, role: str, content: str) -> None:
         logger.warning("Failed to save chat message: %s", exc)
 
 
-def _get_usage(token: str) -> dict:
+def _get_usage(token: str) -> dict | None:
+    """Read the user's rate-limit usage from the backend.
+
+    Returns None when the backend cannot be reached so callers that enforce the
+    limit can fail closed (503) instead of silently letting the request through.
+    """
     try:
         return backend_client.get("/assistant/usage", token) or {}
     except Exception as exc:
         logger.warning("Failed to read chat usage: %s", exc)
-        return {}
+        return None
 
 
 def _load_memories(token: str) -> list[dict]:
@@ -217,7 +224,9 @@ class ChatRequest(BaseModel):
 # Streaming generator
 # ---------------------------------------------------------------------------
 
-async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
+async def _generate(
+    message: str, user: AuthUser, http_request: Request
+) -> AsyncIterator[str]:
     try:
         history = await asyncio.to_thread(_load_history, user.token)
         memories = await asyncio.to_thread(_load_memories, user.token)
@@ -266,6 +275,12 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
 
                 produced_text = False
                 for _ in range(MAX_TOOL_ITERATIONS):
+                    # Stop cleanly if the client closed the SSE connection
+                    # (chat panel closed, page reloaded or navigation). This
+                    # avoids pushing further chunks to a dead connection, which
+                    # uvicorn surfaces as a noisy ClientDisconnected error.
+                    if await http_request.is_disconnected():
+                        return
                     # Show activity immediately; text deltas clear it on the client.
                     yield 'data: {"type":"thinking"}\n\n'
 
@@ -277,6 +292,8 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                         config=config,
                     )
                     async for chunk in stream:
+                        if await http_request.is_disconnected():
+                            return
                         if not chunk.candidates:
                             continue
                         for part in (chunk.candidates[0].content.parts or []):
@@ -295,8 +312,13 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                         for part in fn_parts:
                             fn_name = part.function_call.name
                             fn_args = dict(part.function_call.args)
+                            # Debug trace: which tool ran, with what arguments and
+                            # what it returned. Helps diagnose tool behaviour in
+                            # the server logs without a debugger.
+                            logger.info("🔧 tool call → %s args=%s", fn_name, fn_args)
                             tool_result = await session.call_tool(fn_name, fn_args)
                             result_text = tool_result.content[0].text if tool_result.content else "{}"
+                            logger.info("🔧 tool result ← %s: %s", fn_name, result_text)
                             fn_responses.append(
                                 genai_types.Part(
                                     function_response=genai_types.FunctionResponse(
@@ -346,7 +368,9 @@ async def _generate(message: str, user: AuthUser) -> AsyncIterator[str]:
                         yield f'data: {json.dumps({"type": "error", "message": "El asistente no pudo generar una respuesta. Inténtalo de nuevo."})}\n\n'
 
     except BaseException as exc:
-        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+        # Let cancellation/shutdown propagate (e.g. client disconnect) instead
+        # of swallowing it and trying to emit on a dead connection.
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):
             raise
         logger.exception("Error in _generate for user %s", user.id)
         yield f"data: {json.dumps({'type': 'error', 'message': _unwrap_exc(exc)})}\n\n"
@@ -394,7 +418,7 @@ async def delete_memory_endpoint(
 
 @router.get("/chat/usage")
 async def chat_usage_endpoint(user: AuthUser = Depends(get_current_user)):
-    usage = await asyncio.to_thread(_get_usage, user.token)
+    usage = await asyncio.to_thread(_get_usage, user.token) or {}
     return {
         "used": usage.get("used", 0),
         "limit": usage.get("limit"),
@@ -420,6 +444,7 @@ async def clear_chat_history_endpoint(user: AuthUser = Depends(get_current_user)
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
+    http_request: Request,
     user: AuthUser = Depends(get_current_user),
 ):
     if not request.message.strip():
@@ -429,6 +454,13 @@ async def chat(
         raise HTTPException(status_code=503, detail="AI assistant not configured — set GEMINI_API_KEY")
 
     usage = await asyncio.to_thread(_get_usage, user.token)
+    if usage is None:
+        # Fail closed: if we cannot verify the allowance, do not let the request
+        # bypass the rate limit.
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo verificar el límite de uso. Inténtalo de nuevo en unos segundos.",
+        )
     limit = usage.get("limit")
     if not usage.get("is_root") and limit is not None and usage.get("used", 0) >= limit:
         raise HTTPException(
@@ -437,7 +469,7 @@ async def chat(
         )
 
     return StreamingResponse(
-        _generate(request.message, user),
+        _generate(request.message, user, http_request),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
