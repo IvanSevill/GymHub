@@ -243,6 +243,11 @@ class ChatUsage(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # First message of the rate-limit window this row belongs to. The window is
+    # anchored at its first message and resets exactly RATE_LIMIT_HOURS later,
+    # so every message in the same burst shares one window_start. Nullable for
+    # rows created before this column existed (treated as an elapsed window).
+    window_start = Column(DateTime, nullable=True)
     __table_args__ = (Index("ix_chat_usage_user_created", "user_id", "created_at"),)
 
 

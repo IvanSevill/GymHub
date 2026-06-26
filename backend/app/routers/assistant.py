@@ -67,9 +67,30 @@ async def save_message(
         )
     )
     # Track usage independently of visible history so clearing the chat does
-    # not reset the allowance.
-    if message.role == "user":
-        db.add(models.ChatUsage(user_id=current_user.id, created_at=now))
+    # not reset the allowance. Root users are never rate-limited, so we skip
+    # logging usage rows for them entirely.
+    if message.role == "user" and not _is_root(current_user):
+        window = timedelta(hours=RATE_LIMIT_HOURS)
+        last = (
+            db.query(models.ChatUsage)
+            .filter(models.ChatUsage.user_id == current_user.id)
+            .order_by(models.ChatUsage.created_at.desc())
+            .first()
+        )
+        # Open a new window when there is no prior usage or the window anchored
+        # at its first message has fully elapsed; otherwise stay in the current
+        # window. Every message in the same window shares one window_start.
+        if last is None or last.window_start is None or now >= last.window_start + window:
+            window_start = now
+        else:
+            window_start = last.window_start
+        db.add(
+            models.ChatUsage(
+                user_id=current_user.id,
+                created_at=now,
+                window_start=window_start,
+            )
+        )
     db.commit()
     return {"ok": True}
 
@@ -95,32 +116,38 @@ async def get_usage(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
-    """Return the user's message usage in the current rate-limit window."""
+    """Return the user's message usage in the current rate-limit window.
+
+    The window is a fixed window anchored at its first message: it allows
+    RATE_LIMIT_COUNT messages and resets exactly RATE_LIMIT_HOURS after that
+    first message. Root users are exempt (no limit).
+    """
     if _is_root(current_user):
         return {"used": 0, "limit": None, "reset_at": None, "is_root": True}
 
-    cutoff = datetime.utcnow() - timedelta(hours=RATE_LIMIT_HOURS)
-    window_start = (
-        db.query(models.ChatUsage.created_at)
-        .filter(
-            models.ChatUsage.user_id == current_user.id,
-            models.ChatUsage.created_at >= cutoff,
-        )
-        .order_by(models.ChatUsage.created_at.asc())
-        .scalar()
+    now = datetime.utcnow()
+    window = timedelta(hours=RATE_LIMIT_HOURS)
+    last = (
+        db.query(models.ChatUsage)
+        .filter(models.ChatUsage.user_id == current_user.id)
+        .order_by(models.ChatUsage.created_at.desc())
+        .first()
     )
-    if window_start is None:
+    # No usage yet, or the window anchored at the first message has elapsed:
+    # the allowance is fully reset (a clean reset, not a sliding one).
+    if last is None or last.window_start is None or now >= last.window_start + window:
         return {"used": 0, "limit": RATE_LIMIT_COUNT, "reset_at": None, "is_root": False}
 
+    window_start = last.window_start
     used = (
         db.query(models.ChatUsage)
         .filter(
             models.ChatUsage.user_id == current_user.id,
-            models.ChatUsage.created_at >= window_start,
+            models.ChatUsage.window_start == window_start,
         )
         .count()
     )
-    reset_at = (window_start + timedelta(hours=RATE_LIMIT_HOURS)).isoformat() + "Z"
+    reset_at = (window_start + window).isoformat() + "Z"
     return {"used": used, "limit": RATE_LIMIT_COUNT, "reset_at": reset_at, "is_root": False}
 
 

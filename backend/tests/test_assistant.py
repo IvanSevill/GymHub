@@ -1,6 +1,16 @@
 """Tests for the AI assistant persistence endpoints (/assistant/*)."""
 
+from datetime import datetime, timedelta
+
 import pytest
+
+from app import models
+
+
+async def _post_user_message(client, headers, content: str):
+    return await client.post(
+        "/assistant/history", headers=headers, json={"role": "user", "content": content}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +93,82 @@ async def test_usage_root_is_unlimited(client, root_headers):
     body = resp.json()
     assert body["is_root"] is True
     assert body["limit"] is None
+
+
+@pytest.mark.anyio
+async def test_usage_counts_up_to_limit_in_one_window(client, auth_headers, db):
+    """Five messages sent in one burst share a single window and reach the cap."""
+    for i in range(5):
+        await _post_user_message(client, auth_headers, str(i))
+
+    body = (await client.get("/assistant/usage", headers=auth_headers)).json()
+    assert body["used"] == 5
+    assert body["limit"] == 5
+    assert body["reset_at"] is not None
+
+    # All messages in the burst belong to the same fixed window.
+    window_starts = {r.window_start for r in db.query(models.ChatUsage).all()}
+    assert len(window_starts) == 1
+
+
+@pytest.mark.anyio
+async def test_usage_window_is_fixed_not_sliding(client, auth_headers, db):
+    """The window resets cleanly 2h after its first message, never slides.
+
+    Regression test: a sliding window would still count recent messages once
+    the oldest fell out of the trailing 2h; the fixed window must report 0.
+    """
+    for i in range(5):
+        await _post_user_message(client, auth_headers, str(i))
+
+    rows = (
+        db.query(models.ChatUsage)
+        .order_by(models.ChatUsage.created_at.asc())
+        .all()
+    )
+    # Anchor the window's first message just over 2h ago (window elapsed) while
+    # keeping the other four messages very recent.
+    anchor = datetime.utcnow() - timedelta(hours=2, minutes=6)
+    recent = datetime.utcnow() - timedelta(minutes=90)
+    for idx, r in enumerate(rows):
+        r.window_start = anchor
+        r.created_at = anchor if idx == 0 else recent
+    db.commit()
+
+    body = (await client.get("/assistant/usage", headers=auth_headers)).json()
+    assert body["used"] == 0
+    assert body["reset_at"] is None
+
+
+@pytest.mark.anyio
+async def test_usage_opens_new_window_after_reset(client, auth_headers, db):
+    """Once the window elapses, the next message opens a fresh allowance."""
+    await _post_user_message(client, auth_headers, "old")
+
+    elapsed = datetime.utcnow() - timedelta(hours=3)
+    for r in db.query(models.ChatUsage).all():
+        r.created_at = elapsed
+        r.window_start = elapsed
+    db.commit()
+    assert (await client.get("/assistant/usage", headers=auth_headers)).json()["used"] == 0
+
+    # A new message starts a brand-new window.
+    await _post_user_message(client, auth_headers, "new")
+    body = (await client.get("/assistant/usage", headers=auth_headers)).json()
+    assert body["used"] == 1
+    assert body["reset_at"] is not None
+
+
+@pytest.mark.anyio
+async def test_root_messages_are_not_rate_limited(client, root_headers, db):
+    """Root users are exempt: their messages never accrue usage rows."""
+    for i in range(3):
+        await _post_user_message(client, root_headers, str(i))
+
+    assert db.query(models.ChatUsage).count() == 0
+    body = (await client.get("/assistant/usage", headers=root_headers)).json()
+    assert body["is_root"] is True
+    assert body["used"] == 0
 
 
 # ---------------------------------------------------------------------------
