@@ -10,6 +10,7 @@ import WeightSection from "../components/health/WeightSection";
 import { useFitbitHealthData } from "../components/health/hooks/useFitbitHealthData";
 import NotConnectedState from "../components/health/components/NotConnectedState";
 import SyncStatusDisplay from "../components/health/components/SyncStatusDisplay";
+import ErrorState from "../components/ui/ErrorState";
 import { useToast } from "../context/ToastContext";
 
 const FitbitHealth: React.FC = () => {
@@ -24,6 +25,8 @@ const FitbitHealth: React.FC = () => {
     allDaily,
     syncStatus,
     loading,
+    error,
+    reload,
     autoSyncing,
     syncData,
   } = useFitbitHealthData(!!user?.fitbit_connected);
@@ -94,6 +97,12 @@ const FitbitHealth: React.FC = () => {
             />
           ))}
         </div>
+      ) : error ? (
+        <ErrorState
+          message="No se pudieron cargar tus datos de salud. Comprueba tu conexión e inténtalo de nuevo."
+          onRetry={reload}
+          retrying={loading}
+        />
       ) : !hasData ? (
         <div className="glass-card p-10 text-center">
           <p className="text-white font-black text-lg mb-2">

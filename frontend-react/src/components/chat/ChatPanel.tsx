@@ -272,6 +272,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     setStreamingContent("");
     setErrorMessage(null);
 
+    // Optimistic usage bump: reflect the new message in the counter immediately
+    // for instant visual feedback. The authoritative value is reconciled by
+    // refreshUsage() once the stream finishes. Root users have no limit.
+    setUsage((u) => (u && !u.is_root ? { ...u, used: u.used + 1 } : u));
+
     let accumulated = "";
 
     try {
@@ -688,24 +693,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
                     </span>
                   </div>
                 </div>
-              ) : rateLimitReached ? (
-                /* Rate limit reached state */
-                <div className="flex flex-col items-center justify-center h-full gap-4 py-8">
-                  <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center">
-                    <span className="text-2xl">⏳</span>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-white font-semibold text-sm">
-                      Límite alcanzado
-                    </p>
-                    <p className="text-slate-400 text-xs mt-1.5 max-w-[240px] leading-relaxed">
-                      Has usado {usage!.used}/{usage!.limit} consultas.
-                      {usage!.reset_at
-                        ? ` Disponible en ${formatCountdown(timeLeft)}.`
-                        : ""}
-                    </p>
-                  </div>
-                </div>
               ) : isEmpty ? (
                 /* Empty state */
                 <div className="flex flex-col items-center justify-center h-full gap-6 py-8">
@@ -766,33 +753,49 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input area */}
-            <div className="p-4 border-t border-white/8 flex gap-2 items-end shrink-0">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleInput}
-                onKeyDown={handleKeyDown}
-                disabled={isInputBlocked}
-                placeholder={
-                  rateLimitReached
-                    ? "Límite de consultas alcanzado"
-                    : aiReady
-                      ? "Escribe un mensaje..."
-                      : "Iniciando asistente…"
-                }
-                className="input-field flex-1 resize-none min-h-[42px] max-h-[120px] py-2.5 px-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ lineHeight: "1.5" }}
-              />
-              <button
-                onClick={handleSend}
-                disabled={isInputBlocked || !input.trim()}
-                className="btn-primary w-10 h-10 rounded-xl flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Enviar mensaje"
-              >
-                <Send size={16} />
-              </button>
-            </div>
+            {/* Input area — replaced by the rate-limit countdown when the
+                allowance is spent, so the history stays visible above it. */}
+            {rateLimitReached ? (
+              <div className="p-4 border-t border-white/8 shrink-0 flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center shrink-0">
+                  <span className="text-xl">⏳</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white font-semibold text-sm leading-tight">
+                    Límite alcanzado
+                  </p>
+                  <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">
+                    Has usado {usage!.used}/{usage!.limit} consultas.
+                    {usage!.reset_at
+                      ? ` Disponible en ${formatCountdown(timeLeft)}.`
+                      : ""}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 border-t border-white/8 flex gap-2 items-end shrink-0">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={handleInput}
+                  onKeyDown={handleKeyDown}
+                  disabled={isInputBlocked}
+                  placeholder={
+                    aiReady ? "Escribe un mensaje..." : "Iniciando asistente…"
+                  }
+                  className="input-field flex-1 resize-none min-h-[42px] max-h-[120px] py-2.5 px-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ lineHeight: "1.5" }}
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={isInputBlocked || !input.trim()}
+                  className="btn-primary w-10 h-10 rounded-xl flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Enviar mensaje"
+                >
+                  <Send size={16} />
+                </button>
+              </div>
+            )}
           </motion.div>
         </>
       )}

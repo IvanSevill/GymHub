@@ -169,24 +169,42 @@ export async function* streamChat(
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedTerminal = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const event: ChatEvent = JSON.parse(line.slice(6));
-        yield event;
-        if (event.type === "done" || event.type === "error") return;
-      } catch {
-        // ignore malformed lines
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event: ChatEvent = JSON.parse(line.slice(6));
+          yield event;
+          if (event.type === "done" || event.type === "error") {
+            receivedTerminal = true;
+            return;
+          }
+        } catch {
+          // ignore malformed lines
+        }
       }
     }
+  } catch {
+    // Network error mid-stream: surface it below as a terminal event.
+  }
+
+  // The stream closed without a "done"/"error" event (backend crash, dropped
+  // connection, cold-start timeout). Emit a synthetic error so the caller can
+  // always leave the loading state instead of hanging in "thinking" forever.
+  if (!receivedTerminal) {
+    yield {
+      type: "error",
+      message: "Se perdió la conexión con GymChat. Inténtalo de nuevo.",
+    };
   }
 }

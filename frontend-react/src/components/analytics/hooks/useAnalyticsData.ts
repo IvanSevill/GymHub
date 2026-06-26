@@ -24,6 +24,8 @@ interface AnalyticsData {
   muscleBalance: MuscleBalancePoint[];
   sessionDurations: SessionDuration[];
   loading: boolean;
+  error: boolean;
+  reload: () => void;
 }
 
 export function useAnalyticsData(globalDays: string): AnalyticsData {
@@ -36,12 +38,15 @@ export function useAnalyticsData(globalDays: string): AnalyticsData {
     [],
   );
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       setLoading(true);
+      setError(false);
       const days = Number(globalDays);
       const results = await Promise.allSettled([
         exerciseService.getExercises(),
@@ -53,6 +58,15 @@ export function useAnalyticsData(globalDays: string): AnalyticsData {
       ]);
 
       if (cancelled) return;
+
+      // A genuine backend failure rejects every request; that must surface as
+      // an error state, not as an empty dashboard. Partial failures keep the
+      // data that did load and are treated as success.
+      if (results.every((r) => r.status === "rejected")) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
 
       const [exRes, summaryRes, freqRes, volRes, muscleRes, durRes] = results;
 
@@ -76,7 +90,9 @@ export function useAnalyticsData(globalDays: string): AnalyticsData {
     return () => {
       cancelled = true;
     };
-  }, [globalDays]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [globalDays, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const reload = () => setReloadKey((k) => k + 1);
 
   return {
     exercises,
@@ -86,5 +102,7 @@ export function useAnalyticsData(globalDays: string): AnalyticsData {
     muscleBalance,
     sessionDurations,
     loading,
+    error,
+    reload,
   };
 }
