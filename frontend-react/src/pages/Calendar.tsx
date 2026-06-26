@@ -24,13 +24,14 @@ import { useCalendarWorkouts } from "../components/calendar/hooks/useCalendarWor
 import { useWorkoutEdit } from "../components/calendar/hooks/useWorkoutEdit";
 import { useCalendarModals } from "../components/calendar/hooks/useCalendarModals";
 import { MS_PER_DAY, CALENDAR_GRID_SIZE } from "../components/calendar/helpers";
+import ErrorState from "../components/ui/ErrorState";
 
 const Calendar: React.FC = () => {
   const { addToast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { workouts, loading, fetchWorkouts } = useCalendarWorkouts();
+  const { workouts, loading, error, fetchWorkouts } = useCalendarWorkouts();
   const {
     selectedDayWorkouts,
     setSelectedDayWorkouts,
@@ -83,18 +84,22 @@ const Calendar: React.FC = () => {
   }, [currentDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDeleteWorkout = async (workoutId: string) => {
-    await workoutService.deleteWorkout(workoutId);
-    const fresh = await fetchWorkouts();
-    setSelectedDayWorkouts((prev) => {
-      if (!prev) return null;
-      const remaining = fresh.filter((w) =>
-        isSameDay(parseWorkoutTime(w.start_time), prev.date),
-      );
-      return remaining.length > 0
-        ? { date: prev.date, workouts: remaining }
-        : null;
-    });
-    addToast("Evento eliminado", "success");
+    try {
+      await workoutService.deleteWorkout(workoutId);
+      const fresh = await fetchWorkouts();
+      setSelectedDayWorkouts((prev) => {
+        if (!prev) return null;
+        const remaining = fresh.filter((w) =>
+          isSameDay(parseWorkoutTime(w.start_time), prev.date),
+        );
+        return remaining.length > 0
+          ? { date: prev.date, workouts: remaining }
+          : null;
+      });
+      addToast("Evento eliminado", "success");
+    } catch {
+      addToast("No se pudo eliminar el evento", "error");
+    }
   };
 
   const handleCreateEvent = async (events: EventPayload[]) => {
@@ -120,17 +125,41 @@ const Calendar: React.FC = () => {
 
   const handleSync = async () => {
     setIsSyncing(true);
+    // Each step is independent and best-effort (e.g. Fitbit may be
+    // disconnected), so a failing step must not abort the others. But we no
+    // longer swallow failures silently: we count them and warn the user if
+    // any step did not complete.
+    let failures = 0;
+    let fitbitResult: Awaited<
+      ReturnType<typeof workoutService.syncFitbitCreate>
+    > | null = null;
     try {
       // Step 1: pull calendar events into DB
-      await workoutService.syncAllFromCalendar().catch(() => {});
+      try {
+        await workoutService.syncAllFromCalendar();
+      } catch {
+        failures++;
+      }
       // Step 2: attach Fitbit data to existing gym workouts
-      await workoutService.syncFitbitBulk().catch(() => null);
+      try {
+        await workoutService.syncFitbitBulk();
+      } catch {
+        failures++;
+      }
       // Step 3: create standalone workouts for Fitbit activities not yet in DB
-      const fitbitResult = await workoutService
-        .syncFitbitCreate()
-        .catch(() => null);
+      try {
+        fitbitResult = await workoutService.syncFitbitCreate();
+      } catch {
+        failures++;
+      }
       await fetchWorkouts();
-      if (fitbitResult && fitbitResult.created > 0) {
+
+      if (failures > 0) {
+        addToast(
+          "Sincronización parcial: algunos pasos no se completaron",
+          "error",
+        );
+      } else if (fitbitResult && fitbitResult.created > 0) {
         addToast(
           `${fitbitResult.created} actividad(es) Fitbit añadida(s) al calendario`,
           "success",
@@ -185,15 +214,23 @@ const Calendar: React.FC = () => {
         onUploadCardio={() => setIsUploadingCardio(true)}
       />
 
-      <CalendarGrid
-        daysInGrid={daysInGrid}
-        currentDate={currentDate}
-        workouts={workouts}
-        loading={loading}
-        onDayClick={(day, dayWorkouts) =>
-          setSelectedDayWorkouts({ date: day, workouts: dayWorkouts })
-        }
-      />
+      {error && !loading ? (
+        <ErrorState
+          message="No se pudieron cargar tus entrenamientos. Comprueba tu conexión e inténtalo de nuevo."
+          onRetry={() => fetchWorkouts()}
+          retrying={loading}
+        />
+      ) : (
+        <CalendarGrid
+          daysInGrid={daysInGrid}
+          currentDate={currentDate}
+          workouts={workouts}
+          loading={loading}
+          onDayClick={(day, dayWorkouts) =>
+            setSelectedDayWorkouts({ date: day, workouts: dayWorkouts })
+          }
+        />
+      )}
 
       <CalendarLegend />
 

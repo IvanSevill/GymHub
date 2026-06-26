@@ -109,17 +109,33 @@ def add_set_to_workout(args: dict, token: str) -> dict:
 
 
 def sync_pending_cardio(args: dict, token: str) -> dict:
-    """Upload pending Fitbit cardio activities that have no workout in GymHub."""
-    days: int = int(args.get("days", 30))
-    data = backend_client.post("/workouts/sync-fitbit-create-missing", params={"days": days})
+    """Push the user's pending cardio workouts to Google Calendar.
+
+    Reads the same pending list the app shows (cardio workouts not yet on the
+    calendar) and uploads all of them in one call.
+    """
+    pending = backend_client.get("/workouts/cardio-pending")
+    if backend_client.is_error(pending):
+        return pending
+    workout_ids = [w["id"] for w in pending if isinstance(w, dict) and w.get("id")]
+    if not workout_ids:
+        return {
+            "success": True,
+            "synced": 0,
+            "message": "No hay cardios pendientes de subir al calendario.",
+        }
+    data = backend_client.post(
+        "/workouts/sync-cardio-to-calendar", json={"workout_ids": workout_ids}
+    )
     if backend_client.is_error(data):
         return data
-    created = data.get("created", 0)
+    synced = data.get("synced", 0)
     return {
         "success": True,
-        "created": created,
-        "created_activities": data.get("created_activities", []),
-        "message": f"{created} actividades cardio subidas desde Fitbit.",
+        "synced": synced,
+        "already_synced": data.get("already_synced", 0),
+        "failed": data.get("failed", 0),
+        "message": f"{synced} cardio(s) subido(s) al calendario de Google.",
     }
 
 
