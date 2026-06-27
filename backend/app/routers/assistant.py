@@ -6,7 +6,6 @@ backend REST API like any other client, authenticated with the user's JWT.
 """
 
 import logging
-import os
 from datetime import datetime, timedelta
 from typing import List
 
@@ -14,19 +13,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .. import auth, database, models, schemas
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
-HISTORY_LIMIT = 10
-RATE_LIMIT_COUNT = 5
-RATE_LIMIT_HOURS = 2
-
 
 def _is_root(user: models.User) -> bool:
-    root_emails = [e.strip() for e in os.getenv("ROOT_EMAILS", "").split(",") if e.strip()]
-    return bool(user.is_root) or user.email in root_emails
+    return bool(user.is_root) or user.email in settings.ROOT_EMAILS
 
 
 # ---------------------------------------------------------------------------
@@ -38,12 +33,12 @@ async def get_history(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
-    """Return the last HISTORY_LIMIT messages for the user, oldest first."""
+    """Return the last CHAT_HISTORY_LIMIT messages for the user, oldest first."""
     rows = (
         db.query(models.ChatMessage)
         .filter(models.ChatMessage.user_id == current_user.id)
         .order_by(models.ChatMessage.created_at.desc())
-        .limit(HISTORY_LIMIT)
+        .limit(settings.CHAT_HISTORY_LIMIT)
         .all()
     )
     rows.reverse()
@@ -70,7 +65,7 @@ async def save_message(
     # not reset the allowance. Root users are never rate-limited, so we skip
     # logging usage rows for them entirely.
     if message.role == "user" and not _is_root(current_user):
-        window = timedelta(hours=RATE_LIMIT_HOURS)
+        window = timedelta(minutes=settings.CHAT_RATE_LIMIT_MINUTES)
         last = (
             db.query(models.ChatUsage)
             .filter(models.ChatUsage.user_id == current_user.id)
@@ -119,14 +114,14 @@ async def get_usage(
     """Return the user's message usage in the current rate-limit window.
 
     The window is a fixed window anchored at its first message: it allows
-    RATE_LIMIT_COUNT messages and resets exactly RATE_LIMIT_HOURS after that
-    first message. Root users are exempt (no limit).
+    CHAT_RATE_LIMIT_COUNT messages and resets exactly CHAT_RATE_LIMIT_MINUTES
+    after that first message. Root users are exempt (no limit).
     """
     if _is_root(current_user):
         return {"used": 0, "limit": None, "reset_at": None, "is_root": True}
 
     now = datetime.utcnow()
-    window = timedelta(hours=RATE_LIMIT_HOURS)
+    window = timedelta(minutes=settings.CHAT_RATE_LIMIT_MINUTES)
     last = (
         db.query(models.ChatUsage)
         .filter(models.ChatUsage.user_id == current_user.id)
@@ -136,7 +131,7 @@ async def get_usage(
     # No usage yet, or the window anchored at the first message has elapsed:
     # the allowance is fully reset (a clean reset, not a sliding one).
     if last is None or last.window_start is None or now >= last.window_start + window:
-        return {"used": 0, "limit": RATE_LIMIT_COUNT, "reset_at": None, "is_root": False}
+        return {"used": 0, "limit": settings.CHAT_RATE_LIMIT_COUNT, "reset_at": None, "is_root": False}
 
     window_start = last.window_start
     used = (
@@ -148,7 +143,7 @@ async def get_usage(
         .count()
     )
     reset_at = (window_start + window).isoformat() + "Z"
-    return {"used": used, "limit": RATE_LIMIT_COUNT, "reset_at": reset_at, "is_root": False}
+    return {"used": used, "limit": settings.CHAT_RATE_LIMIT_COUNT, "reset_at": reset_at, "is_root": False}
 
 
 # ---------------------------------------------------------------------------
