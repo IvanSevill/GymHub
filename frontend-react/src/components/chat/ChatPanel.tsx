@@ -226,19 +226,35 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     getMemories().then(setMemories);
   }, [open, aiReady]);
 
-  // Countdown ticker — updates every second
+  const refreshUsage = () => {
+    getUsage().then(setUsage);
+  };
+
+  // Countdown ticker — updates every second. When the window elapses (reaches
+  // 0) we pull fresh usage so the allowance resets on its own, without forcing
+  // the user to reload the page.
   useEffect(() => {
     if (!usage?.reset_at) {
       setTimeLeft(0);
       return;
     }
-    const tick = () => {
-      setTimeLeft(
-        Math.max(0, new Date(usage.reset_at!).getTime() - Date.now()),
-      );
-    };
-    tick();
-    const id = setInterval(tick, 1_000);
+    const target = new Date(usage.reset_at).getTime();
+    const remaining = () => Math.max(0, target - Date.now());
+
+    const initial = remaining();
+    setTimeLeft(initial);
+    if (initial === 0) {
+      refreshUsage();
+      return;
+    }
+    const id = setInterval(() => {
+      const left = remaining();
+      setTimeLeft(left);
+      if (left === 0) {
+        clearInterval(id);
+        refreshUsage();
+      }
+    }, 1_000);
     return () => clearInterval(id);
   }, [usage?.reset_at]);
 
@@ -253,10 +269,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
       setTimeout(() => textareaRef.current?.focus(), 300);
     }
   }, [open]);
-
-  const refreshUsage = () => {
-    getUsage().then(setUsage);
-  };
 
   const handleSend = async () => {
     const trimmed = input.trim();
@@ -358,8 +370,17 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ open, onClose }) => {
     setRetryKey((k) => k + 1);
   };
 
+  // Once the reset time has passed, treat the window as open again immediately
+  // so the input comes back even before the async usage refresh lands. This
+  // depends on timeLeft so it re-evaluates every second as the countdown ticks.
+  const windowElapsed =
+    !!usage?.reset_at &&
+    (timeLeft <= 0 || new Date(usage.reset_at).getTime() <= Date.now());
   const rateLimitReached =
-    !usage?.is_root && usage !== null && usage.used >= usage.limit;
+    !usage?.is_root &&
+    usage !== null &&
+    usage.used >= usage.limit &&
+    !windowElapsed;
   // The ai-server never became healthy within the expected window.
   const aiFailed = !aiReady && aiElapsed >= WAKEUP_FAIL_SECONDS;
   const isEmpty = messages.length === 0 && !streaming && !errorMessage;
