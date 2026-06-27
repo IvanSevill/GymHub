@@ -312,13 +312,14 @@ async def _generate(
                         for part in fn_parts:
                             fn_name = part.function_call.name
                             fn_args = dict(part.function_call.args)
-                            # Debug trace: which tool ran, with what arguments and
-                            # what it returned. Helps diagnose tool behaviour in
-                            # the server logs without a debugger.
+                            # Debug trace: which tool ran and with what arguments.
+                            # The raw result can contain the user's health data, so
+                            # it is logged only at DEBUG (set LOG_LEVEL=DEBUG to see
+                            # the full payload); INFO keeps just the tool + args.
                             logger.info("🔧 tool call → %s args=%s", fn_name, fn_args)
                             tool_result = await session.call_tool(fn_name, fn_args)
                             result_text = tool_result.content[0].text if tool_result.content else "{}"
-                            logger.info("🔧 tool result ← %s: %s", fn_name, result_text)
+                            logger.debug("🔧 tool result ← %s: %s", fn_name, result_text)
                             fn_responses.append(
                                 genai_types.Part(
                                     function_response=genai_types.FunctionResponse(
