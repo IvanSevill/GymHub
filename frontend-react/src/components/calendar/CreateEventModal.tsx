@@ -58,8 +58,8 @@ function buildEventTimes(
   start.setHours(h, m, 0, 0);
   const end = addHours(start, 1);
   return {
-    start: format(start, "yyyy-MM-dd'T'HH:mm:ss"),
-    end: format(end, "yyyy-MM-dd'T'HH:mm:ss"),
+    start: start.toISOString().slice(0, 19),
+    end: end.toISOString().slice(0, 19),
   };
 }
 
@@ -99,8 +99,8 @@ function buildSingleEvent(
 ): EventPayload {
   return {
     title,
-    start: format(new Date(`${date}T${startTime}`), "yyyy-MM-dd'T'HH:mm:ss"),
-    end: format(new Date(`${date}T${endTime}`), "yyyy-MM-dd'T'HH:mm:ss"),
+    start: new Date(`${date}T${startTime}`).toISOString().slice(0, 19),
+    end: new Date(`${date}T${endTime}`).toISOString().slice(0, 19),
   };
 }
 
