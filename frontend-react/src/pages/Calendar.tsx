@@ -33,27 +33,31 @@ const Calendar: React.FC = () => {
 
   const { workouts, loading, error, fetchWorkouts } = useCalendarWorkouts();
   const {
-    selectedDayWorkouts,
-    setSelectedDayWorkouts,
+    selectedDayDate,
+    setSelectedDayDate,
     isCreatingEvent,
     setIsCreatingEvent,
     isUploadingCardio,
     setIsUploadingCardio,
   } = useCalendarModals();
 
-  // Refreshes the workout list and keeps the open day-modal in sync
+  // The open day-modal is derived from the live workout list, so any refresh
+  // (calendar pull, Fitbit sync, edit, delete) flows into it automatically.
+  // A day left with no workouts collapses to null, which closes the modal.
+  const selectedDayWorkouts = useMemo(() => {
+    if (!selectedDayDate) return null;
+    const dayWorkouts = workouts.filter((w) =>
+      isSameDay(parseWorkoutTime(w.start_time), selectedDayDate),
+    );
+    return dayWorkouts.length > 0
+      ? { date: selectedDayDate, workouts: dayWorkouts }
+      : null;
+  }, [workouts, selectedDayDate]);
+
+  // Refresh the workout list; the derived day-modal above updates on its own.
   const refreshAll = useCallback(async () => {
-    const fresh = await fetchWorkouts();
-    setSelectedDayWorkouts((prev) => {
-      if (!prev) return null;
-      return {
-        date: prev.date,
-        workouts: fresh.filter((w) =>
-          isSameDay(parseWorkoutTime(w.start_time), prev.date),
-        ),
-      };
-    });
-  }, [fetchWorkouts, setSelectedDayWorkouts]);
+    await fetchWorkouts();
+  }, [fetchWorkouts]);
 
   const {
     editingWorkoutId,
@@ -86,16 +90,9 @@ const Calendar: React.FC = () => {
   const handleDeleteWorkout = async (workoutId: string) => {
     try {
       await workoutService.deleteWorkout(workoutId);
-      const fresh = await fetchWorkouts();
-      setSelectedDayWorkouts((prev) => {
-        if (!prev) return null;
-        const remaining = fresh.filter((w) =>
-          isSameDay(parseWorkoutTime(w.start_time), prev.date),
-        );
-        return remaining.length > 0
-          ? { date: prev.date, workouts: remaining }
-          : null;
-      });
+      // The derived day-modal recomputes from the refreshed list and closes
+      // itself if this was the day's last workout.
+      await fetchWorkouts();
       addToast("Evento eliminado", "success");
     } catch {
       addToast("No se pudo eliminar el evento", "error");
@@ -197,7 +194,7 @@ const Calendar: React.FC = () => {
   };
 
   const closeModal = () => {
-    setSelectedDayWorkouts(null);
+    setSelectedDayDate(null);
     cancelEdit();
   };
 
@@ -226,9 +223,7 @@ const Calendar: React.FC = () => {
           currentDate={currentDate}
           workouts={workouts}
           loading={loading}
-          onDayClick={(day, dayWorkouts) =>
-            setSelectedDayWorkouts({ date: day, workouts: dayWorkouts })
-          }
+          onDayClick={(day) => setSelectedDayDate(day)}
         />
       )}
 
