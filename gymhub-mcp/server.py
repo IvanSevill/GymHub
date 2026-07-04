@@ -99,14 +99,15 @@ def get_daily_health(days: int = 14) -> dict:
 
 
 @mcp.tool()
-def get_pending_cardio(days: int = 30) -> dict:
-    """Lista las actividades de cardio de Fitbit que AÚN NO están subidas como entrenamiento en GymHub.
+def get_pending_cardio() -> dict:
+    """Lista los cardios que YA están en GymHub pero AÚN NO subidos a Google Calendar.
 
-    Solo lectura: muestra qué actividades hay pendientes de subir (nombre, fecha, duración,
-    distancia, calorías) sin crear nada. Úsalo antes de sync_pending_cardio para enseñar al
-    usuario qué se subiría, o cuando pregunte qué cardio tiene sin registrar.
+    Solo lectura: muestra qué entrenamientos de cardio están pendientes de subir al calendario
+    (nombre, fecha, duración, distancia, calorías) sin crear nada — la misma lista que muestra
+    el modal de subida de cardio de la app. Úsalo antes de sync_pending_cardio para enseñar al
+    usuario qué se subiría, o cuando pregunte qué cardio tiene pendiente de subir al calendario.
     """
-    return read_tools.get_pending_cardio({"days": days}, USER_ID, None)
+    return read_tools.get_pending_cardio({}, USER_ID, None)
 
 
 @mcp.tool()
@@ -230,13 +231,13 @@ def add_set_to_workout(
 
 
 @mcp.tool()
-def sync_pending_cardio(days: int = 30) -> dict:
-    """Sube al historial las actividades cardio de Fitbit que aún no tienen workout en GymHub.
+def sync_pending_cardio() -> dict:
+    """Sube al calendario de Google los cardios de GymHub que aún no están en él.
 
-    El backend detecta automáticamente cuáles actividades Fitbit no tienen workout asociado
-    y las crea. Devuelve cuántas actividades fueron subidas.
+    Toma la lista de cardios pendientes (la misma que get_pending_cardio) y los sube todos al
+    Google Calendar del usuario. Devuelve cuántos se subieron.
     """
-    return write_tools.sync_pending_cardio({"days": days}, TOKEN)
+    return write_tools.sync_pending_cardio({}, TOKEN)
 
 
 @mcp.tool()

@@ -67,7 +67,7 @@ docs/               Design docs, workflow guides, principles, new-implementation
 - **`components/health/`** — HealthKpiCards, ActivityCharts, SleepCharts, StepsChart, CaloriesHeartRateChart, ActivityTable, SleepTable, and sub-components.
 - **`components/workouts/`** — WorkoutCard (header + body + icon), FitbitMetricsCompact, FitbitMetricsGrid, FitbitZonesBar.
 - **`components/settings/`** — ExerciseManager, ExerciseLibrary, DataResetPanel, AdminPanel, ExerciseRequestSection.
-- **`components/ui/`** — ToastContainer, Skeleton, PeriodSelector.
+- **`components/ui/`** — ToastContainer, Skeleton, PeriodSelector, ErrorState (shared error view with a retry CTA, used across Analytics, Salud and Calendar).
 
 Key libraries: TanStack Query (server state), Recharts v3 (charts), Framer Motion (animations), Tailwind CSS v4, Lucide React (icons).
 
@@ -86,7 +86,7 @@ Standalone FastAPI service on port 8001. **Never touches the database directly**
   - `GET`/`POST /chat/memory`, `DELETE /chat/memory/{id}` — proxy to `/assistant/memory`.
   - `GET /chat/usage` — proxies `/assistant/usage` (`{used, limit, reset_at, is_root}`).
 
-  The streaming generator spawns a MCP subprocess per request via `stdio_client`, converts MCP tool schemas to Gemini `FunctionDeclaration` objects, and runs a tool-call loop (max 6 iterations). The **system prompt** enforces a strict fitness-coach personality: direct, data-driven, demanding but fair; off-topic questions get an in-character refusal.
+  The streaming generator spawns a MCP subprocess per request via `stdio_client`, converts MCP tool schemas to Gemini `FunctionDeclaration` objects, and runs a tool-call loop (max 50 iterations; a complex question can chain many tool calls, one per metric). If the cap is ever reached, a no-tools fallback turn guarantees a final answer. The **system prompt** enforces a strict fitness-coach personality: direct, data-driven, demanding but fair; off-topic questions get an in-character refusal.
 
 Chat persistence lives in the backend: see `backend/app/routers/assistant.py` (history, memory, and the `chat_usage`-based rate limit: 5 messages / 2 hours) backed by the `ChatMessage`, `ChatMemory` and `ChatUsage` models.
 

@@ -208,9 +208,12 @@ def get_daily_health(args: dict, user_id: str, db) -> dict:
 
 
 def get_pending_cardio(args: dict, user_id: str, db) -> dict:
-    """List Fitbit activities (last N days) not yet imported as GymHub workouts."""
-    days = int(args.get("days", 30))
-    data = backend_client.get("/workouts/fitbit-pending", {"days": days})
+    """List cardio workouts already in GymHub but not yet pushed to Google Calendar.
+
+    These are the activities the user can still upload to their calendar — the
+    same list the app's cardio-upload modal shows.
+    """
+    data = backend_client.get("/workouts/cardio-pending")
     if backend_client.is_error(data):
         return data
     pending = data if isinstance(data, list) else []

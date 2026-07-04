@@ -110,7 +110,14 @@ async def get_max_lifts(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
-    """Maximum lift recorded for each exercise by the current user."""
+    """Maximum lift recorded for each exercise by the current user.
+
+    Returns the max from the last 60 days; if no records exist in that window,
+    falls back to the all-time max.
+    """
+    now = datetime.utcnow()
+    sixty_days_ago = now - timedelta(days=60)
+
     results = (
         db.query(
             models.Exercise.id,
@@ -124,19 +131,23 @@ async def get_max_lifts(
         .join(models.Workout, models.ExerciseSet.workout_id == models.Workout.id)
         .join(models.Muscle, models.Exercise.muscle_id == models.Muscle.id)
         .filter(models.Workout.user_id == current_user.id)
-        .filter(models.Workout.start_time <= datetime.utcnow())
+        .filter(models.Workout.start_time <= now)
         .filter(models.ExerciseSet.value != "")
         .filter(models.ExerciseSet.value != "0")
         .all()
     )
 
-    max_lifts: dict = {}
+    recent_max: dict = {}
+    all_time_max: dict = {}
+
     for ex_id, ex_name, m_name, value_str, measurement, start_time in results:
         current_max = _parse_exercise_value(value_str)
         if current_max == 0.0:
             continue
-        if ex_id not in max_lifts or current_max > max_lifts[ex_id]["max_value"]:
-            max_lifts[ex_id] = {
+
+        # Track all-time max
+        if ex_id not in all_time_max or current_max > all_time_max[ex_id]["max_value"]:
+            all_time_max[ex_id] = {
                 "exercise_id": ex_id,
                 "exercise_name": ex_name,
                 "muscle_name": m_name,
@@ -144,6 +155,21 @@ async def get_max_lifts(
                 "measurement": measurement,
                 "date": start_time,
             }
+
+        # Track recent (last 60 days) max
+        if start_time >= sixty_days_ago:
+            if ex_id not in recent_max or current_max > recent_max[ex_id]["max_value"]:
+                recent_max[ex_id] = {
+                    "exercise_id": ex_id,
+                    "exercise_name": ex_name,
+                    "muscle_name": m_name,
+                    "max_value": current_max,
+                    "measurement": measurement,
+                    "date": start_time,
+                }
+
+    # Prefer recent max; fallback to all-time if no recent records
+    max_lifts = {**all_time_max, **recent_max}
 
     return sorted(max_lifts.values(), key=lambda x: x["muscle_name"])
 

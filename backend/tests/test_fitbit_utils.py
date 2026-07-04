@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -134,6 +134,77 @@ def test_refresh_fitbit_token_failure():
         result = refresh_fitbit_token(db, tokens)
 
     assert result is None
+
+
+def test_refresh_fitbit_token_invalid_grant_clears_credentials():
+    """A permanently rejected refresh token (400 invalid_grant) clears the
+    stored credentials so the connection flips to 'disconnected'."""
+    db = _make_db()
+    tokens = _new_tokens(db)
+    tokens.fitbit_id = "fb-user-123"
+    db.commit()
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 400
+    mock_resp.text = '{"errors":[{"errorType":"invalid_grant"}],"success":false}'
+
+    with patch("app.fitbit_utils.requests.post", return_value=mock_resp):
+        result = refresh_fitbit_token(db, tokens)
+
+    assert result is None
+    db.expire_all()
+    assert tokens.fitbit_id is None
+    assert tokens.fitbit_access_token is None
+    assert tokens.fitbit_refresh_token is None
+
+
+def test_refresh_fitbit_token_transient_error_keeps_credentials():
+    """A transient server error (5xx) must NOT drop the Fitbit connection."""
+    db = _make_db()
+    tokens = _new_tokens(db)
+    tokens.fitbit_id = "fb-user-123"
+    db.commit()
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 503
+    mock_resp.text = "Service Unavailable"
+
+    with patch("app.fitbit_utils.requests.post", return_value=mock_resp):
+        result = refresh_fitbit_token(db, tokens)
+
+    assert result is None
+    db.expire_all()
+    assert tokens.fitbit_id == "fb-user-123"
+    assert tokens.fitbit_refresh_token == "tok-refresh"
+
+
+def test_refresh_fitbit_token_reuses_concurrently_rotated_token():
+    """If a concurrent request already rotated the (single-use) refresh token,
+    this call must reuse the freshly-minted access token from the DB instead of
+    re-spending the consumed refresh token and getting invalid_grant."""
+    db = _make_db()
+    tokens = _new_tokens(db)  # access "tok-access", refresh "tok-refresh"
+
+    # Simulate the race winner: the DB row already holds a rotated token pair,
+    # while our in-memory object still carries the old refresh token. Raw SQL so
+    # the ORM instance keeps its stale in-memory value (as it would across
+    # separate request sessions).
+    db.execute(
+        text(
+            "UPDATE user_tokens SET fitbit_access_token='winner-access', "
+            "fitbit_refresh_token='winner-refresh' WHERE id=:id"
+        ),
+        {"id": tokens.id},
+    )
+    assert tokens.fitbit_refresh_token == "tok-refresh"  # in-memory still stale
+
+    with patch("app.fitbit_utils.requests.post") as mock_post:
+        result = refresh_fitbit_token(db, tokens)
+
+    assert result == "winner-access"
+    mock_post.assert_not_called()  # no double-spend of the rotated refresh token
+    assert tokens.fitbit_access_token == "winner-access"
+    assert tokens.fitbit_refresh_token == "winner-refresh"
 
 
 # ---------------------------------------------------------------------------

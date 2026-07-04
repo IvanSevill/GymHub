@@ -1,8 +1,16 @@
+import logging
 import os
 
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
+# Configure root logging so module loggers (e.g. tool-call traces in chat.py)
+# are actually emitted. Honour LOG_LEVEL, defaulting to INFO.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402

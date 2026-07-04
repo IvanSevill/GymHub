@@ -14,6 +14,11 @@ Copy from `backend/.env.example`. Required variables:
 | `ROOT_EMAILS` | Comma-separated admin emails |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 — exercise library videos |
 | `PEXELS_API_KEY` | Pexels image search — exercise library images |
+| `CHAT_RATE_LIMIT_COUNT` | GymChat messages allowed per window for non-root users (default `5`) |
+| `CHAT_RATE_LIMIT_MINUTES` | Length of the fixed rate-limit window in minutes (default `120`) |
+| `CHAT_HISTORY_LIMIT` | Number of recent chat messages returned as history (default `10`) |
+
+All backend env access is centralized in `backend/app/config.py` — import the shared `settings` object instead of calling `os.getenv` directly.
 
 ## `ai-server/.env`
 

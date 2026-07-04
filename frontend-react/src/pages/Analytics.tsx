@@ -8,6 +8,7 @@ import MuscleBalanceChart from "../components/analytics/MuscleBalanceChart";
 import DurationHistogram from "../components/analytics/DurationHistogram";
 import WeightProgressCard from "../components/analytics/WeightProgressCard";
 import FrequencyAnalysisCard from "../components/analytics/FrequencyAnalysisCard";
+import ErrorState from "../components/ui/ErrorState";
 import { useAnalyticsData } from "../components/analytics/hooks/useAnalyticsData";
 
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({
@@ -29,6 +30,8 @@ const Analytics: React.FC = () => {
     muscleBalance,
     sessionDurations,
     loading,
+    error,
+    reload,
   } = useAnalyticsData(globalDays);
 
   return (
@@ -50,32 +53,46 @@ const Analytics: React.FC = () => {
         />
       </div>
 
-      {/* KPI Cards — Pattern 1: period comparison */}
-      <KPICards summary={summary} loading={loading} days={Number(globalDays)} />
+      {error ? (
+        <ErrorState
+          message="No se pudieron cargar tus analíticas. Comprueba tu conexión e inténtalo de nuevo."
+          onRetry={reload}
+          retrying={loading}
+        />
+      ) : (
+        <>
+          {/* KPI Cards — Pattern 1: period comparison */}
+          <KPICards
+            summary={summary}
+            loading={loading}
+            days={Number(globalDays)}
+          />
 
-      {/* Tendencias temporales */}
-      <div>
-        <SectionLabel>Tendencias</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <WorkoutFrequencyChart data={freqData} loading={loading} />
-          <VolumeTrendChart data={volumeData} loading={loading} />
-        </div>
-      </div>
+          {/* Tendencias temporales */}
+          <div>
+            <SectionLabel>Tendencias</SectionLabel>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <WorkoutFrequencyChart data={freqData} loading={loading} />
+              <VolumeTrendChart data={volumeData} loading={loading} />
+            </div>
+          </div>
 
-      {/* Composición muscular + Consistencia de sesiones */}
-      <div>
-        <SectionLabel>Composición y consistencia</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <MuscleBalanceChart data={muscleBalance} loading={loading} />
-          <DurationHistogram data={sessionDurations} loading={loading} />
-        </div>
-      </div>
+          {/* Composición muscular + Consistencia de sesiones */}
+          <div>
+            <SectionLabel>Composición y consistencia</SectionLabel>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <MuscleBalanceChart data={muscleBalance} loading={loading} />
+              <DurationHistogram data={sessionDurations} loading={loading} />
+            </div>
+          </div>
 
-      {/* Per-exercise weight progress (own period selector) */}
-      <WeightProgressCard exercises={exercises} loading={loading} />
+          {/* Per-exercise weight progress (own period selector) */}
+          <WeightProgressCard exercises={exercises} loading={loading} />
 
-      {/* Frequency distribution */}
-      <FrequencyAnalysisCard />
+          {/* Frequency distribution */}
+          <FrequencyAnalysisCard />
+        </>
+      )}
     </div>
   );
 };

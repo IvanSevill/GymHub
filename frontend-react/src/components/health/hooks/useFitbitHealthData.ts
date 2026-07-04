@@ -5,7 +5,6 @@ import {
   DailyHealth,
   SyncStatus,
 } from "../../../services/fitbit";
-import { useToast } from "../../../context/ToastContext";
 
 interface FitbitHealthData {
   days: string;
@@ -14,6 +13,8 @@ interface FitbitHealthData {
   allDaily: DailyHealth[];
   syncStatus: SyncStatus | null;
   loading: boolean;
+  error: boolean;
+  reload: () => void;
   autoSyncing: boolean;
   tablesOpen: boolean;
   setTablesOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -23,13 +24,13 @@ interface FitbitHealthData {
 export function useFitbitHealthData(
   fitbitConnected: boolean,
 ): FitbitHealthData {
-  const { addToast } = useToast();
-
   const [days, setDays] = useState("30");
   const [allSleep, setAllSleep] = useState<SleepLog[]>([]);
   const [allDaily, setAllDaily] = useState<DailyHealth[]>([]);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [autoSyncing, setAutoSyncing] = useState(false);
   const [tablesOpen, setTablesOpen] = useState(false);
 
@@ -60,11 +61,12 @@ export function useFitbitHealthData(
 
     const run = async (): Promise<void> => {
       setLoading(true);
+      setError(false);
       let status;
       try {
         status = await fetchData(d);
       } catch {
-        addToast("Error al cargar datos Fitbit", "error");
+        setError(true);
         setLoading(false);
         return;
       }
@@ -87,7 +89,9 @@ export function useFitbitHealthData(
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, fitbitConnected]);
+  }, [days, fitbitConnected, reloadKey]);
+
+  const reload = (): void => setReloadKey((k) => k + 1);
 
   const syncData = async (): Promise<void> => {
     const d = Number(days);
@@ -104,6 +108,8 @@ export function useFitbitHealthData(
     allDaily,
     syncStatus,
     loading,
+    error,
+    reload,
     autoSyncing,
     tablesOpen,
     setTablesOpen,

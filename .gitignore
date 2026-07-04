@@ -15,6 +15,9 @@ env/
 .env
 .env.*
 !.env.example
+# Stray editor/OS duplicates like ".env copy" (space — not caught by .env.*)
+.env*copy*
+*.env copy*
 
 # Databases
 *.db

@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 from . import models
 
@@ -214,12 +215,16 @@ def get_exercise_prs_as_of(
     as_of_date: "datetime",  # type: ignore[name-defined]  # noqa: F821
     exercise_ids: List[str],
 ) -> Dict[str, Tuple[str, str]]:
-    """Return {exercise_id: (value_str, measurement)} — the historical max for each exercise up to as_of_date.
+    """Return {exercise_id: (value_str, measurement)} — the max for each exercise up to as_of_date.
 
+    Returns the max from the last 60 days relative to as_of_date; if no records exist in that
+    window, falls back to the all-time max up to as_of_date.
     Only numeric, non-zero values are considered. Exercises with no valid history are omitted.
     """
     if not exercise_ids:
         return {}
+
+    sixty_days_before = as_of_date - timedelta(days=60)
 
     sets = (
         db.query(models.ExerciseSet)
@@ -235,7 +240,9 @@ def get_exercise_prs_as_of(
     )
 
     # exercise_id → (best_numeric, value_str, measurement)
-    best: Dict[str, Tuple[float, str, str]] = {}
+    best_recent: Dict[str, Tuple[float, str, str]] = {}
+    best_all_time: Dict[str, Tuple[float, str, str]] = {}
+
     for s in sets:
         try:
             num = float(s.value.replace("'", ".").strip())
@@ -243,10 +250,20 @@ def get_exercise_prs_as_of(
                 continue
         except (ValueError, AttributeError):
             continue
-        prev = best.get(s.exercise_id)
-        if prev is None or num > prev[0]:
-            best[s.exercise_id] = (num, s.value, s.measurement or "kg")
 
+        # Track all-time max
+        prev_all_time = best_all_time.get(s.exercise_id)
+        if prev_all_time is None or num > prev_all_time[0]:
+            best_all_time[s.exercise_id] = (num, s.value, s.measurement or "kg")
+
+        # Track recent (last 60 days) max
+        if s.workout.start_time >= sixty_days_before:
+            prev_recent = best_recent.get(s.exercise_id)
+            if prev_recent is None or num > prev_recent[0]:
+                best_recent[s.exercise_id] = (num, s.value, s.measurement or "kg")
+
+    # Prefer recent max; fallback to all-time if no recent records
+    best = {**best_all_time, **best_recent}
     return {ex_id: (val, meas) for ex_id, (_, val, meas) in best.items()}
 
 

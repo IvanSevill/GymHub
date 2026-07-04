@@ -24,35 +24,40 @@ import { useCalendarWorkouts } from "../components/calendar/hooks/useCalendarWor
 import { useWorkoutEdit } from "../components/calendar/hooks/useWorkoutEdit";
 import { useCalendarModals } from "../components/calendar/hooks/useCalendarModals";
 import { MS_PER_DAY, CALENDAR_GRID_SIZE } from "../components/calendar/helpers";
+import ErrorState from "../components/ui/ErrorState";
 
 const Calendar: React.FC = () => {
   const { addToast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { workouts, loading, fetchWorkouts } = useCalendarWorkouts();
+  const { workouts, loading, error, fetchWorkouts } = useCalendarWorkouts();
   const {
-    selectedDayWorkouts,
-    setSelectedDayWorkouts,
+    selectedDayDate,
+    setSelectedDayDate,
     isCreatingEvent,
     setIsCreatingEvent,
     isUploadingCardio,
     setIsUploadingCardio,
   } = useCalendarModals();
 
-  // Refreshes the workout list and keeps the open day-modal in sync
+  // The open day-modal is derived from the live workout list, so any refresh
+  // (calendar pull, Fitbit sync, edit, delete) flows into it automatically.
+  // A day left with no workouts collapses to null, which closes the modal.
+  const selectedDayWorkouts = useMemo(() => {
+    if (!selectedDayDate) return null;
+    const dayWorkouts = workouts.filter((w) =>
+      isSameDay(parseWorkoutTime(w.start_time), selectedDayDate),
+    );
+    return dayWorkouts.length > 0
+      ? { date: selectedDayDate, workouts: dayWorkouts }
+      : null;
+  }, [workouts, selectedDayDate]);
+
+  // Refresh the workout list; the derived day-modal above updates on its own.
   const refreshAll = useCallback(async () => {
-    const fresh = await fetchWorkouts();
-    setSelectedDayWorkouts((prev) => {
-      if (!prev) return null;
-      return {
-        date: prev.date,
-        workouts: fresh.filter((w) =>
-          isSameDay(parseWorkoutTime(w.start_time), prev.date),
-        ),
-      };
-    });
-  }, [fetchWorkouts, setSelectedDayWorkouts]);
+    await fetchWorkouts();
+  }, [fetchWorkouts]);
 
   const {
     editingWorkoutId,
@@ -83,18 +88,15 @@ const Calendar: React.FC = () => {
   }, [currentDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDeleteWorkout = async (workoutId: string) => {
-    await workoutService.deleteWorkout(workoutId);
-    const fresh = await fetchWorkouts();
-    setSelectedDayWorkouts((prev) => {
-      if (!prev) return null;
-      const remaining = fresh.filter((w) =>
-        isSameDay(parseWorkoutTime(w.start_time), prev.date),
-      );
-      return remaining.length > 0
-        ? { date: prev.date, workouts: remaining }
-        : null;
-    });
-    addToast("Evento eliminado", "success");
+    try {
+      await workoutService.deleteWorkout(workoutId);
+      // The derived day-modal recomputes from the refreshed list and closes
+      // itself if this was the day's last workout.
+      await fetchWorkouts();
+      addToast("Evento eliminado", "success");
+    } catch {
+      addToast("No se pudo eliminar el evento", "error");
+    }
   };
 
   const handleCreateEvent = async (events: EventPayload[]) => {
@@ -120,17 +122,41 @@ const Calendar: React.FC = () => {
 
   const handleSync = async () => {
     setIsSyncing(true);
+    // Each step is independent and best-effort (e.g. Fitbit may be
+    // disconnected), so a failing step must not abort the others. But we no
+    // longer swallow failures silently: we count them and warn the user if
+    // any step did not complete.
+    let failures = 0;
+    let fitbitResult: Awaited<
+      ReturnType<typeof workoutService.syncFitbitCreate>
+    > | null = null;
     try {
       // Step 1: pull calendar events into DB
-      await workoutService.syncAllFromCalendar().catch(() => {});
+      try {
+        await workoutService.syncAllFromCalendar();
+      } catch {
+        failures++;
+      }
       // Step 2: attach Fitbit data to existing gym workouts
-      await workoutService.syncFitbitBulk().catch(() => null);
+      try {
+        await workoutService.syncFitbitBulk();
+      } catch {
+        failures++;
+      }
       // Step 3: create standalone workouts for Fitbit activities not yet in DB
-      const fitbitResult = await workoutService
-        .syncFitbitCreate()
-        .catch(() => null);
+      try {
+        fitbitResult = await workoutService.syncFitbitCreate();
+      } catch {
+        failures++;
+      }
       await fetchWorkouts();
-      if (fitbitResult && fitbitResult.created > 0) {
+
+      if (failures > 0) {
+        addToast(
+          "Sincronización parcial: algunos pasos no se completaron",
+          "error",
+        );
+      } else if (fitbitResult && fitbitResult.created > 0) {
         addToast(
           `${fitbitResult.created} actividad(es) Fitbit añadida(s) al calendario`,
           "success",
@@ -168,7 +194,7 @@ const Calendar: React.FC = () => {
   };
 
   const closeModal = () => {
-    setSelectedDayWorkouts(null);
+    setSelectedDayDate(null);
     cancelEdit();
   };
 
@@ -185,15 +211,21 @@ const Calendar: React.FC = () => {
         onUploadCardio={() => setIsUploadingCardio(true)}
       />
 
-      <CalendarGrid
-        daysInGrid={daysInGrid}
-        currentDate={currentDate}
-        workouts={workouts}
-        loading={loading}
-        onDayClick={(day, dayWorkouts) =>
-          setSelectedDayWorkouts({ date: day, workouts: dayWorkouts })
-        }
-      />
+      {error && !loading ? (
+        <ErrorState
+          message="No se pudieron cargar tus entrenamientos. Comprueba tu conexión e inténtalo de nuevo."
+          onRetry={() => fetchWorkouts()}
+          retrying={loading}
+        />
+      ) : (
+        <CalendarGrid
+          daysInGrid={daysInGrid}
+          currentDate={currentDate}
+          workouts={workouts}
+          loading={loading}
+          onDayClick={(day) => setSelectedDayDate(day)}
+        />
+      )}
 
       <CalendarLegend />
 

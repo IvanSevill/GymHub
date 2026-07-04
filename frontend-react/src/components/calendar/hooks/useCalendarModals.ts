@@ -1,17 +1,16 @@
 import { useState } from "react";
-import type { Workout } from "../../../services/workout";
 
 export function useCalendarModals() {
-  const [selectedDayWorkouts, setSelectedDayWorkouts] = useState<{
-    date: Date;
-    workouts: Workout[];
-  } | null>(null);
+  // Only the selected day is stored; the day's workouts are derived from the
+  // live workout list in the page, so any refresh (e.g. a Fitbit sync) flows
+  // into the open modal without needing to re-snapshot them here.
+  const [selectedDayDate, setSelectedDayDate] = useState<Date | null>(null);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [isUploadingCardio, setIsUploadingCardio] = useState(false);
 
   return {
-    selectedDayWorkouts,
-    setSelectedDayWorkouts,
+    selectedDayDate,
+    setSelectedDayDate,
     isCreatingEvent,
     setIsCreatingEvent,
     isUploadingCardio,

@@ -22,6 +22,34 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
     if not user_tokens.fitbit_refresh_token:
         return None
 
+    # Fitbit refresh tokens are single-use: each refresh rotates the token and
+    # invalidates the old one. When the access token expires, the frontend fires
+    # several Fitbit requests in parallel and each hits 401 at once, so multiple
+    # refreshes race on the same refresh token — only the first succeeds and the
+    # rest get `invalid_grant`, dropping the connection. Serialize the refresh on
+    # the token row and re-read it: a request that loses the race reuses the
+    # access token the winner just minted instead of double-spending the token.
+    old_refresh = user_tokens.fitbit_refresh_token
+    # populate_existing() overwrites the identity-mapped instance with the freshly
+    # locked DB row, so a request that waited on the lock actually sees the token
+    # a concurrent transaction just committed (otherwise SQLAlchemy keeps the
+    # stale in-memory value and we'd re-spend the already-rotated refresh token).
+    row = (
+        db.query(models.UserTokens)
+        .filter(models.UserTokens.id == user_tokens.id)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+    if row is None:
+        return None
+    if row.fitbit_refresh_token and row.fitbit_refresh_token != old_refresh:
+        # Another request already rotated the token while we waited for the lock.
+        user_tokens.fitbit_access_token = row.fitbit_access_token
+        user_tokens.fitbit_refresh_token = row.fitbit_refresh_token
+        db.commit()  # release the row lock
+        return row.fitbit_access_token
+
     auth_header = base64.b64encode(
         f"{FITBIT_CLIENT_ID}:{FITBIT_CLIENT_SECRET}".encode()
     ).decode()
@@ -31,7 +59,7 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
     }
     data = {
         "grant_type": "refresh_token",
-        "refresh_token": user_tokens.fitbit_refresh_token,
+        "refresh_token": row.fitbit_refresh_token,
     }
 
     response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data, timeout=10)
@@ -47,6 +75,24 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
         response.status_code,
         response.text,
     )
+
+    # A permanently rejected refresh token (invalid_grant) can never be reused:
+    # this happens when a previous rotation half-completed (Fitbit rotated the
+    # token but our commit didn't land). Clear the dead credentials so the
+    # connection status flips to "disconnected" and the UI prompts a reconnect,
+    # instead of silently returning empty data on every future call. Transient
+    # errors (5xx, network) are left untouched so they don't drop the link.
+    if response.status_code == 400 and "invalid_grant" in response.text:
+        logger.warning(
+            "Fitbit refresh token permanently invalid for user_tokens %s — "
+            "clearing credentials; user must reconnect Fitbit.",
+            user_tokens.id,
+        )
+        user_tokens.fitbit_id = None
+        user_tokens.fitbit_access_token = None
+        user_tokens.fitbit_refresh_token = None
+        db.commit()
+
     return None
 
 
