@@ -129,8 +129,13 @@ def test_activity_matches_cardio_fd_name_mismatch():
 
 @pytest.mark.anyio
 async def test_sync_fitbit_bulk_no_tokens(client, auth_headers):
+    # Fitbit is an optional, best-effort step in the calendar sync flow, so a
+    # missing connection returns gracefully (200) rather than raising 400.
     resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["synced"] == 0
+    assert data["skipped"] == "fitbit_not_connected"
 
 
 @pytest.mark.anyio

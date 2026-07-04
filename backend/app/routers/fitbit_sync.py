@@ -188,8 +188,12 @@ async def sync_fitbit_bulk(
         .filter(models.UserTokens.user_id == current_user.id)
         .first()
     )
+    # Fitbit is optional: this endpoint is one of several best-effort steps in
+    # the calendar sync flow, so a missing connection is a normal state, not a
+    # client error. Return gracefully (mirroring sync-fitbit-create-missing)
+    # instead of raising 400, which would surface a spurious "partial sync".
     if not user_tokens or not user_tokens.fitbit_access_token:
-        raise HTTPException(status_code=400, detail="Fitbit not connected.")
+        return {"synced": 0, "not_found": 0, "total": 0, "skipped": "fitbit_not_connected"}
 
     now = datetime.utcnow()
     synced_with_logid = db.query(models.FitbitData.workout_id).filter(
