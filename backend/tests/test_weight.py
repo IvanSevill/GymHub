@@ -46,16 +46,21 @@ async def test_log_weight_upserts_same_date(client, auth_headers):
 
 @pytest.mark.anyio
 async def test_get_weight_logs(client, auth_headers):
+    # Use a date relative to today so it always falls within the default
+    # 90-day window of GET /weight/ (a fixed past date would age out over time).
+    from datetime import date, timedelta
+
+    recent = (date.today() - timedelta(days=5)).isoformat()
     await client.post(
         "/weight/",
         headers=auth_headers,
-        json={"date": "2026-04-01", "weight_kg": 77.0},
+        json={"date": recent, "weight_kg": 77.0},
     )
     resp = await client.get("/weight/", headers=auth_headers)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
     dates = [e["date"] for e in resp.json()]
-    assert "2026-04-01" in dates
+    assert recent in dates
 
 
 @pytest.mark.anyio
