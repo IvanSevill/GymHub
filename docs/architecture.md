@@ -66,6 +66,7 @@ docs/               Design docs, workflow guides, principles, new-implementation
 - **`components/calendar/`** — CalendarGrid, CalendarHeader, DayDetailModal, CreateEventModal, CardioUploadModal, WorkoutBodies, WorkoutIndicator, RouteMap.
 - **`components/health/`** — HealthKpiCards, ActivityCharts, SleepCharts, StepsChart, CaloriesHeartRateChart, ActivityTable, SleepTable, and sub-components.
 - **`components/workouts/`** — WorkoutCard (header + body + icon), FitbitMetricsCompact, FitbitMetricsGrid, FitbitZonesBar.
+- **`components/exercises/`** — FilterButton, RequestExerciseCTA (request-an-exercise/muscle entry point at the bottom of the Ejercicios page), ExerciseRequestModals (shared request modals, also imported by Settings' ExerciseRequestSection).
 - **`components/settings/`** — ExerciseManager, ExerciseLibrary, DataResetPanel, AdminPanel, ExerciseRequestSection.
 - **`components/ui/`** — ToastContainer, Skeleton, PeriodSelector, ErrorState (shared error view with a retry CTA, used across Analytics, Salud and Calendar).
 
