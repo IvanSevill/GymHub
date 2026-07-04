@@ -6,6 +6,7 @@ import { SkeletonBlock } from "../components/ui/Skeleton";
 import { useExerciseModal } from "../context/ExerciseModalContext";
 import { useExerciseData } from "../components/exercises/hooks/useExerciseData";
 import FilterButton from "../components/exercises/FilterButton";
+import RequestExerciseCTA from "../components/exercises/RequestExerciseCTA";
 import { MEASUREMENT_LABELS } from "../constants/measurements";
 
 const Exercises: React.FC = () => {
@@ -183,6 +184,9 @@ const Exercises: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Entry point to request an exercise/muscle when it's not in the catalog */}
+      {!loading && <RequestExerciseCTA />}
     </div>
   );
 };
