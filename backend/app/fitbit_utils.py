@@ -1,9 +1,12 @@
 import base64
+import json
 import logging
 import os
+from dataclasses import dataclass
+from typing import Optional
+
 import defusedxml.ElementTree as ET
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import requests
 from sqlalchemy.orm import Session
@@ -17,9 +20,38 @@ FITBIT_CLIENT_SECRET = os.getenv("FITBIT_CLIENT_SECRET")
 FITBIT_TOKEN_URL = "https://api.fitbit.com/oauth2/token"
 
 
-def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optional[str]:
+@dataclass(frozen=True)
+class FitbitSyncFailure(Exception):
+    """Safe diagnostic raised only by opt-in Calendar sync callers."""
+
+    stage: str
+    code: str
+    status_code: int
+    retryable: bool
+    provider_status: Optional[int] = None
+
+
+def _failure(
+    stage: str,
+    code: str,
+    status_code: int,
+    retryable: bool,
+    provider_status: Optional[int] = None,
+) -> FitbitSyncFailure:
+    return FitbitSyncFailure(stage, code, status_code, retryable, provider_status)
+
+
+def refresh_fitbit_token(
+    db: Session,
+    user_tokens: models.UserTokens,
+    *,
+    strict: bool = False,
+    correlation_id: Optional[str] = None,
+) -> Optional[str]:
     """Refresh the Fitbit access token. Returns the new token or None on failure."""
     if not user_tokens.fitbit_refresh_token:
+        if strict:
+            raise _failure("fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False)
         return None
 
     # Fitbit refresh tokens are single-use: each refresh rotates the token and
@@ -42,6 +74,8 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
         .first()
     )
     if row is None:
+        if strict:
+            raise _failure("fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False)
         return None
     if row.fitbit_refresh_token and row.fitbit_refresh_token != old_refresh:
         # Another request already rotated the token while we waited for the lock.
@@ -62,36 +96,91 @@ def refresh_fitbit_token(db: Session, user_tokens: models.UserTokens) -> Optiona
         "refresh_token": row.fitbit_refresh_token,
     }
 
-    response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data, timeout=10)
+    try:
+        response = requests.post(FITBIT_TOKEN_URL, headers=headers, data=data, timeout=10)
+    except requests.Timeout:
+        if strict:
+            raise _failure("fitbit_auth", "FITBIT_AUTH_TIMEOUT", 504, True) from None
+        return None
+    except requests.RequestException:
+        if strict:
+            raise _failure("fitbit_auth", "FITBIT_AUTH_UNAVAILABLE", 503, True) from None
+        return None
+
     if response.status_code == 200:
-        new_tokens = response.json()
-        user_tokens.fitbit_access_token = new_tokens["access_token"]
-        user_tokens.fitbit_refresh_token = new_tokens["refresh_token"]
+        try:
+            new_tokens = response.json()
+            access_token = new_tokens["access_token"]
+            refresh_token = new_tokens["refresh_token"]
+            if not isinstance(access_token, str) or not isinstance(refresh_token, str):
+                raise ValueError
+        except (KeyError, TypeError, ValueError, requests.JSONDecodeError):
+            if strict:
+                raise _failure("processing", "FITBIT_RESPONSE_INVALID", 502, False) from None
+            return None
+        user_tokens.fitbit_access_token = access_token
+        user_tokens.fitbit_refresh_token = refresh_token
         db.commit()
         return user_tokens.fitbit_access_token
 
     logger.warning(
-        "Fitbit token refresh failed — status %s: %s",
-        response.status_code,
-        response.text,
+        "Fitbit token refresh failed",
+        extra={"provider_status": response.status_code},
     )
 
-    # A permanently rejected refresh token (invalid_grant) can never be reused:
-    # this happens when a previous rotation half-completed (Fitbit rotated the
-    # token but our commit didn't land). Clear the dead credentials so the
-    # connection status flips to "disconnected" and the UI prompts a reconnect,
-    # instead of silently returning empty data on every future call. Transient
-    # errors (5xx, network) are left untouched so they don't drop the link.
-    if response.status_code == 400 and "invalid_grant" in response.text:
+    try:
+        error_payload = response.json()
+    except (ValueError, requests.JSONDecodeError):
+        error_payload = {}
+    if not isinstance(error_payload, dict):
+        try:
+            error_payload = json.loads(response.text)
+        except (TypeError, ValueError):
+            error_payload = {}
+    invalid_grant = response.status_code == 400 and (
+        error_payload.get("error") == "invalid_grant"
+        or any(
+            error.get("errorType") == "invalid_grant"
+            for error in error_payload.get("errors", [])
+            if isinstance(error, dict)
+        )
+    )
+
+    if invalid_grant:
         logger.warning(
-            "Fitbit refresh token permanently invalid for user_tokens %s — "
-            "clearing credentials; user must reconnect Fitbit.",
-            user_tokens.id,
+            "Fitbit refresh token permanently invalid; clearing credentials",
+            extra={"provider_status": response.status_code},
         )
         user_tokens.fitbit_id = None
         user_tokens.fitbit_access_token = None
         user_tokens.fitbit_refresh_token = None
         db.commit()
+        if strict:
+            raise _failure(
+                "fitbit_auth",
+                "FITBIT_REAUTH_REQUIRED",
+                424,
+                False,
+                response.status_code,
+            )
+        return None
+
+    if strict:
+        if response.status_code >= 500 or response.status_code == 429:
+            raise _failure(
+                "fitbit_auth",
+                "FITBIT_AUTH_UNAVAILABLE",
+                503,
+                True,
+                response.status_code,
+            )
+        raise _failure(
+            "fitbit_auth",
+            "FITBIT_REAUTH_REQUIRED",
+            424,
+            False,
+            response.status_code,
+        )
 
     return None
 
@@ -100,23 +189,71 @@ def _fitbit_get(
     db: Session,
     user_tokens: models.UserTokens,
     url: str,
+    *,
+    strict: bool = False,
+    correlation_id: Optional[str] = None,
 ) -> Optional[requests.Response]:
     """Authenticated GET to Fitbit API. Retries once after a token refresh on 401."""
     access_token = user_tokens.fitbit_access_token
     if not access_token:
+        if strict:
+            raise _failure("fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False)
         return None
 
-    response = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
-    if response.status_code == 401:
-        access_token = refresh_fitbit_token(db, user_tokens)
-        if not access_token:
-            logger.warning("Fitbit token refresh failed — cannot retry request.")
-            return None
+    try:
         response = requests.get(
             url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10
         )
+    except requests.Timeout:
+        if strict:
+            raise _failure("fitbit_api", "FITBIT_API_TIMEOUT", 504, True) from None
+        return None
+    except requests.RequestException:
+        if strict:
+            raise _failure("fitbit_api", "FITBIT_API_UNAVAILABLE", 503, True) from None
+        return None
+    if response.status_code == 401:
+        access_token = refresh_fitbit_token(
+            db,
+            user_tokens,
+            strict=strict,
+            correlation_id=correlation_id,
+        )
+        if not access_token:
+            logger.warning("Fitbit token refresh failed; request not retried")
+            return None
+        try:
+            response = requests.get(
+                url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10
+            )
+        except requests.Timeout:
+            if strict:
+                raise _failure("fitbit_api", "FITBIT_API_TIMEOUT", 504, True) from None
+            return None
+        except requests.RequestException:
+            if strict:
+                raise _failure("fitbit_api", "FITBIT_API_UNAVAILABLE", 503, True) from None
+            return None
 
-    return response if response.status_code == 200 else None
+    if response.status_code == 200:
+        return response
+    if not strict:
+        return None
+    if response.status_code == 401:
+        raise _failure(
+            "fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False, response.status_code
+        )
+    if response.status_code == 429:
+        raise _failure(
+            "fitbit_api", "FITBIT_API_RATE_LIMITED", 503, True, response.status_code
+        )
+    if response.status_code >= 500:
+        raise _failure(
+            "fitbit_api", "FITBIT_API_UNAVAILABLE", 503, True, response.status_code
+        )
+    raise _failure(
+        "fitbit_api", "FITBIT_API_REJECTED", 502, False, response.status_code
+    )
 
 
 def extract_azm(activity_data: dict) -> dict:
@@ -151,7 +288,13 @@ def extract_azm(activity_data: dict) -> dict:
 
 
 def get_fitbit_activities_range(
-    db: Session, user_tokens: models.UserTokens, days: int = 30
+    db: Session,
+    user_tokens: models.UserTokens,
+    days: int = 30,
+    *,
+    strict: bool = False,
+    correlation_id: Optional[str] = None,
+    processing_failures: Optional[list] = None,
 ) -> list:
     """Fetch all Fitbit activities from the last N days, most-recent first."""
     cutoff = datetime.utcnow() - timedelta(days=days)
@@ -161,12 +304,28 @@ def get_fitbit_activities_range(
         f"?beforeDate={date_str}&offset=0&limit=100&sort=desc"
     )
 
-    response = _fitbit_get(db, user_tokens, url)
+    response = _fitbit_get(
+        db,
+        user_tokens,
+        url,
+        strict=strict,
+        correlation_id=correlation_id,
+    )
     if response is None:
         return []
 
+    try:
+        payload = response.json()
+        activities = payload["activities"]
+        if not isinstance(activities, list):
+            raise TypeError
+    except (KeyError, TypeError, ValueError, requests.JSONDecodeError):
+        if strict:
+            raise _failure("processing", "FITBIT_RESPONSE_INVALID", 502, False) from None
+        return []
+
     result = []
-    for activity in response.json().get("activities", []):
+    for activity in activities:
         try:
             act_start = (
                 datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
@@ -177,6 +336,8 @@ def get_fitbit_activities_range(
                 break  # sorted desc — stop once outside the window
             result.append(activity)
         except Exception:
+            if strict and processing_failures is not None:
+                processing_failures.append("FITBIT_ACTIVITY_PROCESSING_FAILED")
             continue
 
     return result
@@ -196,24 +357,24 @@ def get_fitbit_route(
         return []
 
     url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
-    logger.debug("Fetching TCX for log_id=%s", log_id)
+    logger.debug("Fetching Fitbit TCX route")
     response = _fitbit_get(db, user_tokens, url)
     if response is None:
-        logger.warning("TCX fetch failed (non-200 or token error) for log_id=%s", log_id)
+        logger.warning("Fitbit TCX route fetch failed")
         return []
 
-    logger.debug("TCX response length=%d bytes for log_id=%s", len(response.text), log_id)
+    logger.debug("Fitbit TCX response received", extra={"response_bytes": len(response.text)})
 
     # Try standard Garmin namespace (Fitbit uses this for both onboard and connected GPS)
     ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
     try:
         root = ET.fromstring(response.text)
-    except ET.ParseError as e:
-        logger.warning("TCX XML parse error for log_id=%s: %s — body: %.200s", log_id, e, response.text)
+    except ET.ParseError:
+        logger.warning("Fitbit TCX XML parse failed")
         return []
 
     trackpoints = root.findall(".//tcx:Trackpoint", ns)
-    logger.debug("Found %d Trackpoints for log_id=%s", len(trackpoints), log_id)
+    logger.debug("Fitbit TCX trackpoints parsed", extra={"trackpoint_count": len(trackpoints)})
 
     points = []
     for tp in trackpoints:
@@ -244,12 +405,21 @@ def probe_has_gps(
     db: Session,
     user_tokens: models.UserTokens,
     log_id: str,
+    *,
+    strict: bool = False,
+    correlation_id: Optional[str] = None,
 ) -> bool:
     """Return True if the Fitbit activity TCX contains at least one GPS Position element."""
     if not log_id:
         return False
     url = f"https://api.fitbit.com/1/user/-/activities/{log_id}.tcx?includePartialTCX=true"
-    response = _fitbit_get(db, user_tokens, url)
+    response = _fitbit_get(
+        db,
+        user_tokens,
+        url,
+        strict=strict,
+        correlation_id=correlation_id,
+    )
     if response is None:
         return False
     ns = {"tcx": "http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"}
@@ -340,24 +510,55 @@ def get_daily_activity(
     return response.json().get("summary")
 
 
+def is_weights_workout(workout: models.Workout) -> bool:
+    """Return whether a GymHub workout contains non-cardio exercise sets."""
+    return any(
+        exercise_set.exercise
+        and exercise_set.exercise.name.lower() != "cardio"
+        for exercise_set in workout.exercise_sets
+    )
+
+
 def get_fitbit_activity(
     db: Session,
     user_tokens: models.UserTokens,
     start_time: datetime,
     end_time: datetime,
+    required_activity_name: Optional[str] = None,
+    *,
+    strict: bool = False,
+    correlation_id: Optional[str] = None,
 ) -> Optional[dict]:
-    """Find a Fitbit activity matching the given workout time window (±3 h)."""
+    """Find the closest Fitbit activity matching the workout time and type."""
     date_str = (start_time + timedelta(days=1)).strftime("%Y-%m-%d")
     url = (
         "https://api.fitbit.com/1.1/user/-/activities/list.json"
         f"?beforeDate={date_str}&offset=0&limit=20&sort=desc"
     )
 
-    response = _fitbit_get(db, user_tokens, url)
+    response = _fitbit_get(
+        db,
+        user_tokens,
+        url,
+        strict=strict,
+        correlation_id=correlation_id,
+    )
     if response is None:
         return None
 
-    for activity in response.json().get("activities", []):
+    try:
+        payload = response.json()
+        activities = payload["activities"]
+        if not isinstance(activities, list):
+            raise TypeError
+    except (KeyError, TypeError, ValueError, requests.JSONDecodeError):
+        if strict:
+            raise _failure("processing", "FITBIT_RESPONSE_INVALID", 502, False) from None
+        return None
+
+    matches = []
+    invalid_activity = False
+    for activity in activities:
         try:
             act_start = (
                 datetime.fromisoformat(activity["startTime"].replace("Z", "+00:00"))
@@ -366,15 +567,27 @@ def get_fitbit_activity(
             )
             act_end = act_start + timedelta(milliseconds=activity["duration"])
         except Exception:
+            invalid_activity = True
             continue
 
         # Match if activity started within ±3 h of the workout start.
         # Calendar events are often manually entered and can misalign by 1-2 h.
-        if abs((act_start - start_time).total_seconds()) < 10800:
-            return activity
-
         mid_workout = start_time + (end_time - start_time) / 2
-        if act_start <= mid_workout <= act_end:
-            return activity
+        start_delta = abs((act_start - start_time).total_seconds())
+        if start_delta >= 10800 and not act_start <= mid_workout <= act_end:
+            continue
 
+        if required_activity_name and required_activity_name.lower() not in activity.get(
+            "activityName", ""
+        ).lower():
+            continue
+
+        matches.append((start_delta, activity))
+
+    if matches:
+        return min(matches, key=lambda match: match[0])[1]
+    if strict and invalid_activity:
+        raise _failure(
+            "processing", "FITBIT_ACTIVITY_PROCESSING_FAILED", 500, False
+        )
     return None

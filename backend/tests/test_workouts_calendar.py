@@ -1,4 +1,5 @@
 """Tests for workouts.py routes that require Google Calendar or Fitbit tokens."""
+import uuid
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -599,7 +600,7 @@ async def test_delete_workout_with_calendar_event(client, auth_headers, db):
 async def test_sync_all_no_tokens(client, auth_headers):
     resp = await client.get("/workouts/sync-all", headers=auth_headers)
     assert resp.status_code == 400
-    assert "No user tokens" in resp.json()["detail"]
+    assert resp.json()["detail"]["code"] == "GOOGLE_CALENDAR_NOT_CONNECTED"
 
 
 @pytest.mark.anyio
@@ -610,7 +611,7 @@ async def test_sync_all_no_access_token(client, auth_headers, db):
     db.commit()
     resp = await client.get("/workouts/sync-all", headers=auth_headers)
     assert resp.status_code == 400
-    assert "Missing access token" in resp.json()["detail"]
+    assert resp.json()["detail"]["code"] == "GOOGLE_CALENDAR_REAUTH_REQUIRED"
 
 
 @pytest.mark.anyio
@@ -620,7 +621,31 @@ async def test_sync_all_no_credentials(client, auth_headers, db):
     with patch("app.routers.workouts.get_google_credentials", return_value=None):
         resp = await client.get("/workouts/sync-all", headers=auth_headers)
     assert resp.status_code == 400
-    assert "reconnect" in resp.json()["detail"]
+    assert resp.json()["detail"]["code"] == "GOOGLE_CALENDAR_REAUTH_REQUIRED"
+
+
+@pytest.mark.anyio
+async def test_sync_all_preserves_jwt_401_semantics(client):
+    resp = await client.get(
+        "/workouts/sync-all",
+        headers={"X-Correlation-ID": str(uuid.uuid4())},
+    )
+
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Not authenticated"
+
+
+@pytest.mark.anyio
+async def test_sync_all_replaces_invalid_correlation(client, auth_headers):
+    resp = await client.get(
+        "/workouts/sync-all",
+        headers={**auth_headers, "X-Correlation-ID": "token=secret arbitrary log text"},
+    )
+
+    assert resp.status_code == 400
+    correlation_id = resp.json()["detail"]["correlation_id"]
+    assert str(uuid.UUID(correlation_id)) == correlation_id
+    assert "secret" not in resp.text
 
 
 @pytest.mark.anyio
@@ -645,6 +670,77 @@ async def test_sync_all_full_no_events(client, auth_headers, db):
     data = resp.json()
     assert "0 workouts" in data["message"]
     assert "full" in data["message"]
+
+
+@pytest.mark.anyio
+async def test_sync_all_round_trips_correlation_and_logs(client, auth_headers, db, caplog):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+    correlation_id = str(uuid.uuid4())
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.return_value = {
+        "items": [],
+        "nextSyncToken": "tok-new",
+    }
+
+    with (
+        caplog.at_level("INFO", logger="app.routers.workouts"),
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get(
+            "/workouts/sync-all",
+            headers={**auth_headers, "X-Correlation-ID": correlation_id},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["correlation_id"] == correlation_id
+    records = [record for record in caplog.records if hasattr(record, "correlation_id")]
+    assert [record.event for record in records] == [
+        "calendar_sync.started",
+        "calendar_sync.completed",
+    ]
+    assert all(record.correlation_id == correlation_id for record in records)
+
+
+@pytest.mark.anyio
+async def test_sync_all_returns_safe_correlated_provider_failure(
+    client, auth_headers, db, caplog
+):
+    user = _get_user(db)
+    _add_tokens(db, user.id, google=True)
+    correlation_id = str(uuid.uuid4())
+    mock_svc = MagicMock()
+    mock_svc.events.return_value.list.return_value.execute.side_effect = RuntimeError(
+        "private provider payload token=secret SQL stack"
+    )
+
+    with (
+        caplog.at_level("INFO", logger="app.routers.workouts"),
+        patch("app.routers.workouts.get_google_credentials", return_value=MagicMock()),
+        patch("app.routers.workouts.build", return_value=mock_svc),
+    ):
+        resp = await client.get(
+            "/workouts/sync-all",
+            headers={**auth_headers, "X-Correlation-ID": correlation_id},
+        )
+
+    assert resp.status_code == 500
+    assert resp.json()["detail"] == {
+        "stage": "google_calendar",
+        "code": "GOOGLE_CALENDAR_API_UNAVAILABLE",
+        "message": "Google Calendar is temporarily unavailable.",
+        "correlation_id": correlation_id,
+        "retryable": True,
+    }
+    failed_record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "calendar_sync.failed"
+    )
+    assert failed_record.exception_type == "RuntimeError"
+    assert "private provider payload" not in caplog.text
+    assert "secret" not in resp.text
 
 
 @pytest.mark.anyio

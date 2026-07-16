@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useState, useMemo } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   startOfMonth,
   endOfMonth,
@@ -25,11 +31,21 @@ import { useWorkoutEdit } from "../components/calendar/hooks/useWorkoutEdit";
 import { useCalendarModals } from "../components/calendar/hooks/useCalendarModals";
 import { MS_PER_DAY, CALENDAR_GRID_SIZE } from "../components/calendar/helpers";
 import ErrorState from "../components/ui/ErrorState";
+import {
+  createCorrelationId,
+  normalizeSyncError,
+  prioritizeDiagnostics,
+  syncDiagnosticMessage,
+  type SyncDiagnostic,
+} from "../services/syncDiagnostics";
 
 const Calendar: React.FC = () => {
   const { addToast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
+  const syncInFlight = useRef(false);
+  const syncSequence = useRef(0);
+  const mounted = useRef(true);
 
   const { workouts, loading, error, fetchWorkouts } = useCalendarWorkouts();
   const {
@@ -87,6 +103,13 @@ const Calendar: React.FC = () => {
     fetchWorkouts();
   }, [currentDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const handleDeleteWorkout = async (workoutId: string) => {
     try {
       await workoutService.deleteWorkout(workoutId);
@@ -121,41 +144,84 @@ const Calendar: React.FC = () => {
   };
 
   const handleSync = async () => {
-    setIsSyncing(true);
-    // Each step is independent and best-effort (e.g. Fitbit may be
-    // disconnected), so a failing step must not abort the others. But we no
-    // longer swallow failures silently: we count them and warn the user if
-    // any step did not complete.
-    let failures = 0;
+    if (syncInFlight.current) return;
+    syncInFlight.current = true;
+    const operationId = ++syncSequence.current;
+    const correlationId = createCorrelationId();
+    const diagnostics: SyncDiagnostic[] = [];
     let fitbitResult: Awaited<
       ReturnType<typeof workoutService.syncFitbitCreate>
     > | null = null;
+    setIsSyncing(true);
     try {
       // Step 1: pull calendar events into DB
       try {
-        await workoutService.syncAllFromCalendar();
-      } catch {
-        failures++;
+        await workoutService.syncAllFromCalendar(correlationId);
+      } catch (syncError) {
+        diagnostics.push(normalizeSyncError(syncError, correlationId));
       }
       // Step 2: attach Fitbit data to existing gym workouts
       try {
-        await workoutService.syncFitbitBulk();
-      } catch {
-        failures++;
+        const bulkResult = await workoutService.syncFitbitBulk(correlationId);
+        if (bulkResult.outcome === "partial") {
+          const issues =
+            bulkResult.issues.length > 0
+              ? bulkResult.issues
+              : [
+                  {
+                    stage: "processing" as const,
+                    code: "FITBIT_PROCESSING_FAILED",
+                    retryable: false,
+                  },
+                ];
+          diagnostics.push(
+            ...issues.map((issue) => ({
+              stage: issue.stage,
+              code: issue.code,
+              retryable: issue.retryable,
+              correlationId: bulkResult.correlation_id,
+            })),
+          );
+        }
+      } catch (syncError) {
+        diagnostics.push(normalizeSyncError(syncError, correlationId));
       }
       // Step 3: create standalone workouts for Fitbit activities not yet in DB
       try {
-        fitbitResult = await workoutService.syncFitbitCreate();
-      } catch {
-        failures++;
+        fitbitResult = await workoutService.syncFitbitCreate(correlationId);
+        if (fitbitResult.outcome === "partial") {
+          const issues =
+            fitbitResult.issues.length > 0
+              ? fitbitResult.issues
+              : [
+                  {
+                    stage: "processing" as const,
+                    code: "FITBIT_PROCESSING_FAILED",
+                    retryable: false,
+                  },
+                ];
+          diagnostics.push(
+            ...issues.map((issue) => ({
+              stage: issue.stage,
+              code: issue.code,
+              retryable: issue.retryable,
+              correlationId: fitbitResult!.correlation_id,
+            })),
+          );
+        }
+      } catch (syncError) {
+        diagnostics.push(normalizeSyncError(syncError, correlationId));
       }
-      await fetchWorkouts();
+      try {
+        await fetchWorkouts({ propagateError: true });
+      } catch (refreshError) {
+        diagnostics.push(normalizeSyncError(refreshError, correlationId));
+      }
 
-      if (failures > 0) {
-        addToast(
-          "Sincronización parcial: algunos pasos no se completaron",
-          "error",
-        );
+      if (!mounted.current || syncSequence.current !== operationId) return;
+      const primaryDiagnostic = prioritizeDiagnostics(diagnostics);
+      if (primaryDiagnostic) {
+        addToast(syncDiagnosticMessage(primaryDiagnostic), "error", 10000);
       } else if (fitbitResult && fitbitResult.created > 0) {
         addToast(
           `${fitbitResult.created} actividad(es) Fitbit añadida(s) al calendario`,
@@ -164,10 +230,16 @@ const Calendar: React.FC = () => {
       } else {
         addToast("Sincronización completada", "success");
       }
-    } catch {
-      addToast("Error al sincronizar", "error");
+    } catch (uiError) {
+      if (mounted.current && syncSequence.current === operationId) {
+        const diagnostic = normalizeSyncError(uiError, correlationId);
+        addToast(syncDiagnosticMessage(diagnostic), "error", 10000);
+      }
     } finally {
-      setIsSyncing(false);
+      if (syncSequence.current === operationId) {
+        syncInFlight.current = false;
+        if (mounted.current) setIsSyncing(false);
+      }
     }
   };
 
