@@ -1,7 +1,10 @@
 import logging
+import time
+import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from .. import auth, database, fitbit_utils, models, schemas
@@ -10,6 +13,86 @@ from ..services.google_calendar import update_google_calendar_event
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/workouts", tags=["fitbit"])
+
+
+_SYNC_ERROR_MESSAGES = {
+    "FITBIT_REAUTH_REQUIRED": "Fitbit authorization must be renewed.",
+    "FITBIT_AUTH_UNAVAILABLE": "Fitbit authorization is temporarily unavailable.",
+    "FITBIT_AUTH_TIMEOUT": "Fitbit authorization timed out.",
+    "FITBIT_API_RATE_LIMITED": "Fitbit is temporarily rate limited.",
+    "FITBIT_API_UNAVAILABLE": "Fitbit is temporarily unavailable.",
+    "FITBIT_API_TIMEOUT": "Fitbit request timed out.",
+    "FITBIT_API_REJECTED": "Fitbit rejected the request.",
+    "FITBIT_RESPONSE_INVALID": "Fitbit returned an invalid response.",
+    "FITBIT_MATCHING_FAILED": "Fitbit activity matching failed.",
+    "FITBIT_PROCESSING_FAILED": "Fitbit activity processing failed.",
+    "FITBIT_PERSISTENCE_FAILED": "Fitbit data could not be saved.",
+}
+
+
+def _canonical_correlation_id(value: Optional[str]) -> str:
+    if value:
+        try:
+            parsed = uuid.UUID(value)
+            if parsed.version == 4 and str(parsed) == value:
+                return value
+        except (ValueError, AttributeError):
+            pass
+    return str(uuid.uuid4())
+
+
+def _sync_log(event: str, correlation_id: str, route: str, **fields) -> None:
+    if "created" in fields:
+        # LogRecord.created is reserved for the event timestamp.
+        fields["created_count"] = fields.pop("created")
+    logger.info(
+        event,
+        extra={
+            "event": event,
+            "correlation_id": correlation_id,
+            "route": route,
+            **fields,
+        },
+    )
+
+
+def _raise_sync_failure(
+    failure: fitbit_utils.FitbitSyncFailure,
+    correlation_id: str,
+    route: str,
+    started_at: float,
+    exception_type: Optional[str] = None,
+) -> None:
+    fields = {
+        "stage": failure.stage,
+        "code": failure.code,
+        "http_status": failure.status_code,
+        "retryable": failure.retryable,
+        "duration_ms": round((time.monotonic() - started_at) * 1000),
+    }
+    if failure.provider_status is not None:
+        fields["provider_status"] = failure.provider_status
+    if exception_type is not None:
+        fields["exception_type"] = exception_type
+    _sync_log("fitbit_sync.failed", correlation_id, route, **fields)
+    detail = schemas.SyncErrorDetail(
+        stage=failure.stage,
+        code=failure.code,
+        message=_SYNC_ERROR_MESSAGES[failure.code],
+        correlation_id=correlation_id,
+        retryable=failure.retryable,
+    )
+    raise HTTPException(status_code=failure.status_code, detail=detail.model_dump())
+
+
+def _processing_failure(code: str = "FITBIT_PROCESSING_FAILED") -> fitbit_utils.FitbitSyncFailure:
+    return fitbit_utils.FitbitSyncFailure("processing", code, 500, False)
+
+
+def _persistence_failure() -> fitbit_utils.FitbitSyncFailure:
+    return fitbit_utils.FitbitSyncFailure(
+        "database_persistence", "FITBIT_PERSISTENCE_FAILED", 500, True
+    )
 
 
 def _is_gym_activity(activity: dict) -> bool:
@@ -88,13 +171,24 @@ def _collect_pending_fitbit_activities(
     user_tokens: models.UserTokens,
     user_id: str,
     days: int,
+    *,
+    strict: bool = False,
+    correlation_id: Optional[str] = None,
+    processing_failures: Optional[list] = None,
 ) -> list:
     """Return Fitbit activities from the last `days` with no matching GymHub workout.
 
     Mirrors the detection used by sync-fitbit-create-missing but performs no
     writes, so it backs both the create endpoint and a read-only preview.
     """
-    activities = fitbit_utils.get_fitbit_activities_range(db, user_tokens, days)
+    activities = fitbit_utils.get_fitbit_activities_range(
+        db,
+        user_tokens,
+        days,
+        strict=strict,
+        correlation_id=correlation_id,
+        processing_failures=processing_failures,
+    )
     if not activities:
         return []
 
@@ -177,12 +271,27 @@ async def list_fitbit_pending(
     return result
 
 
-@router.post("/sync-fitbit-bulk", response_model=dict)
+@router.post(
+    "/sync-fitbit-bulk",
+    response_model=schemas.FitbitBulkSyncResponse,
+    responses={
+        424: {"model": schemas.SyncErrorResponse},
+        500: {"model": schemas.SyncErrorResponse},
+        502: {"model": schemas.SyncErrorResponse},
+        503: {"model": schemas.SyncErrorResponse},
+        504: {"model": schemas.SyncErrorResponse},
+    },
+)
 async def sync_fitbit_bulk(
+    x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
-    """Sync Fitbit data for all past workouts missing it (±1 h window matching)."""
+    """Sync Fitbit data for past workouts with safe stage-aware diagnostics."""
+    correlation_id = _canonical_correlation_id(x_correlation_id)
+    route = "sync_fitbit_bulk"
+    started_at = time.monotonic()
+    _sync_log("fitbit_sync.started", correlation_id, route)
     user_tokens = (
         db.query(models.UserTokens)
         .filter(models.UserTokens.user_id == current_user.id)
@@ -193,7 +302,23 @@ async def sync_fitbit_bulk(
     # client error. Return gracefully (mirroring sync-fitbit-create-missing)
     # instead of raising 400, which would surface a spurious "partial sync".
     if not user_tokens or not user_tokens.fitbit_access_token:
-        return {"synced": 0, "not_found": 0, "total": 0, "skipped": "fitbit_not_connected"}
+        result = schemas.FitbitBulkSyncResponse(
+            skipped="fitbit_not_connected",
+            outcome=schemas.SyncOutcome.SKIPPED,
+            correlation_id=correlation_id,
+        )
+        _sync_log(
+            "fitbit_sync.completed",
+            correlation_id,
+            route,
+            outcome=result.outcome.value,
+            synced=0,
+            not_found=0,
+            failed=0,
+            total=0,
+            duration_ms=round((time.monotonic() - started_at) * 1000),
+        )
+        return result
 
     now = datetime.utcnow()
     synced_with_logid = db.query(models.FitbitData.workout_id).filter(
@@ -217,83 +342,244 @@ async def sync_fitbit_bulk(
         .all()
     )
 
-    synced, not_found = 0, 0
-    for workout in workouts:
+    not_found = 0
+    failed = 0
+    prepared = []
+    provider_failure = None
+    provider_failed_count = 0
+    for workout_index, workout in enumerate(workouts):
         try:
             activity = fitbit_utils.get_fitbit_activity(
-                db, user_tokens, workout.start_time, workout.end_time
+                db,
+                user_tokens,
+                workout.start_time,
+                workout.end_time,
+                required_activity_name="weights"
+                if fitbit_utils.is_weights_workout(workout)
+                else None,
+                strict=True,
+                correlation_id=correlation_id,
             )
             if not activity:
                 not_found += 1
                 continue
 
-            log_id = str(activity.get("logId", "")) or None
-            azm = fitbit_utils.extract_azm(activity)
-            has_gps = fitbit_utils.probe_has_gps(db, user_tokens, log_id or "") if log_id else False
-
-            existing_fd = workout.fitbit_data
-            if existing_fd:
-                existing_fd.fitbit_log_id = log_id
-                existing_fd.calories = activity.get("calories", 0)
-                existing_fd.heart_rate_avg = activity.get("averageHeartRate", 0)
-                existing_fd.duration_ms = activity.get("duration", 0)
-                existing_fd.distance_km = activity.get("distance", 0.0)
-                existing_fd.elevation_gain_m = activity.get("elevationGain", 0.0)
-                existing_fd.activity_name = activity.get("activityName", "Unknown")
-                existing_fd.azm_fat_burn = azm.get("fatBurnMinutes", 0)
-                existing_fd.azm_cardio = azm.get("cardioMinutes", 0)
-                existing_fd.azm_peak = azm.get("peakMinutes", 0)
-                existing_fd.has_gps = has_gps
-                fitbit_data = existing_fd
-            else:
-                fitbit_data = models.FitbitData(
-                    workout_id=workout.id,
-                    fitbit_log_id=log_id,
-                    calories=activity.get("calories", 0),
-                    heart_rate_avg=activity.get("averageHeartRate", 0),
-                    duration_ms=activity.get("duration", 0),
-                    distance_km=activity.get("distance", 0.0),
-                    elevation_gain_m=activity.get("elevationGain", 0.0),
-                    activity_name=activity.get("activityName", "Unknown"),
-                    azm_fat_burn=azm.get("fatBurnMinutes", 0),
-                    azm_cardio=azm.get("cardioMinutes", 0),
-                    azm_peak=azm.get("peakMinutes", 0),
-                    has_gps=has_gps,
+            try:
+                log_id = str(activity.get("logId", "")) or None
+                azm = fitbit_utils.extract_azm(activity)
+            except fitbit_utils.FitbitSyncFailure:
+                raise
+            except Exception:
+                failed += 1
+                continue
+            has_gps = (
+                fitbit_utils.probe_has_gps(
+                    db,
+                    user_tokens,
+                    log_id or "",
+                    strict=False,
+                    correlation_id=correlation_id,
                 )
+                if log_id
+                else False
+            )
+            prepared.append((workout, activity, azm, log_id, has_gps))
+        except fitbit_utils.FitbitSyncFailure as failure:
+            if failure.code == "FITBIT_ACTIVITY_PROCESSING_FAILED":
+                failed += 1
+                continue
+            if failure.retryable and prepared:
+                db.rollback()
+                provider_failure = failure
+                provider_failed_count = len(workouts) - workout_index
+                failed += provider_failed_count
+                break
+            db.rollback()
+            _raise_sync_failure(failure, correlation_id, route, started_at)
+        except Exception as error:
+            db.rollback()
+            failure = _processing_failure("FITBIT_MATCHING_FAILED")
+            _sync_log(
+                "fitbit_sync.failed",
+                correlation_id,
+                route,
+                stage=failure.stage,
+                code=failure.code,
+                http_status=failure.status_code,
+                retryable=False,
+                exception_type=type(error).__name__,
+                duration_ms=round((time.monotonic() - started_at) * 1000),
+            )
+            detail = schemas.SyncErrorDetail(
+                stage=failure.stage,
+                code=failure.code,
+                message=_SYNC_ERROR_MESSAGES[failure.code],
+                correlation_id=correlation_id,
+                retryable=False,
+            )
+            raise HTTPException(status_code=500, detail=detail.model_dump()) from None
+
+    try:
+        for workout, activity, azm, log_id, has_gps in prepared:
+            fitbit_data = workout.fitbit_data
+            if fitbit_data is None:
+                fitbit_data = models.FitbitData(workout_id=workout.id)
                 db.add(fitbit_data)
-                db.flush()
                 workout.fitbit_data = fitbit_data
+            fitbit_data.fitbit_log_id = log_id
+            fitbit_data.calories = activity.get("calories", 0)
+            fitbit_data.heart_rate_avg = activity.get("averageHeartRate", 0)
+            fitbit_data.duration_ms = activity.get("duration", 0)
+            fitbit_data.distance_km = activity.get("distance", 0.0)
+            fitbit_data.elevation_gain_m = activity.get("elevationGain", 0.0)
+            fitbit_data.activity_name = activity.get("activityName", "Unknown")
+            fitbit_data.azm_fat_burn = azm.get("fatBurnMinutes", 0)
+            fitbit_data.azm_cardio = azm.get("cardioMinutes", 0)
+            fitbit_data.azm_peak = azm.get("peakMinutes", 0)
+            fitbit_data.has_gps = has_gps
+        db.flush()
+        db.commit()
+    except Exception as error:
+        db.rollback()
+        _raise_sync_failure(
+            _persistence_failure(),
+            correlation_id,
+            route,
+            started_at,
+            type(error).__name__,
+        )
 
-            synced += 1
-        except Exception as e:
-            logger.error("Fitbit bulk sync error for workout %s: %s", workout.id, e)
-            not_found += 1
+    outcome = (
+        schemas.SyncOutcome.PARTIAL
+        if failed
+        else schemas.SyncOutcome.SUCCESS
+        if prepared
+        else schemas.SyncOutcome.NO_DATA
+    )
+    issues = []
+    processing_failed = failed - provider_failed_count
+    if processing_failed:
+        issues.append(
+            schemas.SyncIssue(
+                stage=schemas.ServerSyncStage.PROCESSING,
+                code="FITBIT_ACTIVITY_PROCESSING_FAILED",
+                retryable=False,
+                count=processing_failed,
+            )
+        )
+    if provider_failure is not None:
+        issues.append(
+            schemas.SyncIssue(
+                stage=provider_failure.stage,
+                code=provider_failure.code,
+                retryable=True,
+                count=provider_failed_count,
+            )
+        )
+    result = schemas.FitbitBulkSyncResponse(
+        synced=len(prepared),
+        not_found=not_found,
+        total=len(workouts),
+        failed=failed,
+        outcome=outcome,
+        correlation_id=correlation_id,
+        issues=issues,
+    )
+    _sync_log(
+        "fitbit_sync.completed",
+        correlation_id,
+        route,
+        outcome=outcome.value,
+        synced=len(prepared),
+        not_found=not_found,
+        failed=failed,
+        total=len(workouts),
+        duration_ms=round((time.monotonic() - started_at) * 1000),
+    )
+    return result
 
-    db.commit()
-    return {"synced": synced, "not_found": not_found, "total": len(workouts)}
 
-
-@router.post("/sync-fitbit-create-missing", response_model=dict)
+@router.post(
+    "/sync-fitbit-create-missing",
+    response_model=schemas.FitbitCreateMissingResponse,
+    responses={
+        424: {"model": schemas.SyncErrorResponse},
+        500: {"model": schemas.SyncErrorResponse},
+        502: {"model": schemas.SyncErrorResponse},
+        503: {"model": schemas.SyncErrorResponse},
+        504: {"model": schemas.SyncErrorResponse},
+    },
+)
 async def sync_fitbit_create_missing(
     days: int = 30,
+    x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
     """Fetch recent Fitbit activities and create workouts for any without a DB match."""
+    correlation_id = _canonical_correlation_id(x_correlation_id)
+    route = "sync_fitbit_create_missing"
+    started_at = time.monotonic()
+    _sync_log("fitbit_sync.started", correlation_id, route)
     user_tokens = (
         db.query(models.UserTokens)
         .filter(models.UserTokens.user_id == current_user.id)
         .first()
     )
     if not user_tokens or not user_tokens.fitbit_access_token:
-        return {"created": 0, "created_activities": []}
+        result = schemas.FitbitCreateMissingResponse(
+            outcome=schemas.SyncOutcome.SKIPPED,
+            correlation_id=correlation_id,
+        )
+        _sync_log(
+            "fitbit_sync.completed",
+            correlation_id,
+            route,
+            outcome=result.outcome.value,
+            created=0,
+            failed=0,
+            duration_ms=round((time.monotonic() - started_at) * 1000),
+        )
+        return result
 
-    pending = _collect_pending_fitbit_activities(db, user_tokens, current_user.id, days)
-    if not pending:
-        return {"created": 0, "created_activities": []}
+    processing_failures = []
+    try:
+        pending = _collect_pending_fitbit_activities(
+            db,
+            user_tokens,
+            current_user.id,
+            days,
+            strict=True,
+            correlation_id=correlation_id,
+            processing_failures=processing_failures,
+        )
+    except fitbit_utils.FitbitSyncFailure as failure:
+        db.rollback()
+        _raise_sync_failure(failure, correlation_id, route, started_at)
+    except Exception as error:
+        db.rollback()
+        failure = _processing_failure("FITBIT_MATCHING_FAILED")
+        _sync_log(
+            "fitbit_sync.failed",
+            correlation_id,
+            route,
+            stage=failure.stage,
+            code=failure.code,
+            http_status=500,
+            retryable=False,
+            exception_type=type(error).__name__,
+            duration_ms=round((time.monotonic() - started_at) * 1000),
+        )
+        detail = schemas.SyncErrorDetail(
+            stage=failure.stage,
+            code=failure.code,
+            message=_SYNC_ERROR_MESSAGES[failure.code],
+            correlation_id=correlation_id,
+            retryable=False,
+        )
+        raise HTTPException(status_code=500, detail=detail.model_dump()) from None
 
-    created = 0
-    created_activities = []
+    prepared = []
     for activity in pending:
         try:
             act_start = (
@@ -303,44 +589,59 @@ async def sync_fitbit_create_missing(
             )
             act_end = act_start + timedelta(milliseconds=activity.get("duration", 0))
         except Exception:
+            processing_failures.append("FITBIT_ACTIVITY_PROCESSING_FAILED")
             continue
 
-        activity_name = _resolve_activity_name(activity)
-        workout = models.Workout(
-            user_id=current_user.id,
-            start_time=act_start,
-            end_time=act_end,
-            title=activity_name,
-        )
-        db.add(workout)
-        db.flush()
-
-        new_log_id = str(activity.get("logId", ""))
-        azm = fitbit_utils.extract_azm(activity)
-        fitbit_data = models.FitbitData(
-            workout_id=workout.id,
-            fitbit_log_id=new_log_id,
-            calories=activity.get("calories", 0),
-            heart_rate_avg=activity.get("averageHeartRate", 0),
-            duration_ms=activity.get("duration", 0),
-            distance_km=activity.get("distance", 0.0),
-            elevation_gain_m=activity.get("elevationGain", 0.0),
-            activity_name=activity_name,
-            azm_fat_burn=azm.get("fatBurnMinutes", 0),
-            azm_cardio=azm.get("cardioMinutes", 0),
-            azm_peak=azm.get("peakMinutes", 0),
-            has_gps=fitbit_utils.probe_has_gps(db, user_tokens, new_log_id),
-        )
-        db.add(fitbit_data)
-        db.flush()
-        workout.fitbit_data = fitbit_data
-
-        act_name_lower = activity_name.lower()
-        if "weights" not in act_name_lower and "walk" not in act_name_lower:
-            cardio_ex = (
-                db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
+        try:
+            activity_name = _resolve_activity_name(activity)
+            new_log_id = str(activity.get("logId", ""))
+            azm = fitbit_utils.extract_azm(activity)
+        except Exception:
+            processing_failures.append("FITBIT_ACTIVITY_PROCESSING_FAILED")
+            continue
+        try:
+            has_gps = fitbit_utils.probe_has_gps(
+                db,
+                user_tokens,
+                new_log_id,
+                strict=False,
+                correlation_id=correlation_id,
             )
-            if cardio_ex:
+        except fitbit_utils.FitbitSyncFailure as failure:
+            db.rollback()
+            _raise_sync_failure(failure, correlation_id, route, started_at)
+        prepared.append((activity, activity_name, act_start, act_end, new_log_id, azm, has_gps))
+
+    cardio_ex = db.query(models.Exercise).filter(models.Exercise.name == "cardio").first()
+    created_activities = []
+    try:
+        for activity, activity_name, act_start, act_end, new_log_id, azm, has_gps in prepared:
+            workout = models.Workout(
+                user_id=current_user.id,
+                start_time=act_start,
+                end_time=act_end,
+                title=activity_name,
+            )
+            db.add(workout)
+            db.flush()
+            fitbit_data = models.FitbitData(
+                workout_id=workout.id,
+                fitbit_log_id=new_log_id,
+                calories=activity.get("calories", 0),
+                heart_rate_avg=activity.get("averageHeartRate", 0),
+                duration_ms=activity.get("duration", 0),
+                distance_km=activity.get("distance", 0.0),
+                elevation_gain_m=activity.get("elevationGain", 0.0),
+                activity_name=activity_name,
+                azm_fat_burn=azm.get("fatBurnMinutes", 0),
+                azm_cardio=azm.get("cardioMinutes", 0),
+                azm_peak=azm.get("peakMinutes", 0),
+                has_gps=has_gps,
+            )
+            db.add(fitbit_data)
+            workout.fitbit_data = fitbit_data
+            act_name_lower = activity_name.lower()
+            if cardio_ex and "weights" not in act_name_lower and "walk" not in act_name_lower:
                 db.add(
                     models.ExerciseSet(
                         workout_id=workout.id,
@@ -350,14 +651,59 @@ async def sync_fitbit_create_missing(
                         is_completed=True,
                     )
                 )
-
-        created += 1
-        created_activities.append(
-            {"activity_name": activity_name, "date": act_start.strftime("%Y-%m-%d %H:%M")}
+            created_activities.append(
+                {"activity_name": activity_name, "date": act_start.strftime("%Y-%m-%d %H:%M")}
+            )
+        db.flush()
+        db.commit()
+    except Exception as error:
+        db.rollback()
+        _raise_sync_failure(
+            _persistence_failure(),
+            correlation_id,
+            route,
+            started_at,
+            type(error).__name__,
         )
 
-    db.commit()
-    return {"created": created, "created_activities": created_activities}
+    failed = len(processing_failures)
+    outcome = (
+        schemas.SyncOutcome.PARTIAL
+        if failed
+        else schemas.SyncOutcome.SUCCESS
+        if prepared
+        else schemas.SyncOutcome.NO_DATA
+    )
+    issues = (
+        [
+            schemas.SyncIssue(
+                stage=schemas.ServerSyncStage.PROCESSING,
+                code="FITBIT_ACTIVITY_PROCESSING_FAILED",
+                retryable=False,
+                count=failed,
+            )
+        ]
+        if failed
+        else []
+    )
+    result = schemas.FitbitCreateMissingResponse(
+        created=len(prepared),
+        created_activities=created_activities,
+        failed=failed,
+        outcome=outcome,
+        correlation_id=correlation_id,
+        issues=issues,
+    )
+    _sync_log(
+        "fitbit_sync.completed",
+        correlation_id,
+        route,
+        outcome=outcome.value,
+        created=len(prepared),
+        failed=failed,
+        duration_ms=round((time.monotonic() - started_at) * 1000),
+    )
+    return result
 
 
 @router.post("/{workout_id}/sync-fitbit", response_model=schemas.FitbitData)
@@ -387,7 +733,13 @@ async def sync_fitbit_to_workout(
         raise HTTPException(status_code=400, detail="Fitbit not connected or token invalid")
 
     activity = fitbit_utils.get_fitbit_activity(
-        db, user_tokens, db_workout.start_time, db_workout.end_time
+        db,
+        user_tokens,
+        db_workout.start_time,
+        db_workout.end_time,
+        required_activity_name="weights"
+        if fitbit_utils.is_weights_workout(db_workout)
+        else None,
     )
     if not activity:
         raise HTTPException(
@@ -515,8 +867,11 @@ async def sync_gps_flags(
             if fitbit_utils.probe_has_gps(db, user_tokens, fd.fitbit_log_id):
                 fd.has_gps = True
                 updated += 1
-        except Exception as e:
-            logger.warning("GPS probe failed for log_id %s: %s", fd.fitbit_log_id, e)
+        except Exception as error:
+            logger.warning(
+                "Fitbit GPS probe failed",
+                extra={"exception_type": type(error).__name__},
+            )
 
     db.commit()
     return {"updated": updated, "checked": checked}
