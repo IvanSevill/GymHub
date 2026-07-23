@@ -1,9 +1,11 @@
 import logging
 import re
+import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session, joinedload
@@ -14,6 +16,83 @@ from ..services.google_calendar import get_google_credentials, update_google_cal
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
+
+_CALENDAR_SYNC_ERROR_MESSAGES = {
+    "GOOGLE_CALENDAR_NOT_CONNECTED": "Google Calendar is not connected.",
+    "GOOGLE_CALENDAR_REAUTH_REQUIRED": "Google Calendar authorization must be renewed.",
+    "GOOGLE_CALENDAR_API_RATE_LIMITED": "Google Calendar is temporarily rate limited.",
+    "GOOGLE_CALENDAR_API_UNAVAILABLE": "Google Calendar is temporarily unavailable.",
+    "GOOGLE_CALENDAR_API_TIMEOUT": "Google Calendar request timed out.",
+    "GOOGLE_CALENDAR_API_REJECTED": "Google Calendar rejected the request.",
+}
+
+
+def _canonical_correlation_id(value: Optional[str]) -> str:
+    if value:
+        try:
+            parsed = uuid.UUID(value)
+            if parsed.version == 4 and str(parsed) == value:
+                return value
+        except (ValueError, AttributeError):
+            pass
+    return str(uuid.uuid4())
+
+
+def _calendar_sync_log(event: str, correlation_id: str, **fields) -> None:
+    logger.info(
+        event,
+        extra={
+            "event": event,
+            "correlation_id": correlation_id,
+            "route": "/workouts/sync-all",
+            **fields,
+        },
+    )
+
+
+def _raise_calendar_sync_failure(
+    *,
+    stage: str,
+    code: str,
+    status_code: int,
+    retryable: bool,
+    correlation_id: str,
+    started_at: float,
+    provider_status: Optional[int] = None,
+    exception_type: Optional[str] = None,
+) -> None:
+    fields = {
+        "stage": stage,
+        "code": code,
+        "http_status": status_code,
+        "retryable": retryable,
+        "duration_ms": round((time.monotonic() - started_at) * 1000),
+    }
+    if provider_status is not None:
+        fields["provider_status"] = provider_status
+    if exception_type is not None:
+        fields["exception_type"] = exception_type
+    _calendar_sync_log("calendar_sync.failed", correlation_id, **fields)
+    detail = schemas.SyncErrorDetail(
+        stage=stage,
+        code=code,
+        message=_CALENDAR_SYNC_ERROR_MESSAGES[code],
+        correlation_id=correlation_id,
+        retryable=retryable,
+    )
+    raise HTTPException(status_code=status_code, detail=detail.model_dump())
+
+
+def _calendar_provider_diagnostic(status_code: Optional[int]) -> tuple[str, bool]:
+    if status_code in {401, 403}:
+        return "GOOGLE_CALENDAR_REAUTH_REQUIRED", False
+    if status_code == 429:
+        return "GOOGLE_CALENDAR_API_RATE_LIMITED", True
+    if status_code in {408, 504}:
+        return "GOOGLE_CALENDAR_API_TIMEOUT", True
+    if status_code is not None and 400 <= status_code < 500:
+        return "GOOGLE_CALENDAR_API_REJECTED", False
+    return "GOOGLE_CALENDAR_API_UNAVAILABLE", True
 
 
 def _expand_set_values(value: str) -> List[str]:
@@ -324,6 +403,11 @@ async def update_workout(
                 )
             )
 
+    db.flush()
+    db.refresh(db_workout)
+    
+    requires_weights_activity = fitbit_utils.is_weights_workout(db_workout)
+
     user_tokens = (
         db.query(models.UserTokens)
         .filter(models.UserTokens.user_id == current_user.id)
@@ -332,7 +416,13 @@ async def update_workout(
     if user_tokens and user_tokens.fitbit_access_token:
         try:
             activity = fitbit_utils.get_fitbit_activity(
-                db, user_tokens, db_workout.start_time, db_workout.end_time
+                db,
+                user_tokens,
+                db_workout.start_time,
+                db_workout.end_time,
+                required_activity_name="weights"
+                if requires_weights_activity
+                else None,
             )
             if activity:
                 fitbit_data = (
@@ -539,34 +629,72 @@ async def test_parse_calendar_events(
 
 @router.get("/sync-all", response_model=dict)
 async def sync_all_from_calendar(
+    x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(database.get_db),
 ):
     """Synchronize all relevant workouts from Google Calendar for the current user."""
+    correlation_id = _canonical_correlation_id(x_correlation_id)
+    started_at = time.monotonic()
+    _calendar_sync_log("calendar_sync.started", correlation_id)
     user_tokens = (
         db.query(models.UserTokens)
         .filter(models.UserTokens.user_id == current_user.id)
         .first()
     )
     if not user_tokens:
-        raise HTTPException(
+        _raise_calendar_sync_failure(
+            stage="google_calendar",
+            code="GOOGLE_CALENDAR_NOT_CONNECTED",
             status_code=400,
-            detail="Google Calendar not connected: No user tokens found.",
+            retryable=False,
+            correlation_id=correlation_id,
+            started_at=started_at,
         )
     if not user_tokens.google_access_token:
-        raise HTTPException(
+        _raise_calendar_sync_failure(
+            stage="google_calendar",
+            code="GOOGLE_CALENDAR_REAUTH_REQUIRED",
             status_code=400,
-            detail="Google Calendar not connected: Missing access token.",
+            retryable=False,
+            correlation_id=correlation_id,
+            started_at=started_at,
         )
 
-    creds = get_google_credentials(user_tokens, db)
+    try:
+        creds = get_google_credentials(user_tokens, db)
+    except Exception as e:
+        _raise_calendar_sync_failure(
+            stage="google_calendar",
+            code="GOOGLE_CALENDAR_API_UNAVAILABLE",
+            status_code=500,
+            retryable=True,
+            correlation_id=correlation_id,
+            started_at=started_at,
+            exception_type=type(e).__name__,
+        )
     if not creds:
-        raise HTTPException(
+        _raise_calendar_sync_failure(
+            stage="google_calendar",
+            code="GOOGLE_CALENDAR_REAUTH_REQUIRED",
             status_code=400,
-            detail="Could not refresh Google credentials. Please reconnect your Google account.",
+            retryable=False,
+            correlation_id=correlation_id,
+            started_at=started_at,
         )
 
-    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    try:
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    except Exception as e:
+        _raise_calendar_sync_failure(
+            stage="google_calendar",
+            code="GOOGLE_CALENDAR_API_UNAVAILABLE",
+            status_code=500,
+            retryable=True,
+            correlation_id=correlation_id,
+            started_at=started_at,
+            exception_type=type(e).__name__,
+        )
     calendar_id = user_tokens.selected_calendar_id or "primary"
 
     all_events = []
@@ -598,7 +726,18 @@ async def sync_all_from_calendar(
                 is_incremental = False
                 all_events = []
             else:
-                raise HTTPException(status_code=500, detail=f"Calendar sync error: {e}")
+                provider_status = getattr(e.resp, "status", None)
+                code, retryable = _calendar_provider_diagnostic(provider_status)
+                _raise_calendar_sync_failure(
+                    stage="google_calendar",
+                    code=code,
+                    status_code=500,
+                    retryable=retryable,
+                    correlation_id=correlation_id,
+                    started_at=started_at,
+                    provider_status=provider_status,
+                    exception_type=type(e).__name__,
+                )
 
     if not is_incremental:
         sync_days = 730
@@ -621,8 +760,19 @@ async def sync_all_from_calendar(
                 if not page_token:
                     break
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Failed to fetch calendar events: {str(e)}"
+            provider_status = (
+                getattr(e.resp, "status", None) if isinstance(e, HttpError) else None
+            )
+            code, retryable = _calendar_provider_diagnostic(provider_status)
+            _raise_calendar_sync_failure(
+                stage="google_calendar",
+                code=code,
+                status_code=500,
+                retryable=retryable,
+                correlation_id=correlation_id,
+                started_at=started_at,
+                provider_status=provider_status,
+                exception_type=type(e).__name__,
             )
 
     processed_count = 0
@@ -754,7 +904,17 @@ async def sync_all_from_calendar(
                 )
                 sets_added_to_workout += 1
 
+        stale_walk_detected = False
         if parsed_fitbit_data:
+            # If the calendar description was populated by a previous sync with a
+            # stale activity_name (e.g. "Walk" from the original bug), don't blindly
+            # restore it for weights workouts — the bulk sync will determine it.
+            if sets_added_to_workout > 0:
+                parsed_activity = (parsed_fitbit_data.get("activity_name") or "").lower()
+                if parsed_activity == "walk":
+                    stale_walk_detected = True
+                    parsed_fitbit_data.pop("activity_name", None)
+
             existing_fd = workout.fitbit_data
             if existing_fd:
                 existing_fd.calories = parsed_fitbit_data.get("calories", existing_fd.calories)
@@ -770,9 +930,13 @@ async def sync_all_from_calendar(
                 existing_fd.elevation_gain_m = parsed_fitbit_data.get(
                     "elevation_gain_m", existing_fd.elevation_gain_m
                 )
-                existing_fd.activity_name = parsed_fitbit_data.get(
-                    "activity_name", existing_fd.activity_name
-                )
+                # For weights workouts, reset a stale "Walk" so it's not preserved
+                if sets_added_to_workout > 0 and existing_fd.activity_name and existing_fd.activity_name.lower() == "walk":
+                    existing_fd.activity_name = "Unknown"
+                else:
+                    existing_fd.activity_name = parsed_fitbit_data.get(
+                        "activity_name", existing_fd.activity_name
+                    )
                 existing_fd.azm_fat_burn = parsed_fitbit_data.get(
                     "azm_fat_burn", existing_fd.azm_fat_burn
                 )
@@ -783,6 +947,9 @@ async def sync_all_from_calendar(
                     "azm_peak", existing_fd.azm_peak
                 )
             else:
+                new_activity_name = parsed_fitbit_data.get("activity_name", "Unknown")
+                if sets_added_to_workout > 0 and new_activity_name.lower() == "walk":
+                    new_activity_name = "Unknown"
                 db.add(
                     models.FitbitData(
                         workout_id=workout.id,
@@ -791,11 +958,35 @@ async def sync_all_from_calendar(
                         duration_ms=parsed_fitbit_data.get("duration_ms", 0),
                         distance_km=parsed_fitbit_data.get("distance_km", 0.0),
                         elevation_gain_m=parsed_fitbit_data.get("elevation_gain_m", 0.0),
-                        activity_name=parsed_fitbit_data.get("activity_name", "Unknown"),
+                        activity_name=new_activity_name,
                         azm_fat_burn=parsed_fitbit_data.get("azm_fat_burn", 0),
                         azm_cardio=parsed_fitbit_data.get("azm_cardio", 0),
                         azm_peak=parsed_fitbit_data.get("azm_peak", 0),
                     )
+                )
+
+        # Retroactive Calendar fix: if the Calendar event has a stale "Walk"
+        # description but the workout already has fitbit_log_id in the DB
+        # (meaning the bulk sync already matched it to "Weights"), push the
+        # corrected description back to Google Calendar.
+        if (
+            stale_walk_detected
+            and workout.fitbit_data
+            and workout.fitbit_data.fitbit_log_id
+        ):
+            try:
+                update_google_calendar_event(db, user_tokens, workout, workout.fitbit_data)
+                logger.info(
+                    "Calendar sync: corrected stale Calendar description for workout %s (%s) → %s",
+                    workout.id,
+                    workout.title,
+                    workout.fitbit_data.activity_name or "Unknown",
+                )
+            except Exception as cal_err:
+                logger.warning(
+                    "Calendar sync: failed to correct description for workout %s: %s",
+                    workout.id,
+                    cal_err,
                 )
 
         if sets_added_to_workout > 0 or parsed_fitbit_data:
@@ -825,7 +1016,15 @@ async def sync_all_from_calendar(
     msg = f"Successfully synced {processed_count} workouts from Google Calendar ({sync_type})"
     if deleted_count > 0:
         msg += f" (deleted {deleted_count} orphaned workouts)"
-    return {"message": msg}
+    _calendar_sync_log(
+        "calendar_sync.completed",
+        correlation_id,
+        duration_ms=round((time.monotonic() - started_at) * 1000),
+        sync_type=sync_type,
+        processed=processed_count,
+        deleted=deleted_count,
+    )
+    return {"message": msg, "correlation_id": correlation_id}
 
 
 @router.get("/cardio-pending", response_model=List[dict])

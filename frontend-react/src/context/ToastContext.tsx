@@ -9,7 +9,7 @@ interface Toast {
 }
 
 interface ToastContextValue {
-  addToast: (message: string, type?: ToastType) => void;
+  addToast: (message: string, type?: ToastType, duration?: number) => void;
   removeToast: (id: number) => void;
   toasts: Toast[];
 }
@@ -28,10 +28,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const addToast = useCallback(
-    (message: string, type: ToastType = "info") => {
+    (message: string, type: ToastType = "info", duration = 4000) => {
       const id = nextId++;
       setToasts((prev) => [...prev, { id, message, type }]);
-      setTimeout(() => removeToast(id), 4000);
+      setTimeout(() => removeToast(id), duration);
     },
     [removeToast],
   );

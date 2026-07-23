@@ -1,4 +1,116 @@
 import api from "./api";
+import {
+  invalidSyncResponse,
+  isCanonicalUuid,
+  type ServerSyncStage,
+} from "./syncDiagnostics";
+
+export type SyncOutcome = "success" | "partial" | "no_data" | "skipped";
+
+export interface SyncIssue {
+  stage: ServerSyncStage;
+  code: string;
+  retryable: boolean;
+  count?: number;
+}
+
+interface SyncResponseBase {
+  failed: number;
+  outcome: SyncOutcome;
+  correlation_id: string;
+  issues: SyncIssue[];
+  message?: string;
+}
+
+export interface FitbitBulkSyncResponse extends SyncResponseBase {
+  synced: number;
+  not_found: number;
+  total: number;
+  skipped?: string;
+}
+
+export interface CreatedFitbitActivity {
+  activity_name: string;
+  date: string;
+}
+
+export interface FitbitCreateMissingResponse extends SyncResponseBase {
+  created: number;
+  created_activities: CreatedFitbitActivity[];
+}
+
+const SYNC_OUTCOMES = new Set<SyncOutcome>([
+  "success",
+  "partial",
+  "no_data",
+  "skipped",
+]);
+
+function isSyncIssue(value: unknown): value is SyncIssue {
+  if (!value || typeof value !== "object") return false;
+  const issue = value as Record<string, unknown>;
+  return (
+    [
+      "fitbit_auth",
+      "fitbit_api",
+      "processing",
+      "database_persistence",
+    ].includes(String(issue.stage)) &&
+    typeof issue.code === "string" &&
+    typeof issue.retryable === "boolean" &&
+    (issue.count === undefined || typeof issue.count === "number")
+  );
+}
+
+function isSyncResponseBase(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const response = value as Record<string, unknown>;
+  return (
+    typeof response.failed === "number" &&
+    typeof response.outcome === "string" &&
+    SYNC_OUTCOMES.has(response.outcome as SyncOutcome) &&
+    isCanonicalUuid(response.correlation_id) &&
+    Array.isArray(response.issues) &&
+    response.issues.every(isSyncIssue)
+  );
+}
+
+function validateBulkResponse(
+  value: unknown,
+  correlationId: string,
+): FitbitBulkSyncResponse {
+  if (
+    !isSyncResponseBase(value) ||
+    typeof value.synced !== "number" ||
+    typeof value.not_found !== "number" ||
+    typeof value.total !== "number"
+  ) {
+    throw invalidSyncResponse(correlationId);
+  }
+  return value as unknown as FitbitBulkSyncResponse;
+}
+
+function validateCreateResponse(
+  value: unknown,
+  correlationId: string,
+): FitbitCreateMissingResponse {
+  if (
+    !isSyncResponseBase(value) ||
+    typeof value.created !== "number" ||
+    !Array.isArray(value.created_activities) ||
+    !value.created_activities.every(
+      (activity) =>
+        activity !== null &&
+        typeof activity === "object" &&
+        typeof (activity as Record<string, unknown>).activity_name ===
+          "string" &&
+        typeof (activity as Record<string, unknown>).date === "string",
+    )
+  ) {
+    throw invalidSyncResponse(correlationId);
+  }
+  return value as unknown as FitbitCreateMissingResponse;
+}
 
 export interface ExerciseSet {
   id?: string;
@@ -99,27 +211,39 @@ export const workoutService = {
     const response = await api.post(`/workouts/${id}/sync-fitbit`);
     return response.data;
   },
-  syncAllFromCalendar: async (): Promise<{ message: string }> => {
-    const response = await api.get<{ message: string }>("/workouts/sync-all");
+  syncAllFromCalendar: async (
+    correlationId?: string,
+  ): Promise<{ message: string; correlation_id?: string }> => {
+    const response = await api.get<{
+      message: string;
+      correlation_id?: string;
+    }>("/workouts/sync-all", {
+      headers: correlationId
+        ? { "X-Correlation-ID": correlationId }
+        : undefined,
+    });
     return response.data;
   },
-  syncFitbitBulk: async (): Promise<{
-    synced: number;
-    not_found: number;
-    total: number;
-  }> => {
-    const response = await api.post<{
-      synced: number;
-      not_found: number;
-      total: number;
-    }>("/workouts/sync-fitbit-bulk");
-    return response.data;
-  },
-  syncFitbitCreate: async (days: number = 30): Promise<{ created: number }> => {
-    const response = await api.post<{ created: number }>(
-      `/workouts/sync-fitbit-create-missing?days=${days}`,
+  syncFitbitBulk: async (
+    correlationId: string,
+  ): Promise<FitbitBulkSyncResponse> => {
+    const response = await api.post<unknown>(
+      "/workouts/sync-fitbit-bulk",
+      undefined,
+      { headers: { "X-Correlation-ID": correlationId } },
     );
-    return response.data;
+    return validateBulkResponse(response.data, correlationId);
+  },
+  syncFitbitCreate: async (
+    correlationId: string,
+    days: number = 30,
+  ): Promise<FitbitCreateMissingResponse> => {
+    const response = await api.post<unknown>(
+      `/workouts/sync-fitbit-create-missing?days=${days}`,
+      undefined,
+      { headers: { "X-Correlation-ID": correlationId } },
+    );
+    return validateCreateResponse(response.data, correlationId);
   },
   getRoute: async (
     workoutId: string,

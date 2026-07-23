@@ -35,6 +35,7 @@ _COLUMN_MIGRATIONS = [
     ("exercises", "image_url", "TEXT"),
     ("users", "height_cm", "FLOAT"),
     ("chat_usage", "window_start", "TIMESTAMP"),
+    ("fitbit_data", "calendar_fix_applied", "BOOLEAN"),
 ]
 
 

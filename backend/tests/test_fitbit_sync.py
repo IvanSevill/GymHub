@@ -1,10 +1,12 @@
 """Tests for fitbit_sync.py — route handlers and _activity_matches_any_workout branches."""
+import uuid
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app import models
+from app.fitbit_utils import FitbitSyncFailure
 from app.routers.fitbit_sync import _activity_matches_any_workout
 
 
@@ -164,7 +166,7 @@ async def test_sync_fitbit_bulk_no_matching_activity(client, auth_headers, db):
 async def test_sync_fitbit_bulk_creates_fitbit_data(client, auth_headers, db):
     user = _get_user(db)
     _fitbit_tokens(db, user.id)
-    _make_workout(db, user.id)
+    workout = _make_workout(db, user.id)
     mock_activity = {
         "logId": 111222,
         "calories": 350,
@@ -181,6 +183,14 @@ async def test_sync_fitbit_bulk_creates_fitbit_data(client, auth_headers, db):
         resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["synced"] == 1
+    db.expire_all()
+    stored = (
+        db.query(models.FitbitData)
+        .filter(models.FitbitData.workout_id == workout.id)
+        .one()
+    )
+    assert stored.fitbit_log_id == "111222"
+    assert stored.activity_name == "Weights"
 
 
 @pytest.mark.anyio
@@ -210,6 +220,207 @@ async def test_sync_fitbit_bulk_updates_existing_fitbit_data(client, auth_header
         resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["synced"] == 1
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_bulk_round_trips_correlation_and_logs(
+    client, auth_headers, db, caplog
+):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    correlation_id = str(uuid.uuid4())
+    with caplog.at_level("INFO", logger="app.routers.fitbit_sync"):
+        resp = await client.post(
+            "/workouts/sync-fitbit-bulk",
+            headers={**auth_headers, "X-Correlation-ID": correlation_id},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["correlation_id"] == correlation_id
+    assert resp.json()["outcome"] == "no_data"
+    records = [record for record in caplog.records if hasattr(record, "correlation_id")]
+    assert [record.event for record in records] == [
+        "fitbit_sync.started",
+        "fitbit_sync.completed",
+    ]
+    assert all(record.correlation_id == correlation_id for record in records)
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_bulk_replaces_invalid_correlation(client, auth_headers):
+    resp = await client.post(
+        "/workouts/sync-fitbit-bulk",
+        headers={**auth_headers, "X-Correlation-ID": "not-safe arbitrary log text"},
+    )
+
+    assert resp.status_code == 200
+    assert str(uuid.UUID(resp.json()["correlation_id"])) == resp.json()["correlation_id"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("failure",),
+    [
+        (FitbitSyncFailure("fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False),),
+        (FitbitSyncFailure("fitbit_api", "FITBIT_API_RATE_LIMITED", 503, True, 429),),
+        (FitbitSyncFailure("processing", "FITBIT_RESPONSE_INVALID", 502, False),),
+    ],
+)
+async def test_sync_fitbit_bulk_maps_safe_typed_failures(
+    client, auth_headers, db, failure
+):
+    """Provider failures interrupt the bulk sync; the endpoint returns PARTIAL
+    with a 200 status so the frontend can surface the issue via the response
+    body rather than an HTTP-level error."""
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    _make_workout(db, user.id)
+    correlation_id = str(uuid.uuid4())
+    with patch(
+        "app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity",
+        side_effect=failure,
+    ):
+        resp = await client.post(
+            "/workouts/sync-fitbit-bulk",
+            headers={**auth_headers, "X-Correlation-ID": correlation_id},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["outcome"] == "partial"
+    assert len(body["issues"]) >= 1
+    issue = body["issues"][0]
+    assert issue["code"] == failure.code
+    assert issue["retryable"] is failure.retryable
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_bulk_partial_processing_persists_valid_data(
+    client, auth_headers, db
+):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    _make_workout(db, user.id, start=datetime(2026, 6, 11, 10), end=datetime(2026, 6, 11, 11))
+    valid_workout = _make_workout(db, user.id)
+    valid = {
+        "logId": 123,
+        "duration": 1000,
+        "activityName": "Weights",
+    }
+    processing_failure = FitbitSyncFailure(
+        "processing", "FITBIT_ACTIVITY_PROCESSING_FAILED", 500, False
+    )
+    with (
+        patch(
+            "app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity",
+            side_effect=[processing_failure, valid],
+        ),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+    ):
+        resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] == "partial"
+    assert resp.json()["failed"] == 1
+    assert resp.json()["synced"] == 1
+    assert resp.json()["issues"][0]["count"] == 1
+    db.expire_all()
+    assert (
+        db.query(models.FitbitData)
+        .filter(models.FitbitData.workout_id == valid_workout.id)
+        .one()
+        .fitbit_log_id
+        == "123"
+    )
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_bulk_aborts_after_provider_failure(client, auth_headers, db):
+    """Provider failures abort the main loop immediately (only calls
+    get_fitbit_activity once) and return PARTIAL with 200."""
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    _make_workout(db, user.id)
+    _make_workout(db, user.id, start=datetime(2026, 6, 11, 10), end=datetime(2026, 6, 11, 11))
+    failure = FitbitSyncFailure("fitbit_api", "FITBIT_API_UNAVAILABLE", 503, True)
+    with patch(
+        "app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", side_effect=failure
+    ) as get_activity:
+        resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] == "partial"
+    assert get_activity.call_count == 1
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_bulk_rolls_back_persistence_failure(
+    client, auth_headers, db, caplog
+):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    workout = _make_workout(db, user.id)
+    activity = {"logId": 456, "duration": 1000, "activityName": "Weights"}
+    original_flush = db.flush
+    flush_calls = 0
+
+    def fail_final_flush(*args, **kwargs):
+        nonlocal flush_calls
+        flush_calls += 1
+        if flush_calls == 1:
+            raise RuntimeError("SQL with private provider body")
+        return original_flush(*args, **kwargs)
+
+    caplog.set_level("INFO", logger="app.routers.fitbit_sync")
+    with (
+        patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=activity),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+        patch.object(db, "flush", side_effect=fail_final_flush),
+        patch.object(db, "rollback", wraps=db.rollback) as rollback,
+    ):
+        resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
+
+    assert resp.status_code == 500
+    assert resp.json()["detail"]["stage"] == "database_persistence"
+    assert "SQL" not in resp.text
+    rollback.assert_called()
+    failed_record = next(
+        record for record in caplog.records if getattr(record, "event", None) == "fitbit_sync.failed"
+    )
+    assert failed_record.exception_type == "RuntimeError"
+    assert "private provider body" not in caplog.text
+    db.expire_all()
+    assert (
+        db.query(models.FitbitData)
+        .filter(models.FitbitData.workout_id == workout.id)
+        .count()
+        == 0
+    )
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_bulk_completes_provider_work_before_staging(
+    client, auth_headers, db
+):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    _make_workout(db, user.id)
+    activity = {"logId": 789, "duration": 1000, "activityName": "Weights"}
+
+    def assert_no_staged_fitbit_data(*args, **kwargs):
+        assert db.query(models.FitbitData).count() == 0
+        return False
+
+    with (
+        patch("app.routers.fitbit_sync.fitbit_utils.get_fitbit_activity", return_value=activity),
+        patch(
+            "app.routers.fitbit_sync.fitbit_utils.probe_has_gps",
+            side_effect=assert_no_staged_fitbit_data,
+        ),
+    ):
+        resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
+
+    assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +528,95 @@ async def test_sync_fitbit_create_missing_invalid_start_time(client, auth_header
         resp = await client.post("/workouts/sync-fitbit-create-missing", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["created"] == 0
+    assert resp.json()["failed"] == 1
+    assert resp.json()["outcome"] == "partial"
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_create_missing_partial_persists_valid_activity(
+    client, auth_headers, db
+):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    activities = [
+        {"logId": 1, "activityName": "Run", "startTime": "invalid", "duration": 1000},
+        {
+            "logId": 2,
+            "activityName": "Run",
+            "startTime": "2026-06-10T07:00:00Z",
+            "duration": 1000,
+        },
+    ]
+    with (
+        patch(
+            "app.routers.fitbit_sync.fitbit_utils.get_fitbit_activities_range",
+            return_value=activities,
+        ),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+    ):
+        resp = await client.post("/workouts/sync-fitbit-create-missing", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["created"] == 1
+    assert resp.json()["failed"] == 1
+    assert resp.json()["outcome"] == "partial"
+    db.expire_all()
+    assert db.query(models.FitbitData).filter(models.FitbitData.fitbit_log_id == "2").count() == 1
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_create_missing_maps_provider_failure(
+    client, auth_headers, db
+):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    failure = FitbitSyncFailure("fitbit_api", "FITBIT_API_TIMEOUT", 504, True)
+    with patch(
+        "app.routers.fitbit_sync.fitbit_utils.get_fitbit_activities_range",
+        side_effect=failure,
+    ):
+        resp = await client.post("/workouts/sync-fitbit-create-missing", headers=auth_headers)
+
+    assert resp.status_code == 504
+    assert resp.json()["detail"]["code"] == "FITBIT_API_TIMEOUT"
+    assert resp.status_code != 401
+
+
+@pytest.mark.anyio
+async def test_sync_fitbit_create_missing_rolls_back_all_rows(client, auth_headers, db):
+    user = _get_user(db)
+    _fitbit_tokens(db, user.id)
+    activity = {
+        "logId": 3,
+        "activityName": "Run",
+        "startTime": "2026-06-10T07:00:00Z",
+        "duration": 1000,
+    }
+    original_flush = db.flush
+    flush_calls = 0
+
+    def fail_second_flush(*args, **kwargs):
+        nonlocal flush_calls
+        flush_calls += 1
+        if flush_calls == 2:
+            raise RuntimeError("private SQL text")
+        return original_flush(*args, **kwargs)
+
+    with (
+        patch(
+            "app.routers.fitbit_sync.fitbit_utils.get_fitbit_activities_range",
+            return_value=[activity],
+        ),
+        patch("app.routers.fitbit_sync.fitbit_utils.probe_has_gps", return_value=False),
+        patch.object(db, "flush", side_effect=fail_second_flush),
+    ):
+        resp = await client.post("/workouts/sync-fitbit-create-missing", headers=auth_headers)
+
+    assert resp.status_code == 500
+    assert resp.json()["detail"]["code"] == "FITBIT_PERSISTENCE_FAILED"
+    assert "private SQL" not in resp.text
+    db.expire_all()
+    assert db.query(models.FitbitData).filter(models.FitbitData.fitbit_log_id == "3").count() == 0
 
 
 # ---------------------------------------------------------------------------

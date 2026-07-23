@@ -17,18 +17,18 @@ docs/               Design docs, workflow guides, principles, new-implementation
 - **`main.py`** — FastAPI app, CORS middleware, global exception handler, router registration, startup column migrations.
 - **`database.py`** — SQLAlchemy engine (SQLite dev / PostgreSQL prod), `get_db` session dependency.
 - **`models.py`** — ORM models: `User`, `UserTokens` (Google + Fitbit tokens), `Workout`, `Muscle`, `Exercise` (includes `video_url_1`, `video_url_2`, `image_url`), `ExerciseSet`, `FitbitData`, `SleepLog`, `DailyHealth`, `ExerciseRequest`. All PKs are UUID strings.
-- **`schemas.py`** — Pydantic request/response schemas.
+- **`schemas.py`** — Pydantic request/response schemas, including additive Fitbit Calendar sync outcomes, issues, and safe error details.
 - **`auth.py`** — JWT creation/verification, `get_current_user` / `get_root_user` FastAPI dependencies, Google OAuth flow.
 - **`calendar_utils.py`** — Parse and generate Google Calendar event descriptions for workouts.
-- **`fitbit_utils.py`** — Fitbit OAuth token refresh and activity data fetching.
+- **`fitbit_utils.py`** — Fitbit OAuth token refresh and activity data fetching. Calendar sync routes opt into strict, typed provider diagnostics while other consumers retain compatibility behavior.
 - **`services/google_calendar.py`** — Google Calendar API client: create, update, and delete events.
 - **`routers/`**:
   - `auth_routes.py` — Google OAuth login, Fitbit OAuth connect/callback, register
-  - `workouts.py` — workout CRUD, Google Calendar sync, Fitbit import
+  - `workouts.py` — workout CRUD, correlated Google Calendar sync diagnostics, Fitbit import
   - `exercises.py` — exercise/muscle CRUD, media fetch (YouTube + Pexels), cache
   - `exercise_requests.py` — non-root users request new exercises; root approves/rejects
   - `analytics.py` — aggregated stats: KPIs, frequency, volume, PRs, Fitbit summary
-  - `fitbit_sync.py` — manual and scheduled Fitbit activity sync
+  - `fitbit_sync.py` — manual and scheduled Fitbit activity sync; Calendar bulk/create routes use canonical correlation IDs, provider-first processing, and explicit persistence rollback
   - `fitbit_health.py` — Fitbit health data: daily activity, sleep logs
 
 ---
@@ -37,9 +37,10 @@ docs/               Design docs, workflow guides, principles, new-implementation
 
 - **`App.tsx`** — React Router setup with `ProtectedRoute` (redirects to `/login` if unauthenticated; redirects to `CalendarSetup` if no calendar connected). `CALENDAR_CACHE_KEY` constant exported here.
 - **`context/AuthContext.tsx`** — Auth state: JWT in `localStorage`, `useAuth()` hook.
-- **`context/ToastContext.tsx`** — Global toast notifications, `useToast()` hook.
+- **`context/ToastContext.tsx`** — Global toast notifications with optional per-toast duration, `useToast()` hook.
 - **`context/ExerciseModalContext.tsx`** — Global exercise detail modal with in-memory cache, 4 states (loading/success/empty/error), `useExerciseModal()` hook.
-- **`services/`** — Axios-based API clients: `api.ts` (base client + 401 interceptor), `auth.ts`, `workout.ts`, `exercise.ts`, `analytics.ts`.
+- **`services/`** — Axios-based API clients: `api.ts` (base client + 401 interceptor), `auth.ts`, `workout.ts`, `exercise.ts`, `analytics.ts`. `syncDiagnostics.ts` validates correlation IDs, normalizes Google Calendar, Fitbit, persistence, HTTP, and UI sync failures, prioritizes issues, and selects safe Spanish copy.
+- **`test/setup.ts`** — Shared Vitest/jsdom cleanup for React Testing Library. Calendar diagnostics are covered at pure service, race-safe hook, and page orchestration boundaries.
 
 ### Pages (all protected unless noted)
 
