@@ -904,7 +904,17 @@ async def sync_all_from_calendar(
                 )
                 sets_added_to_workout += 1
 
+        stale_walk_detected = False
         if parsed_fitbit_data:
+            # If the calendar description was populated by a previous sync with a
+            # stale activity_name (e.g. "Walk" from the original bug), don't blindly
+            # restore it for weights workouts — the bulk sync will determine it.
+            if sets_added_to_workout > 0:
+                parsed_activity = (parsed_fitbit_data.get("activity_name") or "").lower()
+                if parsed_activity == "walk":
+                    stale_walk_detected = True
+                    parsed_fitbit_data.pop("activity_name", None)
+
             existing_fd = workout.fitbit_data
             if existing_fd:
                 existing_fd.calories = parsed_fitbit_data.get("calories", existing_fd.calories)
@@ -920,9 +930,13 @@ async def sync_all_from_calendar(
                 existing_fd.elevation_gain_m = parsed_fitbit_data.get(
                     "elevation_gain_m", existing_fd.elevation_gain_m
                 )
-                existing_fd.activity_name = parsed_fitbit_data.get(
-                    "activity_name", existing_fd.activity_name
-                )
+                # For weights workouts, reset a stale "Walk" so it's not preserved
+                if sets_added_to_workout > 0 and existing_fd.activity_name and existing_fd.activity_name.lower() == "walk":
+                    existing_fd.activity_name = "Unknown"
+                else:
+                    existing_fd.activity_name = parsed_fitbit_data.get(
+                        "activity_name", existing_fd.activity_name
+                    )
                 existing_fd.azm_fat_burn = parsed_fitbit_data.get(
                     "azm_fat_burn", existing_fd.azm_fat_burn
                 )
@@ -933,6 +947,9 @@ async def sync_all_from_calendar(
                     "azm_peak", existing_fd.azm_peak
                 )
             else:
+                new_activity_name = parsed_fitbit_data.get("activity_name", "Unknown")
+                if sets_added_to_workout > 0 and new_activity_name.lower() == "walk":
+                    new_activity_name = "Unknown"
                 db.add(
                     models.FitbitData(
                         workout_id=workout.id,
@@ -941,11 +958,35 @@ async def sync_all_from_calendar(
                         duration_ms=parsed_fitbit_data.get("duration_ms", 0),
                         distance_km=parsed_fitbit_data.get("distance_km", 0.0),
                         elevation_gain_m=parsed_fitbit_data.get("elevation_gain_m", 0.0),
-                        activity_name=parsed_fitbit_data.get("activity_name", "Unknown"),
+                        activity_name=new_activity_name,
                         azm_fat_burn=parsed_fitbit_data.get("azm_fat_burn", 0),
                         azm_cardio=parsed_fitbit_data.get("azm_cardio", 0),
                         azm_peak=parsed_fitbit_data.get("azm_peak", 0),
                     )
+                )
+
+        # Retroactive Calendar fix: if the Calendar event has a stale "Walk"
+        # description but the workout already has fitbit_log_id in the DB
+        # (meaning the bulk sync already matched it to "Weights"), push the
+        # corrected description back to Google Calendar.
+        if (
+            stale_walk_detected
+            and workout.fitbit_data
+            and workout.fitbit_data.fitbit_log_id
+        ):
+            try:
+                update_google_calendar_event(db, user_tokens, workout, workout.fitbit_data)
+                logger.info(
+                    "Calendar sync: corrected stale Calendar description for workout %s (%s) → %s",
+                    workout.id,
+                    workout.title,
+                    workout.fitbit_data.activity_name or "Unknown",
+                )
+            except Exception as cal_err:
+                logger.warning(
+                    "Calendar sync: failed to correct description for workout %s: %s",
+                    workout.id,
+                    cal_err,
                 )
 
         if sets_added_to_workout > 0 or parsed_fitbit_data:

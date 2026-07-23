@@ -19,7 +19,7 @@ _SYNC_ERROR_MESSAGES = {
     "FITBIT_REAUTH_REQUIRED": "Fitbit authorization must be renewed.",
     "FITBIT_AUTH_UNAVAILABLE": "Fitbit authorization is temporarily unavailable.",
     "FITBIT_AUTH_TIMEOUT": "Fitbit authorization timed out.",
-    "FITBIT_API_RATE_LIMITED": "Fitbit is temporarily rate limited.",
+    "FITBIT_API_RATE_LIMITED": "Fitbit rate limit alcanzado. Esperá ~1 hora y probá de nuevo.",
     "FITBIT_API_UNAVAILABLE": "Fitbit is temporarily unavailable.",
     "FITBIT_API_TIMEOUT": "Fitbit request timed out.",
     "FITBIT_API_REJECTED": "Fitbit rejected the request.",
@@ -345,6 +345,8 @@ async def sync_fitbit_bulk(
     not_found = 0
     failed = 0
     prepared = []
+    _interrupted_by_rate_limit = False
+    _fatal_failure: Optional[fitbit_utils.FitbitSyncFailure] = None
     for workout in workouts:
         try:
             activity = fitbit_utils.get_fitbit_activity(
@@ -360,6 +362,21 @@ async def sync_fitbit_bulk(
             )
             if not activity:
                 not_found += 1
+                # Stale placeholder restored from calendar description — don't
+                # keep showing "Walk" for a weights workout when no Weights
+                # activity was found.
+                if (
+                    workout.fitbit_data
+                    and not workout.fitbit_data.fitbit_log_id
+                    and workout.fitbit_data.activity_name
+                    and workout.fitbit_data.activity_name.lower() == "walk"
+                ):
+                    logger.info(
+                        "Bulk sync: reset stale 'Walk' to 'Unknown' for workout %s (%s)",
+                        workout.id,
+                        workout.title,
+                    )
+                    workout.fitbit_data.activity_name = "Unknown"
                 continue
 
             log_id = str(activity.get("logId", "")) or None
@@ -380,8 +397,12 @@ async def sync_fitbit_bulk(
             if failure.code == "FITBIT_ACTIVITY_PROCESSING_FAILED":
                 failed += 1
                 continue
-            db.rollback()
-            _raise_sync_failure(failure, correlation_id, route, started_at)
+            if failure.code == "FITBIT_API_RATE_LIMITED":
+                _interrupted_by_rate_limit = True
+            else:
+                _fatal_failure = failure
+            logger.warning("Fitbit error after %d prepared — stopping: stage=%s code=%s", len(prepared), failure.stage, failure.code)
+            break
         except Exception as error:
             db.rollback()
             failure = _processing_failure("FITBIT_MATCHING_FAILED")
@@ -423,6 +444,13 @@ async def sync_fitbit_bulk(
             fitbit_data.azm_cardio = azm.get("cardioMinutes", 0)
             fitbit_data.azm_peak = azm.get("peakMinutes", 0)
             fitbit_data.has_gps = has_gps
+            logger.info(
+                "Bulk sync: matched workout %s (%s) → activity=%s log_id=%s",
+                workout.id,
+                workout.title,
+                fitbit_data.activity_name,
+                log_id,
+            )
         db.flush()
         db.commit()
     except Exception as error:
@@ -435,25 +463,226 @@ async def sync_fitbit_bulk(
             type(error).__name__,
         )
 
-    outcome = (
-        schemas.SyncOutcome.PARTIAL
-        if failed
-        else schemas.SyncOutcome.SUCCESS
-        if prepared
-        else schemas.SyncOutcome.NO_DATA
+    # Track IDs processed in this sync (used to exclude from subsequent passes)
+    new_ids = {w.id for w, *_ in prepared} if prepared else set()
+
+    # Push updated descriptions to Google Calendar for every matched workout
+    cal_updated = 0
+    if prepared and user_tokens and user_tokens.selected_calendar_id:
+        for workout, _activity, _azm, _log_id, _has_gps in prepared:
+            try:
+                update_google_calendar_event(db, user_tokens, workout, workout.fitbit_data)
+                cal_updated += 1
+            except Exception as cal_err:
+                logger.warning(
+                    "Calendar update failed for workout %s (%s): %s",
+                    workout.id,
+                    workout.title,
+                    cal_err,
+                )
+        db.commit()
+
+    # Retroactive Calendar fix: workouts that were matched in previous sync
+    # runs (before the Calendar-on-sync feature) may still have stale
+    # descriptions in Google Calendar showing "Walk". Update them all so
+    # they reflect the current DB activity_name. This queries workouts
+    # that already had fitbit_log_id + google_event_id before this sync.
+    cal_fixed = 0
+    if user_tokens and user_tokens.selected_calendar_id:
+        retro_query = (
+            db.query(models.Workout)
+            .options(joinedload(models.Workout.fitbit_data))
+            .filter(
+                models.Workout.user_id == current_user.id,
+                models.Workout.google_event_id.isnot(None),
+                models.FitbitData.fitbit_log_id.isnot(None),
+                models.FitbitData.fitbit_log_id != "",
+                # Only Weights workouts were affected by the "Walk" bug
+                models.FitbitData.activity_name == "Weights",
+            )
+            .join(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
+        )
+        if new_ids:
+            retro_query = retro_query.filter(models.Workout.id.notin_(new_ids))
+        retro_candidates = retro_query.all()
+        for rw in retro_candidates:
+            try:
+                update_google_calendar_event(db, user_tokens, rw, rw.fitbit_data)
+                cal_fixed += 1
+            except Exception as cal_err:
+                logger.warning(
+                    "Retroactive Calendar fix failed for workout %s (%s): %s",
+                    rw.id,
+                    rw.title,
+                    cal_err,
+                )
+        if cal_fixed:
+            db.commit()
+            logger.info(
+                "Retroactive Calendar fix: corrected %d workout(s)",
+                cal_fixed,
+            )
+
+    # Re-match pass: workouts that already have fitbit_log_id but were
+    # incorrectly matched to "Walk" (stale calories/duration/HR). Re-fetch
+    # the correct "Weights" activity from Fitbit and update the record.
+    repaired = 0
+    repaired_workouts: list[models.Workout] = []
+    _rematch_interrupted = False
+    stale_query = (
+        db.query(models.Workout)
+        .options(joinedload(models.Workout.fitbit_data))
+        .filter(
+            models.Workout.user_id == current_user.id,
+            models.FitbitData.fitbit_log_id.isnot(None),
+            models.FitbitData.fitbit_log_id != "",
+            models.FitbitData.activity_name == "Weights",
+        )
+        .join(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
+        .order_by(models.Workout.start_time.desc())
     )
-    issues = (
-        [
+    if new_ids:
+        stale_query = stale_query.filter(models.Workout.id.notin_(new_ids))
+    stale_candidates = stale_query.all()
+
+    for sc in stale_candidates:
+        if _rematch_interrupted:
+            break
+        try:
+            correct_activity = fitbit_utils.get_fitbit_activity(
+                db,
+                user_tokens,
+                sc.start_time,
+                sc.end_time,
+                required_activity_name="weights" if fitbit_utils.is_weights_workout(sc) else None,
+                strict=True,
+                correlation_id=correlation_id,
+            )
+            if not correct_activity:
+                continue
+
+            correct_log_id = str(correct_activity.get("logId", "")) or None
+            if not correct_log_id or correct_log_id == sc.fitbit_data.fitbit_log_id:
+                continue
+
+            # Different log_id — this workout was matched to the wrong
+            # activity (e.g. Walk). Update with correct Fitbit data.
+            sc.fitbit_data.fitbit_log_id = correct_log_id
+            sc.fitbit_data.calories = correct_activity.get("calories", 0)
+            sc.fitbit_data.heart_rate_avg = correct_activity.get("averageHeartRate", 0)
+            sc.fitbit_data.duration_ms = correct_activity.get("duration", 0)
+            sc.fitbit_data.distance_km = correct_activity.get("distance", 0.0)
+            sc.fitbit_data.elevation_gain_m = correct_activity.get("elevationGain", 0.0)
+            sc.fitbit_data.activity_name = "Weights"
+            rematch_azm = fitbit_utils.extract_azm(correct_activity)
+            sc.fitbit_data.azm_fat_burn = rematch_azm.get("fatBurnMinutes", 0)
+            sc.fitbit_data.azm_cardio = rematch_azm.get("cardioMinutes", 0)
+            sc.fitbit_data.azm_peak = rematch_azm.get("peakMinutes", 0)
+            logger.info(
+                "Bulk sync: re-matched workout %s (%s) → new log_id=%s",
+                sc.id,
+                sc.title,
+                correct_log_id,
+            )
+            repaired_workouts.append(sc)
+            repaired += 1
+
+        except fitbit_utils.FitbitSyncFailure as failure:
+            if failure.code == "FITBIT_API_RATE_LIMITED":
+                _rematch_interrupted = True
+                break
+            logger.warning(
+                "Re-match error for workout %s (%s): stage=%s code=%s",
+                sc.id,
+                sc.title,
+                failure.stage,
+                failure.code,
+            )
+            continue
+        except Exception as error:
+            logger.warning(
+                "Re-match exception for workout %s (%s): %s",
+                sc.id,
+                sc.title,
+                error,
+            )
+            continue
+
+    if repaired_workouts:
+        db.flush()
+        for rw in repaired_workouts:
+            try:
+                update_google_calendar_event(db, user_tokens, rw, rw.fitbit_data)
+            except Exception as cal_err:
+                logger.warning(
+                    "Calendar update after re-match failed for workout %s: %s",
+                    rw.id,
+                    cal_err,
+                )
+        db.commit()
+        logger.info(
+            "Bulk sync: re-matched %d workout(s) to correct Fitbit activity",
+            repaired,
+        )
+
+    # Merge re-match interruption into the main flow indicator
+    if _rematch_interrupted and not _interrupted_by_rate_limit:
+        _interrupted_by_rate_limit = True
+
+    processed_total = len(prepared) + not_found + failed
+    _was_interrupted = _interrupted_by_rate_limit or processed_total < len(workouts)
+
+    issues: list[schemas.SyncIssue] = []
+    outcome: schemas.SyncOutcome
+    if _was_interrupted:
+        outcome = schemas.SyncOutcome.PARTIAL
+        if _interrupted_by_rate_limit:
+            issues.append(
+                schemas.SyncIssue(
+                    stage=schemas.ServerSyncStage.FITBIT_API,
+                    code="FITBIT_API_RATE_LIMITED",
+                    retryable=True,
+                )
+            )
+        elif _fatal_failure:
+            issues.append(
+                schemas.SyncIssue(
+                    stage=schemas.ServerSyncStage.FITBIT_API,
+                    code=_fatal_failure.code,
+                    retryable=_fatal_failure.retryable,
+                )
+            )
+    elif failed:
+        outcome = schemas.SyncOutcome.PARTIAL
+        issues.append(
             schemas.SyncIssue(
                 stage=schemas.ServerSyncStage.PROCESSING,
                 code="FITBIT_ACTIVITY_PROCESSING_FAILED",
                 retryable=False,
                 count=failed,
             )
-        ]
-        if failed
-        else []
-    )
+        )
+    elif prepared:
+        outcome = schemas.SyncOutcome.SUCCESS
+    else:
+        outcome = schemas.SyncOutcome.NO_DATA
+
+    remaining = max(0, len(workouts) - processed_total)
+    msg_parts: list[str] = []
+    if len(prepared) > 0:
+        msg_parts.append(f"{len(prepared)} emparejado(s)")
+        if cal_updated > 0:
+            msg_parts.append(f"{cal_updated} actualizado(s) en Calendar")
+    if repaired > 0:
+        msg_parts.append(f"{repaired} re-matcher(s) (nuevos datos)")
+    if not_found > 0:
+        msg_parts.append(f"{not_found} sin match")
+    if failed > 0:
+        msg_parts.append(f"{failed} con error")
+    if remaining > 0:
+        msg_parts.append(f"{remaining} pendientes (rate limit)")
+    message = f"Sincronización Fitbit: {', '.join(msg_parts)}." if msg_parts else "Sincronización Fitbit completada."
+
     result = schemas.FitbitBulkSyncResponse(
         synced=len(prepared),
         not_found=not_found,
@@ -462,6 +691,7 @@ async def sync_fitbit_bulk(
         outcome=outcome,
         correlation_id=correlation_id,
         issues=issues,
+        message=message,
     )
     _sync_log(
         "fitbit_sync.completed",
@@ -664,6 +894,12 @@ async def sync_fitbit_create_missing(
         if failed
         else []
     )
+    msg_parts: list[str] = []
+    if len(prepared) > 0:
+        msg_parts.append(f"{len(prepared)} actividad(es) añadida(s) al calendario")
+    if failed > 0:
+        msg_parts.append(f"{failed} con error")
+    message = f"Sincronización actividades Fitbit: {', '.join(msg_parts)}." if msg_parts else "No se encontraron actividades Fitbit nuevas."
     result = schemas.FitbitCreateMissingResponse(
         created=len(prepared),
         created_activities=created_activities,
@@ -671,6 +907,7 @@ async def sync_fitbit_create_missing(
         outcome=outcome,
         correlation_id=correlation_id,
         issues=issues,
+        message=message,
     )
     _sync_log(
         "fitbit_sync.completed",

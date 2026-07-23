@@ -181,6 +181,9 @@ export function syncDiagnosticMessage(diagnostic: SyncDiagnostic): string {
         ? `Google Calendar necesita volver a conectarse.${reference}`
         : `Google Calendar no está disponible temporalmente. Inténtalo de nuevo más tarde.${reference}`;
     case "fitbit_api":
+      if (diagnostic.code === "FITBIT_API_RATE_LIMITED") {
+        return `Fitbit rate limit alcanzado. Algunos datos quedaron pendientes. Esperá ~1 hora y sincronizá de nuevo.${reference}`;
+      }
       return `Fitbit no está disponible temporalmente. Inténtalo de nuevo más tarde.${reference}`;
     case "processing":
       return `GymHub no pudo procesar o asociar algunas actividades de Fitbit.${reference}`;

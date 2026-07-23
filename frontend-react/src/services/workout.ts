@@ -19,6 +19,7 @@ interface SyncResponseBase {
   outcome: SyncOutcome;
   correlation_id: string;
   issues: SyncIssue[];
+  message?: string;
 }
 
 export interface FitbitBulkSyncResponse extends SyncResponseBase {

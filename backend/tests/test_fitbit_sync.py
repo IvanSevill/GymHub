@@ -259,16 +259,19 @@ async def test_sync_fitbit_bulk_replaces_invalid_correlation(client, auth_header
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("failure", "status"),
+    ("failure",),
     [
-        (FitbitSyncFailure("fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False), 424),
-        (FitbitSyncFailure("fitbit_api", "FITBIT_API_RATE_LIMITED", 503, True, 429), 503),
-        (FitbitSyncFailure("processing", "FITBIT_RESPONSE_INVALID", 502, False), 502),
+        (FitbitSyncFailure("fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False),),
+        (FitbitSyncFailure("fitbit_api", "FITBIT_API_RATE_LIMITED", 503, True, 429),),
+        (FitbitSyncFailure("processing", "FITBIT_RESPONSE_INVALID", 502, False),),
     ],
 )
 async def test_sync_fitbit_bulk_maps_safe_typed_failures(
-    client, auth_headers, db, failure, status
+    client, auth_headers, db, failure
 ):
+    """Provider failures interrupt the bulk sync; the endpoint returns PARTIAL
+    with a 200 status so the frontend can surface the issue via the response
+    body rather than an HTTP-level error."""
     user = _get_user(db)
     _fitbit_tokens(db, user.id)
     _make_workout(db, user.id)
@@ -282,13 +285,13 @@ async def test_sync_fitbit_bulk_maps_safe_typed_failures(
             headers={**auth_headers, "X-Correlation-ID": correlation_id},
         )
 
-    assert resp.status_code == status
-    detail = resp.json()["detail"]
-    assert detail["stage"] == failure.stage
-    assert detail["code"] == failure.code
-    assert detail["correlation_id"] == correlation_id
-    assert detail["retryable"] is failure.retryable
-    assert "provider" not in detail["message"].lower()
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["outcome"] == "partial"
+    assert len(body["issues"]) >= 1
+    issue = body["issues"][0]
+    assert issue["code"] == failure.code
+    assert issue["retryable"] is failure.retryable
 
 
 @pytest.mark.anyio
@@ -333,6 +336,8 @@ async def test_sync_fitbit_bulk_partial_processing_persists_valid_data(
 
 @pytest.mark.anyio
 async def test_sync_fitbit_bulk_aborts_after_provider_failure(client, auth_headers, db):
+    """Provider failures abort the main loop immediately (only calls
+    get_fitbit_activity once) and return PARTIAL with 200."""
     user = _get_user(db)
     _fitbit_tokens(db, user.id)
     _make_workout(db, user.id)
@@ -343,7 +348,8 @@ async def test_sync_fitbit_bulk_aborts_after_provider_failure(client, auth_heade
     ) as get_activity:
         resp = await client.post("/workouts/sync-fitbit-bulk", headers=auth_headers)
 
-    assert resp.status_code == 503
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] == "partial"
     assert get_activity.call_count == 1
 
 

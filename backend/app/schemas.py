@@ -136,6 +136,7 @@ class FitbitBulkSyncResponse(BaseModel):
     outcome: SyncOutcome
     correlation_id: str
     issues: List[SyncIssue] = Field(default_factory=list)
+    message: str = ""
 
 
 class CreatedFitbitActivity(BaseModel):
@@ -150,6 +151,7 @@ class FitbitCreateMissingResponse(BaseModel):
     outcome: SyncOutcome
     correlation_id: str
     issues: List[SyncIssue] = Field(default_factory=list)
+    message: str = ""
 
 # SleepLog Schemas
 class SleepLog(BaseModel):

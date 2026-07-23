@@ -239,6 +239,7 @@ def _fitbit_get(
         return response
     if not strict:
         return None
+
     if response.status_code == 401:
         raise _failure(
             "fitbit_auth", "FITBIT_REAUTH_REQUIRED", 424, False, response.status_code

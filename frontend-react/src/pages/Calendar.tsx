@@ -43,6 +43,7 @@ const Calendar: React.FC = () => {
   const { addToast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncPhase, setSyncPhase] = useState("");
   const syncInFlight = useRef(false);
   const syncSequence = useRef(0);
   const mounted = useRef(true);
@@ -149,20 +150,25 @@ const Calendar: React.FC = () => {
     const operationId = ++syncSequence.current;
     const correlationId = createCorrelationId();
     const diagnostics: SyncDiagnostic[] = [];
+    let bulkResult: Awaited<
+      ReturnType<typeof workoutService.syncFitbitBulk>
+    > | null = null;
     let fitbitResult: Awaited<
       ReturnType<typeof workoutService.syncFitbitCreate>
     > | null = null;
     setIsSyncing(true);
     try {
       // Step 1: pull calendar events into DB
+      setSyncPhase("Calendar");
       try {
         await workoutService.syncAllFromCalendar(correlationId);
       } catch (syncError) {
         diagnostics.push(normalizeSyncError(syncError, correlationId));
       }
       // Step 2: attach Fitbit data to existing gym workouts
+      setSyncPhase("Fitbit");
       try {
-        const bulkResult = await workoutService.syncFitbitBulk(correlationId);
+        bulkResult = await workoutService.syncFitbitBulk(correlationId);
         if (bulkResult.outcome === "partial") {
           const issues =
             bulkResult.issues.length > 0
@@ -179,7 +185,7 @@ const Calendar: React.FC = () => {
               stage: issue.stage,
               code: issue.code,
               retryable: issue.retryable,
-              correlationId: bulkResult.correlation_id,
+              correlationId: bulkResult!.correlation_id,
             })),
           );
         }
@@ -187,6 +193,7 @@ const Calendar: React.FC = () => {
         diagnostics.push(normalizeSyncError(syncError, correlationId));
       }
       // Step 3: create standalone workouts for Fitbit activities not yet in DB
+      setSyncPhase("Act. nuevas");
       try {
         fitbitResult = await workoutService.syncFitbitCreate(correlationId);
         if (fitbitResult.outcome === "partial") {
@@ -221,24 +228,61 @@ const Calendar: React.FC = () => {
       if (!mounted.current || syncSequence.current !== operationId) return;
       const primaryDiagnostic = prioritizeDiagnostics(diagnostics);
       if (primaryDiagnostic) {
-        addToast(syncDiagnosticMessage(primaryDiagnostic), "error", 10000);
-      } else if (fitbitResult && fitbitResult.created > 0) {
-        addToast(
-          `${fitbitResult.created} actividad(es) Fitbit añadida(s) al calendario`,
-          "success",
-        );
+        const errMsg = syncDiagnosticMessage(primaryDiagnostic);
+        console.log("[Sync error]", {
+          diagnostic: primaryDiagnostic,
+          message: errMsg,
+        });
+        addToast(errMsg, "error", 10000);
       } else {
-        addToast("Sincronización completada", "success");
+        // Prefer the backend's human-readable message when available
+        const bulkMsg = bulkResult?.message;
+        const fitbitMsg = fitbitResult?.message;
+        let displayMsg = "";
+        if (bulkMsg && fitbitMsg) {
+          displayMsg = `${bulkMsg} ${fitbitMsg}`;
+        } else if (bulkMsg) {
+          displayMsg = bulkMsg;
+        } else if (fitbitMsg) {
+          displayMsg = fitbitMsg;
+        } else {
+          displayMsg = "Sincronización completada";
+        }
+        console.log("[Sync OK]", {
+          message: displayMsg,
+          bulk: bulkResult
+            ? {
+                outcome: bulkResult.outcome,
+                synced: bulkResult.synced,
+                not_found: bulkResult.not_found,
+                total: bulkResult.total,
+                message: bulkResult.message,
+              }
+            : null,
+          fitbit: fitbitResult
+            ? {
+                outcome: fitbitResult.outcome,
+                created: fitbitResult.created,
+                message: fitbitResult.message,
+              }
+            : null,
+        });
+        addToast(displayMsg, "success");
       }
     } catch (uiError) {
       if (mounted.current && syncSequence.current === operationId) {
         const diagnostic = normalizeSyncError(uiError, correlationId);
-        addToast(syncDiagnosticMessage(diagnostic), "error", 10000);
+        const errMsg = syncDiagnosticMessage(diagnostic);
+        console.log("[Sync exception]", { diagnostic, message: errMsg });
+        addToast(errMsg, "error", 10000);
       }
     } finally {
       if (syncSequence.current === operationId) {
         syncInFlight.current = false;
-        if (mounted.current) setIsSyncing(false);
+        if (mounted.current) {
+          setIsSyncing(false);
+          setSyncPhase("");
+        }
       }
     }
   };
@@ -275,6 +319,7 @@ const Calendar: React.FC = () => {
       <CalendarHeader
         currentDate={currentDate}
         isSyncing={isSyncing}
+        syncPhase={syncPhase}
         onPrev={() => setCurrentDate(subMonths(currentDate, 1))}
         onNext={() => setCurrentDate(addMonths(currentDate, 1))}
         onToday={() => setCurrentDate(new Date())}
