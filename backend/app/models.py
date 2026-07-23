@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint, Index
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint, Index, text
 from sqlalchemy.orm import relationship
 import uuid
 from .database import Base
@@ -165,6 +165,7 @@ class FitbitData(Base):
     azm_cardio = Column(Integer, default=0, nullable=False)
     azm_peak = Column(Integer, default=0, nullable=False)
     has_gps = Column(Boolean, default=False, nullable=False)
+    calendar_fix_applied = Column(Boolean, default=False, nullable=False, server_default=text("FALSE"))
 
     workout = relationship("Workout", back_populates="fitbit_data")
 

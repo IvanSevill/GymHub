@@ -342,7 +342,14 @@ def generate_calendar_description(
         description += f"Calorias: {fitbit_data.calories} kcal\n"
         description += f"FC Media: {fitbit_data.heart_rate_avg} bpm\n"
         description += f"Duracion: {fitbit_data.duration_ms // 60_000} min\n"
-        description += f"Actividad: {fitbit_data.activity_name or 'Weights'}\n"
+        # Only persist the activity_name when we have a real logId; placeholders
+        # restored from a stale description would reintroduce "Walk" on every sync.
+        stored_activity = (
+            fitbit_data.activity_name
+            if fitbit_data.fitbit_log_id
+            else "Weights"
+        )
+        description += f"Actividad: {stored_activity or 'Weights'}\n"
         if fitbit_data.azm_fat_burn or fitbit_data.azm_cardio or fitbit_data.azm_peak:
             description += f"AZM Fat Burn: {fitbit_data.azm_fat_burn}\n"
             description += f"AZM Cardio: {fitbit_data.azm_cardio}\n"

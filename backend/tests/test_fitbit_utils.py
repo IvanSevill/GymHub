@@ -1,8 +1,10 @@
 """Tests for fitbit_utils.py — pure functions and HTTP-dependent functions (mocked)."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+import requests
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -11,6 +13,7 @@ from app.database import Base
 from app import models
 from app.fitbit_utils import (
     _fitbit_get,
+    FitbitSyncFailure,
     extract_azm,
     get_fitbit_activities_range,
     get_fitbit_route,
@@ -281,6 +284,119 @@ def test_fitbit_get_non_200_returns_none():
     assert result is None
 
 
+@pytest.mark.parametrize(
+    ("error", "code", "status"),
+    [
+        (requests.ConnectionError("token-secret"), "FITBIT_API_UNAVAILABLE", 503),
+        (requests.Timeout("token-secret"), "FITBIT_API_TIMEOUT", 504),
+    ],
+)
+def test_fitbit_get_strict_classifies_transport_errors(error, code, status):
+    db = _make_db()
+    tokens = _new_tokens(db)
+    with (
+        patch("app.fitbit_utils.requests.get", side_effect=error),
+        pytest.raises(FitbitSyncFailure) as raised,
+    ):
+        _fitbit_get(db, tokens, "https://api.fitbit.com/test", strict=True)
+
+    assert raised.value.code == code
+    assert raised.value.status_code == status
+    assert "token-secret" not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("provider_status", "code", "status"),
+    [
+        (429, "FITBIT_API_RATE_LIMITED", 503),
+        (500, "FITBIT_API_UNAVAILABLE", 503),
+        (403, "FITBIT_API_REJECTED", 502),
+    ],
+)
+def test_fitbit_get_strict_classifies_provider_status(provider_status, code, status):
+    db = _make_db()
+    tokens = _new_tokens(db)
+    response = MagicMock(status_code=provider_status, text="private provider body")
+    with (
+        patch("app.fitbit_utils.requests.get", return_value=response),
+        pytest.raises(FitbitSyncFailure) as raised,
+    ):
+        _fitbit_get(db, tokens, "https://api.fitbit.com/test", strict=True)
+
+    assert raised.value.code == code
+    assert raised.value.status_code == status
+    assert raised.value.provider_status == provider_status
+    assert "private provider body" not in str(raised.value)
+
+
+def test_fitbit_get_strict_second_401_requires_reauthorization():
+    db = _make_db()
+    tokens = _new_tokens(db)
+    unauthorized = MagicMock(status_code=401)
+    with (
+        patch("app.fitbit_utils.requests.get", side_effect=[unauthorized, unauthorized]),
+        patch("app.fitbit_utils.refresh_fitbit_token", return_value="rotated-token"),
+        pytest.raises(FitbitSyncFailure) as raised,
+    ):
+        _fitbit_get(db, tokens, "https://api.fitbit.com/test", strict=True)
+
+    assert raised.value.code == "FITBIT_REAUTH_REQUIRED"
+    assert raised.value.status_code == 424
+
+
+@pytest.mark.parametrize(
+    ("error", "code", "status"),
+    [
+        (requests.ConnectionError("refresh-secret"), "FITBIT_AUTH_UNAVAILABLE", 503),
+        (requests.Timeout("refresh-secret"), "FITBIT_AUTH_TIMEOUT", 504),
+    ],
+)
+def test_refresh_fitbit_token_strict_classifies_transport_errors(error, code, status):
+    db = _make_db()
+    tokens = _new_tokens(db)
+    with (
+        patch("app.fitbit_utils.requests.post", side_effect=error),
+        pytest.raises(FitbitSyncFailure) as raised,
+    ):
+        refresh_fitbit_token(db, tokens, strict=True)
+
+    assert raised.value.code == code
+    assert raised.value.status_code == status
+    assert tokens.fitbit_refresh_token == "tok-refresh"
+    assert "refresh-secret" not in str(raised.value)
+
+
+def test_refresh_fitbit_token_strict_invalid_grant_is_safe(caplog):
+    db = _make_db()
+    tokens = _new_tokens(db)
+    response = MagicMock(status_code=400, text='{"error":"invalid_grant","token":"raw"}')
+    response.json.return_value = {"error": "invalid_grant", "token": "raw"}
+    with (
+        patch("app.fitbit_utils.requests.post", return_value=response),
+        pytest.raises(FitbitSyncFailure) as raised,
+    ):
+        refresh_fitbit_token(db, tokens, strict=True)
+
+    assert raised.value.code == "FITBIT_REAUTH_REQUIRED"
+    assert raised.value.status_code == 424
+    assert tokens.fitbit_refresh_token is None
+    assert "raw" not in caplog.text
+
+
+def test_refresh_fitbit_token_strict_rejects_malformed_success():
+    db = _make_db()
+    tokens = _new_tokens(db)
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"access_token": "missing-rotated-refresh"}
+    with (
+        patch("app.fitbit_utils.requests.post", return_value=response),
+        pytest.raises(FitbitSyncFailure) as raised,
+    ):
+        refresh_fitbit_token(db, tokens, strict=True)
+
+    assert raised.value.code == "FITBIT_RESPONSE_INVALID"
+
+
 # ---------------------------------------------------------------------------
 # get_fitbit_activities_range
 # ---------------------------------------------------------------------------
@@ -298,12 +414,14 @@ def test_get_fitbit_activities_range_no_token():
 def test_get_fitbit_activities_range_success():
     db = _make_db()
     tokens = _new_tokens(db)
+    first_start = datetime.utcnow() - timedelta(days=1)
+    second_start = datetime.utcnow() - timedelta(days=2)
 
     mock_resp = MagicMock()
     mock_resp.json.return_value = {
         "activities": [
-            {"startTime": "2026-06-15T10:00:00Z", "activityName": "Run"},
-            {"startTime": "2026-06-14T09:00:00Z", "activityName": "Weights"},
+            {"startTime": f"{first_start.isoformat()}Z", "activityName": "Run"},
+            {"startTime": f"{second_start.isoformat()}Z", "activityName": "Weights"},
         ]
     }
 
@@ -311,6 +429,35 @@ def test_get_fitbit_activities_range_success():
         result = get_fitbit_activities_range(db, tokens, days=30)
 
     assert len(result) == 2
+
+
+def test_get_fitbit_activities_range_strict_rejects_invalid_payload():
+    db = _make_db()
+    tokens = _new_tokens(db)
+    response = MagicMock()
+    response.json.return_value = {"unexpected": []}
+    with (
+        patch("app.fitbit_utils._fitbit_get", return_value=response),
+        pytest.raises(FitbitSyncFailure) as raised,
+    ):
+        get_fitbit_activities_range(db, tokens, strict=True)
+
+    assert raised.value.code == "FITBIT_RESPONSE_INVALID"
+
+
+def test_get_fitbit_activities_range_strict_counts_malformed_activity():
+    db = _make_db()
+    tokens = _new_tokens(db)
+    response = MagicMock()
+    response.json.return_value = {"activities": [{"startTime": "invalid"}]}
+    failures = []
+    with patch("app.fitbit_utils._fitbit_get", return_value=response):
+        result = get_fitbit_activities_range(
+            db, tokens, strict=True, processing_failures=failures
+        )
+
+    assert result == []
+    assert failures == ["FITBIT_ACTIVITY_PROCESSING_FAILED"]
 
 
 # ---------------------------------------------------------------------------
@@ -632,6 +779,40 @@ def test_get_fitbit_activity_matching():
     }
     with patch("app.fitbit_utils._fitbit_get", return_value=mock_resp):
         result = get_fitbit_activity(db, tokens, datetime(2026, 6, 1, 10, 0), datetime(2026, 6, 1, 11, 0))
+    assert result is not None
+    assert result["activityName"] == "Weights"
+
+
+def test_get_fitbit_activity_requires_weights_for_weights_workout():
+    from app.fitbit_utils import get_fitbit_activity
+
+    db = _make_db()
+    tokens = _new_tokens(db)
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "activities": [
+            {
+                "startTime": "2026-06-01T10:30:00Z",
+                "duration": 1800000,
+                "activityName": "Walk",
+            },
+            {
+                "startTime": "2026-06-01T10:05:00Z",
+                "duration": 3600000,
+                "activityName": "Weights",
+            },
+        ]
+    }
+
+    with patch("app.fitbit_utils._fitbit_get", return_value=mock_resp):
+        result = get_fitbit_activity(
+            db,
+            tokens,
+            datetime(2026, 6, 1, 10, 0),
+            datetime(2026, 6, 1, 11, 0),
+            required_activity_name="weights",
+        )
+
     assert result is not None
     assert result["activityName"] == "Weights"
 

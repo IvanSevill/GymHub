@@ -54,8 +54,11 @@ backend_err.txt
 .vscode/*
 !.vscode/extensions.json
 
-# Claude Code local settings (machine-specific permissions)
+# Local agent tool config (machine-specific)
 .claude/
+.codex/
+.agents/
+.atl/
 
 # Debug / generated output
 backend/analysis_output.txt
@@ -90,3 +93,5 @@ frontend-react/AGENTS.md
 
 # Data for the Thesis
 TFG-Ivan_Jesus_Sevillano_Plaza/*
+feedback.txt
+TFGLuciaBlazquezFinal.pdf

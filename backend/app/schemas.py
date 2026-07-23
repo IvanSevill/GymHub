@@ -1,6 +1,8 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import List, Optional
 from datetime import datetime
+from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, EmailStr, Field
 
 # Muscle Schemas
 class MuscleBase(BaseModel):
@@ -89,6 +91,67 @@ class FitbitData(FitbitDataBase):
 
     class Config:
         orm_mode = True
+
+
+class ServerSyncStage(str, Enum):
+    GOOGLE_CALENDAR = "google_calendar"
+    FITBIT_AUTH = "fitbit_auth"
+    FITBIT_API = "fitbit_api"
+    PROCESSING = "processing"
+    DATABASE_PERSISTENCE = "database_persistence"
+
+
+class SyncOutcome(str, Enum):
+    SUCCESS = "success"
+    PARTIAL = "partial"
+    NO_DATA = "no_data"
+    SKIPPED = "skipped"
+
+
+class SyncIssue(BaseModel):
+    stage: ServerSyncStage
+    code: str
+    retryable: bool
+    count: Optional[int] = None
+
+
+class SyncErrorDetail(BaseModel):
+    stage: ServerSyncStage
+    code: str
+    message: str
+    correlation_id: str
+    retryable: bool
+
+
+class SyncErrorResponse(BaseModel):
+    detail: SyncErrorDetail
+
+
+class FitbitBulkSyncResponse(BaseModel):
+    synced: int = 0
+    not_found: int = 0
+    total: int = 0
+    failed: int = 0
+    skipped: Optional[str] = None
+    outcome: SyncOutcome
+    correlation_id: str
+    issues: List[SyncIssue] = Field(default_factory=list)
+    message: str = ""
+
+
+class CreatedFitbitActivity(BaseModel):
+    activity_name: str
+    date: str
+
+
+class FitbitCreateMissingResponse(BaseModel):
+    created: int = 0
+    created_activities: List[CreatedFitbitActivity] = Field(default_factory=list)
+    failed: int = 0
+    outcome: SyncOutcome
+    correlation_id: str
+    issues: List[SyncIssue] = Field(default_factory=list)
+    message: str = ""
 
 # SleepLog Schemas
 class SleepLog(BaseModel):

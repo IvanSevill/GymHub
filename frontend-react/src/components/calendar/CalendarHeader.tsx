@@ -13,6 +13,7 @@ import {
 interface Props {
   currentDate: Date;
   isSyncing: boolean;
+  syncPhase?: string;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -24,6 +25,7 @@ interface Props {
 const CalendarHeader: React.FC<Props> = ({
   currentDate,
   isSyncing,
+  syncPhase,
   onPrev,
   onNext,
   onToday,
@@ -36,13 +38,18 @@ const CalendarHeader: React.FC<Props> = ({
       <div className="hidden sm:flex w-10 h-10 bg-primary/10 rounded-xl items-center justify-center text-primary border border-primary/20 shrink-0">
         <CalIcon size={20} />
       </div>
-      <div>
+      <div className="flex flex-col">
         <h1 className="hidden sm:block text-xl font-black text-white uppercase tracking-tighter">
           Calendario
         </h1>
         <p className="text-[10px] sm:text-[8px] font-bold sm:font-semibold text-white sm:text-slate-500 uppercase tracking-[0.15em] capitalize">
           {format(currentDate, "MMMM yyyy", { locale: es })}
         </p>
+        {isSyncing && syncPhase && (
+          <p className="text-[9px] font-bold text-primary/80 uppercase tracking-[0.12em] mt-0.5 animate-pulse">
+            {syncPhase}
+          </p>
+        )}
       </div>
     </div>
 
