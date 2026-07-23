@@ -382,7 +382,6 @@ async def update_workout(
     if not db_workout:
         raise HTTPException(status_code=404, detail="Workout not found")
 
-    requires_weights_activity = fitbit_utils.is_weights_workout(db_workout)
     db_workout.start_time = workout_update.start_time
     db_workout.end_time = workout_update.end_time
     db_workout.title = workout_update.title
@@ -403,6 +402,11 @@ async def update_workout(
                     is_completed=es.is_completed,
                 )
             )
+
+    db.flush()
+    db.refresh(db_workout)
+    
+    requires_weights_activity = fitbit_utils.is_weights_workout(db_workout)
 
     user_tokens = (
         db.query(models.UserTokens)

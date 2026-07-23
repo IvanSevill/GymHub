@@ -332,7 +332,7 @@ def get_fitbit_activities_range(
                 .astimezone(timezone.utc)
                 .replace(tzinfo=None)
             )
-            if act_start < cutoff:
+            if act_start < cutoff or activity["activityName"] == "Walk":
                 break  # sorted desc — stop once outside the window
             result.append(activity)
         except Exception:
