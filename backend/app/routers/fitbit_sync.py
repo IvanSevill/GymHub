@@ -499,6 +499,7 @@ async def sync_fitbit_bulk(
                 models.FitbitData.fitbit_log_id != "",
                 # Only Weights workouts were affected by the "Walk" bug
                 models.FitbitData.activity_name == "Weights",
+                models.FitbitData.calendar_fix_applied == False,  # one-time guard
             )
             .join(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
         )
@@ -508,6 +509,7 @@ async def sync_fitbit_bulk(
         for rw in retro_candidates:
             try:
                 update_google_calendar_event(db, user_tokens, rw, rw.fitbit_data)
+                rw.fitbit_data.calendar_fix_applied = True
                 cal_fixed += 1
             except Exception as cal_err:
                 logger.warning(
