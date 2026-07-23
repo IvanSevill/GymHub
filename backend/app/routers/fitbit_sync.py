@@ -499,7 +499,7 @@ async def sync_fitbit_bulk(
                 models.FitbitData.fitbit_log_id != "",
                 # Only Weights workouts were affected by the "Walk" bug
                 models.FitbitData.activity_name == "Weights",
-                models.FitbitData.calendar_fix_applied == False,  # one-time guard
+                models.FitbitData.calendar_fix_applied.is_(False),  # one-time guard
             )
             .join(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
         )
