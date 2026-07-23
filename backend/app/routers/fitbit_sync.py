@@ -538,7 +538,7 @@ async def sync_fitbit_bulk(
             models.Workout.user_id == current_user.id,
             models.FitbitData.fitbit_log_id.isnot(None),
             models.FitbitData.fitbit_log_id != "",
-            models.FitbitData.activity_name == "Weights",
+            models.FitbitData.activity_name.in_(["Walk", "Weights"]),
         )
         .join(models.FitbitData, models.FitbitData.workout_id == models.Workout.id)
         .order_by(models.Workout.start_time.desc())
